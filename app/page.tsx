@@ -12,16 +12,24 @@ import {
   Bold,
   BookOpen,
   Check,
+  ChevronDown,
+  ChevronLeft,
   Code2,
   Download,
   Eye,
   FileText,
+  Folder,
+  FolderOpen,
   Italic,
+  Library,
   Link2,
   Minus,
   Plus,
   Quote,
+  RefreshCw,
   RotateCcw,
+  Search,
+  ShieldCheck,
   Upload,
   X,
 } from "lucide-react";
@@ -30,6 +38,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 const STORAGE_KEY = "raavi:document:v1";
+const LIBRARY_ROOT_KEY = "raavi:library-root:v1";
 const DEFAULT_FILE_NAME = "راهنمای-راوی.md";
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
@@ -69,6 +78,185 @@ const SAMPLE_MARKDOWN = [
 
 type SaveState = "saved" | "saving" | "error";
 type MobilePane = "editor" | "preview";
+type LibraryState = "idle" | "scanning" | "ready";
+
+type LocalFileHandle = {
+  kind: "file";
+  name: string;
+  getFile: () => Promise<File>;
+};
+
+type LocalDirectoryHandle = {
+  kind: "directory";
+  name: string;
+  values: () => AsyncIterableIterator<LocalFileHandle | LocalDirectoryHandle>;
+};
+
+type DirectoryPickerWindow = Window & {
+  showDirectoryPicker?: (options?: {
+    mode?: "read";
+  }) => Promise<LocalDirectoryHandle>;
+};
+
+type LibraryFile = {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
+  lastModified: number;
+  read: () => Promise<string>;
+};
+
+type LibraryFolderNode = {
+  name: string;
+  path: string;
+  folders: Map<string, LibraryFolderNode>;
+  files: LibraryFile[];
+};
+
+function buildLibraryTree(files: LibraryFile[]): LibraryFolderNode {
+  const root: LibraryFolderNode = {
+    name: "",
+    path: "",
+    folders: new Map(),
+    files: [],
+  };
+
+  for (const file of files) {
+    const parts = file.path.split("/");
+    parts.pop();
+    let current = root;
+    let currentPath = "";
+
+    for (const part of parts) {
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+      if (!current.folders.has(part)) {
+        current.folders.set(part, {
+          name: part,
+          path: currentPath,
+          folders: new Map(),
+          files: [],
+        });
+      }
+      current = current.folders.get(part)!;
+    }
+
+    current.files.push(file);
+  }
+
+  return root;
+}
+
+async function scanMarkdownDirectory(
+  directory: LocalDirectoryHandle,
+  basePath = "",
+  results: LibraryFile[] = [],
+): Promise<LibraryFile[]> {
+  for await (const entry of directory.values()) {
+    const entryPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+
+    if (entry.kind === "directory") {
+      await scanMarkdownDirectory(entry, entryPath, results);
+      continue;
+    }
+
+    if (!/\.(md|markdown)$/i.test(entry.name)) continue;
+
+    const file = await entry.getFile();
+    results.push({
+      id: `${entryPath}:${file.lastModified}:${file.size}`,
+      name: entry.name,
+      path: entryPath,
+      size: file.size,
+      lastModified: file.lastModified,
+      read: async () => (await entry.getFile()).text(),
+    });
+  }
+
+  return results;
+}
+
+function LibraryBranch({
+  node,
+  activePath,
+  onOpenFile,
+  depth = 0,
+  isRoot = false,
+}: {
+  node: LibraryFolderNode;
+  activePath: string;
+  onOpenFile: (file: LibraryFile) => void;
+  depth?: number;
+  isRoot?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(true);
+  const folders = Array.from(node.folders.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "fa"),
+  );
+  const files = [...node.files].sort((a, b) =>
+    a.name.localeCompare(b.name, "fa"),
+  );
+  const branchContents = (
+    <>
+      {folders.map((folder) => (
+        <LibraryBranch
+          key={folder.path}
+          node={folder}
+          activePath={activePath}
+          onOpenFile={onOpenFile}
+          depth={isRoot ? 0 : depth + 1}
+        />
+      ))}
+      {files.map((file) => (
+        <li key={file.id}>
+          <button
+            className={`library-file ${
+              activePath === file.path ? "is-active" : ""
+            }`}
+            type="button"
+            onClick={() => onOpenFile(file)}
+            title={file.path}
+            style={
+              {
+                "--tree-indent": `${(isRoot ? 0 : depth + 1) * 15}px`,
+              } as React.CSSProperties
+            }
+            aria-pressed={activePath === file.path}
+          >
+            <FileText size={15} aria-hidden="true" />
+            <span dir="auto">{file.name}</span>
+          </button>
+        </li>
+      ))}
+    </>
+  );
+
+  if (isRoot) {
+    return <ul className="library-branch">{branchContents}</ul>;
+  }
+
+  return (
+    <li className="library-folder">
+      <button
+        className="folder-row"
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-expanded={isOpen}
+        style={{ "--tree-indent": `${depth * 15}px` } as React.CSSProperties}
+      >
+        {isOpen ? (
+          <ChevronDown size={15} aria-hidden="true" />
+        ) : (
+          <ChevronLeft size={15} aria-hidden="true" />
+        )}
+        <Folder size={16} aria-hidden="true" />
+        <span dir="auto">{node.name}</span>
+      </button>
+
+      {isOpen && <ul className="library-branch">{branchContents}</ul>}
+    </li>
+  );
+}
 
 function getDownloadName(fileName: string) {
   const trimmed = fileName.trim() || "نوشته-راوی";
@@ -86,9 +274,24 @@ export default function Home() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryIsModal, setLibraryIsModal] = useState(false);
+  const [libraryState, setLibraryState] = useState<LibraryState>("idle");
+  const [libraryFiles, setLibraryFiles] = useState<LibraryFile[]>([]);
+  const [libraryRoot, setLibraryRoot] = useState("");
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [activeLibraryPath, setActiveLibraryPath] = useState("");
+  const [openingLibraryPath, setOpeningLibraryPath] = useState("");
+  const [directoryHandle, setDirectoryHandle] =
+    useState<LocalDirectoryHandle | null>(null);
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const directoryInputRef = useRef<HTMLInputElement>(null);
+  const libraryPanelRef = useRef<HTMLElement>(null);
+  const libraryCloseRef = useRef<HTMLButtonElement>(null);
+  const libraryTriggerRef = useRef<HTMLButtonElement>(null);
+  const libraryWasOpenRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const stats = useMemo(() => {
@@ -98,6 +301,19 @@ export default function Home() {
       lines: content.split(/\r?\n/u).length,
     };
   }, [content]);
+
+  const visibleLibraryFiles = useMemo(() => {
+    const query = libraryQuery.trim().toLocaleLowerCase("fa");
+    if (!query) return libraryFiles;
+    return libraryFiles.filter((file) =>
+      file.path.toLocaleLowerCase("fa").includes(query),
+    );
+  }, [libraryFiles, libraryQuery]);
+
+  const libraryTree = useMemo(
+    () => buildLibraryTree(visibleLibraryFiles),
+    [visibleLibraryFiles],
+  );
 
   const showNotice = (message: string) => {
     setNotice(message);
@@ -122,6 +338,8 @@ export default function Home() {
           setReaderSize(Math.min(22, Math.max(16, parsed.readerSize)));
         }
       }
+      const lastLibraryRoot = window.localStorage.getItem(LIBRARY_ROOT_KEY);
+      if (lastLibraryRoot) setLibraryRoot(lastLibraryRoot);
     } catch {
       setError("بازیابی آخرین نوشته ممکن نبود؛ می‌توانید یک فایل تازه باز کنید.");
     } finally {
@@ -173,6 +391,54 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 820px)");
+    const syncLibraryMode = () => setLibraryIsModal(mediaQuery.matches);
+    syncLibraryMode();
+    mediaQuery.addEventListener("change", syncLibraryMode);
+    return () => mediaQuery.removeEventListener("change", syncLibraryMode);
+  }, []);
+
+  useEffect(() => {
+    if (libraryWasOpenRef.current && !libraryOpen) {
+      requestAnimationFrame(() => libraryTriggerRef.current?.focus());
+    }
+    libraryWasOpenRef.current = libraryOpen;
+  }, [libraryOpen]);
+
+  useEffect(() => {
+    if (!libraryOpen || !libraryIsModal) return;
+
+    requestAnimationFrame(() => libraryCloseRef.current?.focus());
+
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const panel = libraryPanelRef.current;
+      if (!panel) return;
+
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.offsetParent !== null);
+
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", trapFocus);
+    return () => document.removeEventListener("keydown", trapFocus);
+  }, [libraryOpen, libraryIsModal]);
+
   const downloadMarkdown = () => {
     const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -188,6 +454,10 @@ export default function Home() {
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && libraryOpen) {
+        setLibraryOpen(false);
+        return;
+      }
       if (event.key === "Escape" && readingMode) {
         setReadingMode(false);
         return;
@@ -206,7 +476,7 @@ export default function Home() {
 
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [content, fileName, readingMode]);
+  }, [content, fileName, readingMode, libraryOpen]);
 
   const readFile = async (file: File) => {
     setError("");
@@ -226,11 +496,135 @@ export default function Home() {
       const nextContent = await file.text();
       setContent(nextContent);
       setFileName(file.name);
+      setActiveLibraryPath("");
       setMobilePane("preview");
       setReadingMode(false);
       showNotice("فایل باز شد و پیش‌نمایش آماده است.");
     } catch {
       setError("خواندن فایل ممکن نبود؛ دوباره تلاش کنید.");
+    }
+  };
+
+  const scanConnectedDirectory = async (handle: LocalDirectoryHandle) => {
+    setLibraryState("scanning");
+    setError("");
+
+    try {
+      const files = await scanMarkdownDirectory(handle);
+      files.sort((a, b) => a.path.localeCompare(b.path, "fa"));
+      setLibraryFiles(files);
+      setLibraryRoot(handle.name);
+      setLibraryQuery("");
+      setLibraryState("ready");
+      window.localStorage.setItem(LIBRARY_ROOT_KEY, handle.name);
+      showNotice(
+        files.length
+          ? `${files.length.toLocaleString("fa-IR")} فایل Markdown به کتابخانه اضافه شد.`
+          : "در این پوشه فایل Markdown پیدا نشد.",
+      );
+    } catch {
+      setLibraryState(libraryFiles.length ? "ready" : "idle");
+      setError(
+        "اسکن پوشه کامل نشد؛ دسترسی پوشه را بررسی کنید و دوباره تلاش کنید.",
+      );
+    }
+  };
+
+  const connectLibrary = async () => {
+    const pickerWindow = window as DirectoryPickerWindow;
+    if (!pickerWindow.showDirectoryPicker) {
+      directoryInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const handle = await pickerWindow.showDirectoryPicker({ mode: "read" });
+      setDirectoryHandle(handle);
+      setActiveLibraryPath("");
+      await scanConnectedDirectory(handle);
+    } catch (pickerError) {
+      if (
+        pickerError instanceof DOMException &&
+        pickerError.name === "AbortError"
+      ) {
+        return;
+      }
+      setError(
+        "اتصال به پوشه انجام نشد؛ دوباره «انتخاب پوشه» را بزنید و اجازه‌ی خواندن بدهید.",
+      );
+    }
+  };
+
+  const handleFallbackDirectory = (files: FileList | null) => {
+    if (!files?.length) return;
+
+    const selectedFiles = Array.from(files);
+    const firstRelativePath =
+      (selectedFiles[0] as File & { webkitRelativePath?: string })
+        .webkitRelativePath || selectedFiles[0].name;
+    const rootName = firstRelativePath.split("/")[0] || "پوشه‌ی انتخابی";
+
+    const entries = selectedFiles
+      .filter((file) => /\.(md|markdown)$/i.test(file.name))
+      .map((file) => {
+        const rawPath =
+          (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
+          file.name;
+        const pathParts = rawPath.split("/");
+        const relativePath =
+          pathParts.length > 1 ? pathParts.slice(1).join("/") : file.name;
+
+        return {
+          id: `${relativePath}:${file.lastModified}:${file.size}`,
+          name: file.name,
+          path: relativePath,
+          size: file.size,
+          lastModified: file.lastModified,
+          read: () => file.text(),
+        } satisfies LibraryFile;
+      })
+      .sort((a, b) => a.path.localeCompare(b.path, "fa"));
+
+    setDirectoryHandle(null);
+    setLibraryFiles(entries);
+    setLibraryRoot(rootName);
+    setActiveLibraryPath("");
+    setLibraryQuery("");
+    setLibraryState("ready");
+    window.localStorage.setItem(LIBRARY_ROOT_KEY, rootName);
+    showNotice(
+      entries.length
+        ? `${entries.length.toLocaleString("fa-IR")} فایل Markdown به کتابخانه اضافه شد.`
+        : "در این پوشه فایل Markdown پیدا نشد.",
+    );
+  };
+
+  const openLibraryFile = async (file: LibraryFile) => {
+    if (file.size > MAX_FILE_SIZE) {
+      setError("حجم این فایل بیشتر از ۲ مگابایت است و در راوی باز نمی‌شود.");
+      return;
+    }
+
+    setOpeningLibraryPath(file.path);
+    setError("");
+
+    try {
+      const nextContent = await file.read();
+      setContent(nextContent);
+      setFileName(file.name);
+      setActiveLibraryPath(file.path);
+      setMobilePane("preview");
+      setReadingMode(false);
+      if (window.matchMedia("(max-width: 820px)").matches) {
+        setLibraryOpen(false);
+      }
+      showNotice(`«${file.name}» از کتابخانه باز شد.`);
+    } catch {
+      setError(
+        "خواندن این فایل ممکن نبود؛ پوشه را دوباره متصل کنید و مجوز دسترسی را تأیید کنید.",
+      );
+    } finally {
+      setOpeningLibraryPath("");
     }
   };
 
@@ -330,6 +724,22 @@ export default function Home() {
             فایل روی همین دستگاه می‌ماند
           </span>
           <button
+            ref={libraryTriggerRef}
+            className={`button button--quiet library-trigger ${
+              libraryOpen ? "is-active" : ""
+            }`}
+            type="button"
+            onClick={() => setLibraryOpen((current) => !current)}
+            aria-controls="library-panel"
+            aria-expanded={libraryOpen}
+          >
+            <Library size={18} aria-hidden="true" />
+            <span>کتابخانه</span>
+            {libraryFiles.length > 0 && (
+              <b>{libraryFiles.length.toLocaleString("fa-IR")}</b>
+            )}
+          </button>
+          <button
             className="button button--primary"
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -348,7 +758,13 @@ export default function Home() {
           <button
             className={`button button--quiet ${readingMode ? "is-active" : ""}`}
             type="button"
-            onClick={() => setReadingMode((current) => !current)}
+            onClick={() =>
+              setReadingMode((current) => {
+                const nextMode = !current;
+                if (nextMode) setLibraryOpen(false);
+                return nextMode;
+              })
+            }
             aria-pressed={readingMode}
           >
             {readingMode ? (
@@ -412,16 +828,22 @@ export default function Home() {
         </div>
       )}
 
-      <main
-        className={`workspace ${readingMode ? "workspace--reading" : ""}`}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragOver={(event) => event.preventDefault()}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+      <div
+        className={`workspace-frame ${
+          libraryOpen ? "library-is-open" : ""
+        }`}
       >
+        <main
+          className={`workspace ${readingMode ? "workspace--reading" : ""}`}
+          inert={libraryOpen && libraryIsModal ? true : undefined}
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
         <input
           ref={fileInputRef}
           className="visually-hidden"
@@ -592,6 +1014,37 @@ export default function Home() {
                         rel="noreferrer noopener"
                       />
                     ),
+                    img: ({ src, alt }) => {
+                      const imageSource =
+                        typeof src === "string" ? src.trim() : "";
+                      const isRemoteImage =
+                        /^(?:https?:)?\/\//i.test(imageSource);
+
+                      if (isRemoteImage) {
+                        return (
+                          <span className="remote-media-blocked" role="note">
+                            <ShieldCheck size={18} aria-hidden="true" />
+                            <span>
+                              <strong>تصویر خارجی بارگذاری نشد</strong>
+                              <small>
+                                برای حفظ حریم خصوصی، تصویرهای اینترنتی خودکار
+                                دریافت نمی‌شوند.
+                              </small>
+                            </span>
+                            <a
+                              href={imageSource}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              referrerPolicy="no-referrer"
+                            >
+                              بازکردن تصویر
+                            </a>
+                          </span>
+                        );
+                      }
+
+                      return <img src={src} alt={alt ?? ""} loading="lazy" />;
+                    },
                   }}
                 >
                   {content}
@@ -620,7 +1073,195 @@ export default function Home() {
             Markdown استاندارد با پشتیبانی از جدول و چک‌لیست
           </div>
         </section>
-      </main>
+        </main>
+
+        {libraryOpen && (
+          <aside
+            ref={libraryPanelRef}
+            className="library-panel"
+            id="library-panel"
+            role={libraryIsModal ? "dialog" : undefined}
+            aria-modal={libraryIsModal || undefined}
+            aria-labelledby="library-title"
+          >
+            <div className="library-header">
+              <div>
+                <span className="library-kicker">قفسه‌ی محلی</span>
+                <strong id="library-title">کتابخانه</strong>
+              </div>
+              <button
+                ref={libraryCloseRef}
+                type="button"
+                onClick={() => setLibraryOpen(false)}
+                aria-label="بستن کتابخانه"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+
+            <input
+              ref={directoryInputRef}
+              className="visually-hidden"
+              type="file"
+              accept=".md,.markdown,text/markdown"
+              multiple
+              {...({
+                webkitdirectory: "",
+                directory: "",
+              } as React.InputHTMLAttributes<HTMLInputElement>)}
+              onChange={(event) => {
+                handleFallbackDirectory(event.target.files);
+                event.currentTarget.value = "";
+              }}
+              tabIndex={-1}
+            />
+
+            {libraryState === "idle" ? (
+              <div className="library-onboarding">
+                <span className="library-seal" aria-hidden="true">
+                  <FolderOpen size={32} />
+                </span>
+                <strong>
+                  {libraryRoot
+                    ? `اتصال دوباره به «${libraryRoot}»`
+                    : "پوشه‌ی نوشته‌ها را انتخاب کنید"}
+                </strong>
+                <p>
+                  راوی همه‌ی زیرپوشه‌ها را می‌گردد و فقط فایل‌های md و markdown
+                  را به این قفسه می‌آورد.
+                </p>
+                <button
+                  className="button button--primary"
+                  type="button"
+                  onClick={() => void connectLibrary()}
+                >
+                  <FolderOpen size={17} aria-hidden="true" />
+                  انتخاب پوشه
+                </button>
+              </div>
+            ) : libraryState === "scanning" ? (
+              <div className="library-scanning" role="status">
+                <RefreshCw
+                  className="is-spinning"
+                  size={28}
+                  aria-hidden="true"
+                />
+                <strong>در حال ساخت کتابخانه…</strong>
+                <span>پوشه‌ها و فایل‌های Markdown بررسی می‌شوند.</span>
+              </div>
+            ) : (
+              <>
+                <div className="library-rootbar">
+                  <div>
+                    <FolderOpen size={17} aria-hidden="true" />
+                    <span>
+                      <small>پوشه‌ی ریشه</small>
+                      <strong dir="auto">{libraryRoot}</strong>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      directoryHandle
+                        ? void scanConnectedDirectory(directoryHandle)
+                        : void connectLibrary()
+                    }
+                    aria-label="اسکن دوباره‌ی پوشه"
+                    title="اسکن دوباره"
+                  >
+                    <RefreshCw size={16} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void connectLibrary()}
+                    aria-label="انتخاب پوشه‌ی دیگر"
+                    title="تغییر پوشه"
+                  >
+                    <FolderOpen size={16} aria-hidden="true" />
+                  </button>
+                </div>
+
+                <label className="library-search">
+                  <Search size={16} aria-hidden="true" />
+                  <span className="visually-hidden">جست‌وجو در کتابخانه</span>
+                  <input
+                    type="search"
+                    value={libraryQuery}
+                    onChange={(event) => setLibraryQuery(event.target.value)}
+                    placeholder="جست‌وجوی نام یا مسیر…"
+                    dir="auto"
+                  />
+                  {libraryQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setLibraryQuery("")}
+                      aria-label="پاک‌کردن جست‌وجو"
+                    >
+                      <X size={15} aria-hidden="true" />
+                    </button>
+                  )}
+                </label>
+
+                <div className="library-summary">
+                  <span>
+                    {visibleLibraryFiles.length.toLocaleString("fa-IR")} فایل
+                  </span>
+                  {libraryQuery && (
+                    <span>
+                      از {libraryFiles.length.toLocaleString("fa-IR")}
+                    </span>
+                  )}
+                </div>
+
+                <div className="library-tree">
+                  {visibleLibraryFiles.length ? (
+                    <LibraryBranch
+                      node={libraryTree}
+                      activePath={activeLibraryPath}
+                      onOpenFile={(file) => void openLibraryFile(file)}
+                      isRoot
+                    />
+                  ) : (
+                    <div className="library-empty">
+                      <FileText size={28} aria-hidden="true" />
+                      <strong>
+                        {libraryQuery
+                          ? "فایلی با این عبارت پیدا نشد"
+                          : "فایل Markdown پیدا نشد"}
+                      </strong>
+                      <span>
+                        {libraryQuery
+                          ? "عبارت جست‌وجو را تغییر دهید."
+                          : "یک پوشه‌ی دیگر انتخاب کنید یا فایل md بسازید."}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="library-footer">
+                  {openingLibraryPath ? (
+                    <span>در حال باز کردن فایل…</span>
+                  ) : activeLibraryPath ? (
+                    <span dir="auto" title={activeLibraryPath}>
+                      {activeLibraryPath}
+                    </span>
+                  ) : (
+                    <span>برای باز کردن، روی نام فایل کلیک کنید.</span>
+                  )}
+                </div>
+              </>
+            )}
+
+            <div className="library-privacy">
+              <ShieldCheck size={17} aria-hidden="true" />
+              <span>
+                اسکن فقط پس از اجازه‌ی شما انجام می‌شود؛ فایلی به اینترنت ارسال
+                نمی‌شود.
+              </span>
+            </div>
+          </aside>
+        )}
+      </div>
 
       {notice && (
         <div className="toast" role="status">

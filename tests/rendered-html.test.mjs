@@ -47,6 +47,11 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /ReactMarkdown/);
   assert.match(page, /localStorage/);
   assert.match(page, /text\/markdown/);
+  assert.match(page, /showDirectoryPicker/);
+  assert.match(page, /scanMarkdownDirectory/);
+  assert.match(page, /کتابخانه/);
+  assert.match(page, /تصویر خارجی بارگذاری نشد/);
+  assert.match(page, /<ul className="library-branch">/);
   assert.match(layout, /lang="fa"/);
   assert.match(layout, /dir="rtl"/);
   assert.match(css, /IRANSansX-Regular\.woff2/);
