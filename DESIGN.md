@@ -1,0 +1,224 @@
+---
+name: راوی
+description: میز نمونه‌خوانی و ویرایش Markdown فارسی
+colors:
+  ink-950: "#171b18"
+  ink-900: "#20251f"
+  ink-700: "#50584f"
+  ink-500: "#747c73"
+  paper-50: "#fcfdf9"
+  paper-100: "#f5f6f0"
+  paper-200: "#e8ebe2"
+  paper-300: "#d5d9cf"
+  proof-blue: "#2557e5"
+  proof-blue-dark: "#1742bd"
+  proof-blue-soft: "#e9efff"
+  rule: "#cbd0c6"
+  error: "#b9382f"
+  error-soft: "#fff0ed"
+  success: "#299452"
+  saving: "#b77b08"
+  focus-ring: "#9fb5ff"
+typography:
+  display:
+    fontFamily: "IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif"
+    fontSize: "clamp(30px, 4vw, 50px)"
+    fontWeight: 700
+    lineHeight: 1.5
+    letterSpacing: "-0.025em"
+  body:
+    fontFamily: "IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif"
+    fontSize: "18px"
+    fontWeight: 400
+    lineHeight: 2
+  editor:
+    fontFamily: "IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 2.14
+  label:
+    fontFamily: "IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif"
+    fontSize: "12px"
+    fontWeight: 700
+    lineHeight: 1.5
+  small-label:
+    fontFamily: "IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif"
+    fontSize: "11px"
+    fontWeight: 400
+    lineHeight: 1.5
+  micro-label:
+    fontFamily: "IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif"
+    fontSize: "9px"
+    fontWeight: 700
+    lineHeight: 1.5
+  brand:
+    fontFamily: "IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif"
+    fontSize: "20px"
+    fontWeight: 700
+    lineHeight: 1.2
+  quote-mark:
+    fontFamily: "IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif"
+    fontSize: "28px"
+    fontWeight: 700
+    lineHeight: 1
+  mono:
+    fontFamily: "Cascadia Code, SFMono-Regular, Consolas, monospace"
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: 1.75
+rounded:
+  tight: "3px"
+  control: "4px"
+  tab: "5px"
+  action: "6px"
+spacing:
+  xs: "4px"
+  sm: "8px"
+  md: "14px"
+  lg: "24px"
+  xl: "36px"
+components:
+  button-primary:
+    backgroundColor: "{colors.proof-blue}"
+    textColor: "{colors.paper-50}"
+    typography: "{typography.label}"
+    rounded: "{rounded.action}"
+    padding: "0 15px"
+    height: "42px"
+  button-primary-hover:
+    backgroundColor: "{colors.proof-blue-dark}"
+    textColor: "{colors.paper-50}"
+  button-quiet:
+    backgroundColor: "transparent"
+    textColor: "{colors.paper-300}"
+    typography: "{typography.label}"
+    rounded: "{rounded.action}"
+    padding: "0 15px"
+    height: "42px"
+  tool-button:
+    backgroundColor: "transparent"
+    textColor: "{colors.ink-700}"
+    rounded: "{rounded.control}"
+    size: "31px"
+  pane:
+    backgroundColor: "{colors.paper-50}"
+    rounded: "0"
+---
+
+# Design System: راوی
+
+## Overview
+
+**Creative North Star: "برگه‌ی زنده‌ی نمونه‌خوانی"**
+
+راوی از فضای کار یک نمونه‌خوان حرفه‌ای می‌آید: کاغذ روشن، مرکب دقیق، حاشیه‌های کاربردی و نشانه‌هایی که تنها وقتی لازم‌اند خودشان را نشان می‌دهند. نوشته همیشه بیشترین سطح و بالاترین کنتراست را دارد؛ رابط مثل ابزار چاپ و صحافی کنار آن می‌نشیند، نه روی آن.
+
+هویت در تمام سطوح با قاب‌بندی دقیق، خط‌های ثبت، شماره‌ی برگ و وضعیت‌های شبیه مهر یا یادداشت نمونه‌خوان باقی می‌ماند. تزئین چاپی فقط وقتی مجاز است که جهت، وضعیت یا مرز یک کار را روشن کند.
+
+**Key Characteristics:**
+
+- روشن، دقیق و مناسب مطالعه‌ی طولانی
+- ترکیب کاغذ سرد، مرکب زغالی و آبی نمونه‌خوان
+- سطوح کاری تخت و یک سایه‌ی واقعی برای برگ حالت مطالعه
+- حرکت کوتاه شبیه جابه‌جایی یا بازشدن یک برگه
+
+## Colors
+
+راهبرد رنگی محدود است: خنثی‌های چاپی با یک آبی واضح برای عمل و تمرکز. مرکب زغالی متن و نوار اصلی را می‌سازد، خانواده‌ی کاغذ فاصله‌ی سطوح را بدون سایه روشن می‌کند، و قرمز فقط به خطا تعلق دارد.
+
+### Primary
+
+- **آبی نمونه‌خوان:** عمل اصلی، فوکوس، لینک و نشانه‌ی ثبت
+- **آبی نمونه‌خوان تیره:** حالت hover و لینک‌های متنی
+- **آبی یادداشت:** پس‌زمینه‌ی کم‌کنتراست کنترل فعال
+
+### Neutral
+
+- **مرکب عمیق:** متن اصلی و نوار بالای محصول
+- **مرکب نرم:** متن توضیحی و آمار سند
+- **کاغذ سفید سرد:** سطح پیش‌نمایش
+- **کاغذ کار:** ویرایشگر و نوارهای ابزار
+- **خط صحافی:** مرزها و تقسیم‌کننده‌ها
+
+**The Proofreader Blue Rule.** آبی فقط عمل اصلی، مکان فعال و نشانه‌ی نمونه‌خوان را حمل می‌کند؛ به رنگ تزئینی پس‌زمینه تبدیل نمی‌شود.
+
+## Typography
+
+**Display Font:** IRANSansX با fallback فارسی  
+**Body Font:** IRANSansX با fallback فارسی  
+**Label/Mono Font:** Cascadia Code یا Consolas فقط برای کد
+
+**Character:** وزن‌ها و اندازه‌های ایران‌سنس سلسله‌مراتب را می‌سازند. عنوان اصلی بسیار سنگین و فشرده است، بدنه با فاصله‌ی خط دو برابر اندازه‌ی متن نفس می‌کشد. کد همیشه LTR و از متن فارسی قابل تشخیص است.
+
+### Hierarchy
+
+- **Display** (وزن ۷۰۰، `clamp(30px, 4vw, 50px)`، فاصله‌ی خط ۱٫۵): عنوان سطح اول نوشته
+- **Headline** (وزن ۷۰۰، `clamp(23px, 2.5vw, 30px)`، فاصله‌ی خط ۱٫۵): بخش‌های اصلی
+- **Title** (وزن ۷۰۰، `clamp(19px, 2vw, 23px)`): زیربخش‌ها
+- **Body** (وزن ۴۰۰، ۱۸px، فاصله‌ی خط ۲): خواندن طولانی با عرض حداکثر ۷۶ch
+- **Label** (وزن ۷۰۰، ۱۲px): کنترل‌ها و وضعیت
+
+**The Native Direction Rule.** پاراگراف فارسی RTL است؛ کد، نشانی و متن فنی جهت طبیعی خود را حفظ می‌کنند.
+
+## Layout
+
+سطح اصلی یک میز کار دوبرگی است: ویرایشگر در سمت راست و پیش‌نمایش در سمت چپ، با ستون ثبت ۳۴ پیکسلی میان آن‌ها. نوار ابزار ۷۶ پیکسلی و نوار وضعیت حداقل ۵۰ پیکسلی‌اند؛ باقی ارتفاع در اختیار نوشته است. برگ خواندن روی اندازه‌ی ۷۶ch محدود می‌ماند.
+
+در عرض ۸۲۰px و کمتر، دو سطح به تب‌های «ویرایش» و «پیش‌نمایش» تبدیل می‌شوند. نوار وضعیت دو ردیفه می‌شود، کنترل‌های اصلی به آیکون تقلیل پیدا می‌کنند و جدول‌ها به‌تنهایی امکان پیمایش افقی دارند.
+
+## Elevation & Depth
+
+سیستم در حالت کار تخت است و عمق را با اختلاف سطح رنگ و مرزهای یک پیکسلی می‌سازد. فقط برگ حالت مطالعه سایه‌ی پایین‌افتاده‌ی نرم دارد (`0 18px 54px rgba(29, 36, 30, 0.17)`). بازخورد کشیدن فایل سایه‌ی قوی‌تر و موقت می‌گیرد.
+
+**The Flat Workbench Rule.** کنترل‌ها و پنل‌های کاری در حالت عادی سایه ندارند؛ سایه فقط برای برگ مطالعه، اعلان و بازخورد جابه‌جایی فایل است.
+
+## Shapes
+
+پنل‌ها گوشه‌ی مستقیم دارند. کنترل‌های قالب‌بندی شعاع ۴ پیکسلی و دکمه‌های عملیاتی شعاع ۶ پیکسلی دارند. نشان ثبت و نقطه‌ی وضعیت تنها دایره‌های کامل سیستم‌اند؛ هیچ کنترل متنی به کپسول تزئینی تبدیل نمی‌شود.
+
+## Components
+
+### Buttons
+
+- **Shape:** مستطیل کم‌گرد (۶px) با ارتفاع ۴۲px
+- **Primary:** آبی نمونه‌خوان با متن سفید و وزن ۷۰۰
+- **Hover / Focus:** تیره‌شدن آبی، یک جابه‌جایی یک پیکسلی و حلقه‌ی فوکوس سه پیکسلی
+- **Quiet:** شفاف با خط خاکستری روی نوار مرکب؛ در حالت فعال به کاغذ سفید تبدیل می‌شود
+
+### Cards / Containers
+
+- **Corner Style:** مستقیم
+- **Background:** کاغذ سفید برای پیش‌نمایش و کاغذ کار برای ویرایش
+- **Shadow Strategy:** بدون سایه در میز کار
+- **Border:** خط صحافی یک پیکسلی
+- **Internal Padding:** وابسته به نقش؛ ۱۴px برای ابزار و ۲۲ تا ۷۲px برای نوشته
+
+### Inputs / Fields
+
+- **Style:** textarea تمام‌سطح با خطوط مبنای ۳۲ پیکسلی و بدون قاب داخلی
+- **Focus:** خط داخلی دو پیکسلی آبی
+- **Error / Disabled:** خطا روی کاغذ قرمز کم‌رنگ؛ کنترل غیرفعال با مرکب بسیار روشن
+
+### Navigation
+
+نوار بالا مرکب عمیق است و نام را با یک مهر مربع و علامت برش معرفی می‌کند. در موبایل فقط عمل اصلی متن خود را نگه می‌دارد و سایر کنترل‌ها آیکونی می‌شوند.
+
+### Registration Spine
+
+ستون میانی با دو نشان ثبت، خط ممتد و برچسب عمودی به کاربر می‌گوید دو برگ نمایش‌های هم‌زمان یک سند هستند.
+
+## Do's and Don'ts
+
+### Do:
+
+- **Do** فضای متن را از رابط بیشتر نگه دار.
+- **Do** از علائم چاپی برای وضعیت، مرز و جهت استفاده کن.
+- **Do** قطعه‌کد را LTR و با پیمایش امن در نمایشگر کوچک نمایش بده.
+- **Do** آبی را برای عمل و فوکوس ذخیره کن.
+
+### Don't:
+
+- **Don't** نوشته را داخل مجموعه‌ای از کارت‌های هم‌اندازه خرد کن.
+- **Don't** کاغذ را با بافت تزئینی یا نویز مصنوعی پر کن.
+- **Don't** برای ظاهر فنی از تک‌عرض‌کردن متن فارسی استفاده کن.
+- **Don't** روی سطح کاری تخت سایه و خط مرزی را هم‌زمان انباشته کن.

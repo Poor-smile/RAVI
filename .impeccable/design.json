@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-29T17:17:23.0404491+03:30",
+  "title": "Design System: راوی",
+  "extensions": {
+    "colorMeta": {
+      "ink-950": {
+        "role": "neutral",
+        "displayName": "مرکب عمیق",
+        "canonical": "#171b18",
+        "tonalRamp": ["#0d100e", "#171b18", "#2c332d", "#4b554d", "#78817a", "#aab0aa", "#d6d9d5", "#f2f3f1"]
+      },
+      "paper-50": {
+        "role": "neutral",
+        "displayName": "کاغذ سفید سرد",
+        "canonical": "#fcfdf9",
+        "tonalRamp": ["#242820", "#3b4235", "#59624f", "#7a846e", "#a1aa94", "#c5cbbd", "#e6e9e1", "#fcfdf9"]
+      },
+      "proof-blue": {
+        "role": "primary",
+        "displayName": "آبی نمونه‌خوان",
+        "canonical": "#2557e5",
+        "tonalRamp": ["#07143f", "#0c246f", "#11389f", "#1748c3", "#2557e5", "#6684ee", "#a6b7f7", "#e9efff"]
+      },
+      "error": {
+        "role": "tertiary",
+        "displayName": "قرمز خطا",
+        "canonical": "#b9382f",
+        "tonalRamp": ["#3b0a08", "#671611", "#8c251e", "#b9382f", "#d7675f", "#ea9d97", "#f6cfcb", "#fff0ed"]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "سبز ذخیره",
+        "canonical": "#299452",
+        "tonalRamp": ["#062b14", "#0b4d24", "#126e34", "#299452", "#57b979", "#8fd5a7", "#c5ead1", "#eefaf2"]
+      },
+      "saving": {
+        "role": "tertiary",
+        "displayName": "کهربایی نگه‌داری",
+        "canonical": "#b77b08",
+        "tonalRamp": ["#342000", "#593900", "#815500", "#b77b08", "#d9a53c", "#eacb7b", "#f6e5b5", "#fff8e5"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "عنوان نوشته",
+        "purpose": "عنوان سطح اول در پیش‌نمایش Markdown."
+      },
+      "body": {
+        "displayName": "متن خواندن",
+        "purpose": "بدنه‌ی فارسی با فاصله‌ی خط زیاد برای مطالعه‌ی طولانی."
+      },
+      "mono": {
+        "displayName": "متن فنی",
+        "purpose": "قطعه‌کد و داده‌ی LTR."
+      }
+    },
+    "shadows": [
+      {
+        "name": "reading-sheet",
+        "value": "0 18px 54px rgba(29, 36, 30, 0.17)",
+        "purpose": "جداکردن برگ حالت مطالعه از میز."
+      },
+      {
+        "name": "drop-feedback",
+        "value": "0 18px 44px rgba(23, 42, 82, 0.18)",
+        "purpose": "بازخورد موقت هنگام کشیدن فایل."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-paper",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "بازشدن برگ، اعلان و جابه‌جایی کوتاه کنترل‌ها."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "820px"
+      },
+      {
+        "name": "narrow",
+        "value": "520px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "عمل اصلی مانند باز کردن فایل.",
+      "html": "<button class=\"ds-button-primary\">باز کردن فایل</button>",
+      "css": ".ds-button-primary { height: 42px; padding: 0 15px; border: 0; border-radius: 6px; background: var(--proof-blue, #2557e5); color: #fff; font-family: IRANSansX, Tahoma, sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; transition: background-color 160ms ease, transform 160ms cubic-bezier(.16,1,.3,1); } .ds-button-primary:hover { background: var(--proof-blue-dark, #1742bd); transform: translateY(-1px); } .ds-button-primary:focus-visible { outline: 3px solid #9fb5ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "عمل ثانویه روی نوار مرکب.",
+      "html": "<button class=\"ds-button-quiet\">حالت مطالعه</button>",
+      "css": ".ds-button-quiet { height: 42px; padding: 0 15px; border: 1px solid #4a524a; border-radius: 6px; background: transparent; color: #d2d7d2; font-family: IRANSansX, Tahoma, sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; transition: background-color 160ms ease, color 160ms ease; } .ds-button-quiet:hover { background: #fcfdf9; border-color: #fcfdf9; color: #171b18; } .ds-button-quiet:focus-visible { outline: 3px solid #9fb5ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Tool Button",
+      "kind": "button",
+      "refersTo": "tool-button",
+      "description": "کنترل فشرده‌ی قالب‌بندی.",
+      "html": "<button class=\"ds-tool-button\" aria-label=\"پررنگ\">B</button>",
+      "css": ".ds-tool-button { width: 31px; height: 31px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: #50584f; font: 700 14px Arial, sans-serif; cursor: pointer; } .ds-tool-button:hover { background: #e9efff; color: #1742bd; } .ds-tool-button:focus-visible { outline: 3px solid #9fb5ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Mobile View Tabs",
+      "kind": "nav",
+      "description": "جابه‌جایی میان ویرایش و پیش‌نمایش در عرض کم.",
+      "html": "<div class=\"ds-view-tabs\" dir=\"rtl\"><button aria-selected=\"true\">پیش‌نمایش</button><button aria-selected=\"false\">ویرایش</button></div>",
+      "css": ".ds-view-tabs { display: flex; width: fit-content; padding: 2px; border: 1px solid #cbd0c6; border-radius: 5px; background: #e1e4dc; } .ds-view-tabs button { min-width: 74px; height: 29px; border: 0; border-radius: 3px; background: transparent; color: #50584f; font-family: IRANSansX, Tahoma, sans-serif; font-size: 10px; font-weight: 700; cursor: pointer; } .ds-view-tabs button[aria-selected=\"true\"] { background: #2557e5; color: #fff; } .ds-view-tabs button:focus-visible { outline: 3px solid #9fb5ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Work Pane",
+      "kind": "card",
+      "refersTo": "pane",
+      "description": "سطح اصلی ویرایش یا پیش‌نمایش با لبه‌ی صحافی.",
+      "html": "<section class=\"ds-work-pane\" dir=\"rtl\"><header>برگ ۲ · پیش‌نمایش</header><p>متن نوشته روی کاغذ قرار می‌گیرد.</p></section>",
+      "css": ".ds-work-pane { width: 320px; min-height: 190px; border: 1px solid #cbd0c6; border-radius: 0; background: #fcfdf9; color: #171b18; font-family: IRANSansX, Tahoma, sans-serif; } .ds-work-pane header { padding: 12px 14px; border-bottom: 1px solid #cbd0c6; background: rgba(252,253,249,.95); font-size: 12px; font-weight: 700; } .ds-work-pane p { margin: 0; padding: 24px; font-size: 16px; line-height: 2; }"
+    },
+    {
+      "name": "Error Banner",
+      "kind": "custom",
+      "description": "خطای قابل بازیابی با زبان روشن.",
+      "html": "<div class=\"ds-error-banner\" role=\"alert\">این فایل Markdown نیست؛ یک فایل md انتخاب کنید.</div>",
+      "css": ".ds-error-banner { min-height: 42px; display: flex; align-items: center; padding: 8px 16px; border-bottom: 1px solid #efbbb5; background: #fff0ed; color: #7c251f; font-family: IRANSansX, Tahoma, sans-serif; font-size: 12px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "برگه‌ی زنده‌ی نمونه‌خوانی",
+    "overview": "راوی از فضای کار یک نمونه‌خوان حرفه‌ای می‌آید: کاغذ روشن، مرکب دقیق، حاشیه‌های کاربردی و نشانه‌هایی که تنها وقتی لازم‌اند خودشان را نشان می‌دهند. نوشته همیشه بیشترین سطح و بالاترین کنتراست را دارد؛ رابط مثل ابزار چاپ و صحافی کنار آن می‌نشیند، نه روی آن.",
+    "keyCharacteristics": [
+      "روشن، دقیق و مناسب مطالعه‌ی طولانی",
+      "ترکیب کاغذ سرد، مرکب زغالی و آبی نمونه‌خوان",
+      "سطوح کاری تخت و یک سایه‌ی واقعی برای برگ حالت مطالعه",
+      "حرکت کوتاه شبیه جابه‌جایی یا بازشدن یک برگه"
+    ],
+    "rules": [
+      {
+        "name": "The Proofreader Blue Rule",
+        "body": "آبی فقط عمل اصلی، مکان فعال و نشانه‌ی نمونه‌خوان را حمل می‌کند؛ به رنگ تزئینی پس‌زمینه تبدیل نمی‌شود.",
+        "section": "colors"
+      },
+      {
+        "name": "The Native Direction Rule",
+        "body": "پاراگراف فارسی RTL است؛ کد، نشانی و متن فنی جهت طبیعی خود را حفظ می‌کنند.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Workbench Rule",
+        "body": "کنترل‌ها و پنل‌های کاری در حالت عادی سایه ندارند؛ سایه فقط برای برگ مطالعه، اعلان و بازخورد جابه‌جایی فایل است.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do فضای متن را از رابط بیشتر نگه دار.",
+      "Do از علائم چاپی برای وضعیت، مرز و جهت استفاده کن.",
+      "Do قطعه‌کد را LTR و با پیمایش امن در نمایشگر کوچک نمایش بده.",
+      "Do آبی را برای عمل و فوکوس ذخیره کن."
+    ],
+    "donts": [
+      "Don't نوشته را داخل مجموعه‌ای از کارت‌های هم‌اندازه خرد کن.",
+      "Don't کاغذ را با بافت تزئینی یا نویز مصنوعی پر کن.",
+      "Don't برای ظاهر فنی از تک‌عرض‌کردن متن فارسی استفاده کن.",
+      "Don't روی سطح کاری تخت سایه و خط مرزی را هم‌زمان انباشته کن."
+    ]
+  }
+}
