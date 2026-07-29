@@ -5,9 +5,21 @@ import path from "node:path";
 import test from "node:test";
 import {
   createRaaviServer,
+  markdownPathFromArguments,
   readMarkdownFile,
   scanMarkdownFolder,
 } from "../desktop/server.mjs";
+
+test("desktop activation recognizes Markdown file arguments", () => {
+  assert.equal(
+    markdownPathFromArguments(
+      ["Raavi.exe", "--flag", "notes/example.md"],
+      "C:\\library",
+    ),
+    path.resolve("C:\\library", "notes/example.md"),
+  );
+  assert.equal(markdownPathFromArguments(["Raavi.exe", "notes.txt"]), null);
+});
 
 test("desktop server renders the packaged app and its assets", async () => {
   const server = await createRaaviServer();

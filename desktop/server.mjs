@@ -143,6 +143,19 @@ function isMarkdownFile(fileName) {
   return /\.(?:md|markdown)$/i.test(fileName);
 }
 
+export function markdownPathFromArguments(argumentsList, workingDirectory) {
+  const markdownArgument = argumentsList.find(
+    (argument) =>
+      typeof argument === "string" &&
+      !argument.startsWith("--") &&
+      isMarkdownFile(argument),
+  );
+
+  return markdownArgument
+    ? path.resolve(workingDirectory ?? process.cwd(), markdownArgument)
+    : null;
+}
+
 export async function scanMarkdownFolder(rootPath) {
   const resolvedRoot = path.resolve(rootPath);
   const rootStats = await stat(resolvedRoot);
@@ -200,6 +213,20 @@ export async function scanMarkdownFolder(rootPath) {
   };
 }
 
+export async function readMarkdownPath(filePath) {
+  const resolvedFile = path.resolve(filePath);
+  const details = await stat(resolvedFile);
+  if (
+    !isMarkdownFile(resolvedFile) ||
+    !details.isFile() ||
+    details.size > MAX_MARKDOWN_SIZE
+  ) {
+    throw new Error("Markdown file is too large.");
+  }
+
+  return readFile(resolvedFile, "utf8");
+}
+
 export async function readMarkdownFile(filePath, allowedRoots) {
   const resolvedFile = path.resolve(filePath);
   const insideAllowedRoot = [...allowedRoots].some((rootPath) => {
@@ -211,14 +238,9 @@ export async function readMarkdownFile(filePath, allowedRoots) {
     );
   });
 
-  if (!insideAllowedRoot || !isMarkdownFile(resolvedFile)) {
+  if (!insideAllowedRoot) {
     throw new Error("File access is outside the selected library.");
   }
 
-  const details = await stat(resolvedFile);
-  if (!details.isFile() || details.size > MAX_MARKDOWN_SIZE) {
-    throw new Error("Markdown file is too large.");
-  }
-
-  return readFile(resolvedFile, "utf8");
+  return readMarkdownPath(resolvedFile);
 }

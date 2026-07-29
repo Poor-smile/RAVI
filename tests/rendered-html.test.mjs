@@ -59,6 +59,8 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(packageJson, /"react-markdown"/);
   assert.match(packageJson, /"desktop:pack"/);
+  assert.match(packageJson, /"fileAssociations"/);
+  assert.match(packageJson, /"perMachine":\s*true/);
   assert.doesNotMatch(
     `${page}\n${layout}\n${css}\n${packageJson}`,
     /SkeletonPreview|react-loading-skeleton|codex-preview/,

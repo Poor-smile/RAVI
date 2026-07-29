@@ -11,7 +11,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createRaaviServer,
+  markdownPathFromArguments,
   readMarkdownFile,
+  readMarkdownPath,
   scanMarkdownFolder,
 } from "./server.mjs";
 
@@ -22,6 +24,8 @@ const isSmokeTest =
   process.argv.includes("--smoke-test") || process.env.RAAVI_SMOKE_TEST === "1";
 let mainWindow = null;
 let localServer = null;
+let rendererReady = false;
+let pendingMarkdownPath = markdownPathFromArguments(process.argv);
 
 function safeMarkdownName(fileName) {
   const cleaned = String(fileName || "نوشته-راوی.md")
@@ -79,8 +83,35 @@ function registerDesktopHandlers() {
   ipcMain.handle("document:save-markdown", saveMarkdown);
 }
 
+async function openMarkdownPath(filePath) {
+  if (!mainWindow || !rendererReady) {
+    pendingMarkdownPath = filePath;
+    return;
+  }
+
+  try {
+    const content = await readMarkdownPath(filePath);
+    mainWindow.webContents.send("document:open-path", {
+      name: path.basename(filePath),
+      path: filePath,
+      content,
+    });
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!isSmokeTest) mainWindow.show();
+    mainWindow.focus();
+  } catch {
+    if (!isSmokeTest) {
+      dialog.showErrorBox(
+        "بازکردن فایل ممکن نبود",
+        "فایل باید Markdown و کوچک‌تر از ۲ مگابایت باشد.",
+      );
+    }
+  }
+}
+
 async function createWindow() {
   if (!localServer) localServer = await createRaaviServer();
+  rendererReady = false;
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -115,6 +146,12 @@ async function createWindow() {
     if (!isSmokeTest) mainWindow?.show();
   });
   mainWindow.webContents.once("did-finish-load", () => {
+    rendererReady = true;
+    if (pendingMarkdownPath) {
+      const filePath = pendingMarkdownPath;
+      pendingMarkdownPath = null;
+      void openMarkdownPath(filePath);
+    }
     if (isSmokeTest) setTimeout(() => app.quit(), 500);
   });
   mainWindow.webContents.once(
@@ -125,6 +162,7 @@ async function createWindow() {
     },
   );
   mainWindow.on("closed", () => {
+    rendererReady = false;
     mainWindow = null;
   });
 
@@ -135,7 +173,9 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_event, commandLine, workingDirectory) => {
+    const filePath = markdownPathFromArguments(commandLine, workingDirectory);
+    if (filePath) void openMarkdownPath(filePath);
     if (!mainWindow) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();

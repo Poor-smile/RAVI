@@ -1,6 +1,6 @@
 {
   "name": "raavi-markdown-viewer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "productName": "راوی",
   "description": "ویور و ویرایشگر دسکتاپ Markdown فارسی",
   "author": "Raavi",
@@ -67,6 +67,16 @@
       "build/icon.svg",
       "package.json"
     ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown"
+        ],
+        "name": "Raavi.Markdown",
+        "description": "فایل Markdown راوی"
+      }
+    ],
     "win": {
       "icon": "build/icon.svg",
       "target": [
@@ -81,7 +91,7 @@
     },
     "nsis": {
       "oneClick": false,
-      "perMachine": false,
+      "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,

@@ -114,6 +114,12 @@ type DesktopLibraryScan = {
   truncated: boolean;
 };
 
+type DesktopOpenedDocument = {
+  name: string;
+  path: string;
+  content: string;
+};
+
 type RaaviDesktopAPI = {
   isDesktop: true;
   chooseMarkdownFolder: () => Promise<DesktopLibraryScan | null>;
@@ -123,6 +129,9 @@ type RaaviDesktopAPI = {
     fileName: string,
     content: string,
   ) => Promise<{ saved: boolean; filePath?: string }>;
+  onOpenMarkdownFile: (
+    callback: (document: DesktopOpenedDocument) => void,
+  ) => () => void;
 };
 
 declare global {
@@ -356,6 +365,21 @@ export default function Home() {
     }
     noticeTimerRef.current = setTimeout(() => setNotice(""), 2400);
   };
+
+  useEffect(() => {
+    const desktop = window.raaviDesktop;
+    if (!desktop) return;
+
+    return desktop.onOpenMarkdownFile((document) => {
+      setContent(document.content);
+      setFileName(document.name);
+      setActiveLibraryPath("");
+      setMobilePane("preview");
+      setReadingMode(false);
+      setError("");
+      showNotice(`«${document.name}» باز شد.`);
+    });
+  }, []);
 
   useEffect(() => {
     try {
