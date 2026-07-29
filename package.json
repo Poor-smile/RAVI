@@ -1,6 +1,10 @@
 {
   "name": "raavi-markdown-viewer",
   "version": "0.1.0",
+  "productName": "راوی",
+  "description": "ویور و ویرایشگر دسکتاپ Markdown فارسی",
+  "author": "Raavi",
+  "main": "desktop/main.mjs",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -9,7 +13,10 @@
     "dev": "cross-env WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "cross-env WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "cross-env WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/desktop-server.test.mjs",
+    "desktop": "npm run build && electron .",
+    "desktop:dir": "npm run build && electron-builder --win dir --x64",
+    "desktop:pack": "npm run build && electron-builder --win nsis --x64",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
@@ -32,6 +39,8 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "cross-env": "^10.1.0",
     "drizzle-kit": "0.31.10",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
     "react-server-dom-webpack": "19.2.6",
@@ -40,6 +49,45 @@
     "vinext": "0.0.50",
     "vite": "8.0.13",
     "wrangler": "4.92.0"
+  },
+  "build": {
+    "appId": "ir.raavi.markdown",
+    "productName": "راوی",
+    "executableName": "Raavi",
+    "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "npmRebuild": false,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "desktop/**/*",
+      "dist/**/*",
+      "build/icon.svg",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.svg",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Raavi-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "راوی",
+      "runAfterFinish": true
+    }
   },
   "type": "module"
 }

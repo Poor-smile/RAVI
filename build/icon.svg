@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="ink" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f6f99"/>
+      <stop offset="1" stop-color="#154b6b"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="32" stdDeviation="34" flood-color="#101820" flood-opacity=".22"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="#e9e5dc"/>
+  <rect x="116" y="116" width="792" height="792" rx="176" fill="url(#ink)"/>
+  <g filter="url(#shadow)">
+    <path d="M306 230h334l112 112v452H306z" fill="#f9f7f1"/>
+    <path d="M640 230v112h112z" fill="#d6d1c7"/>
+  </g>
+  <path d="M384 460h288M384 550h236M384 640h176" fill="none" stroke="#b8b1a4" stroke-width="30" stroke-linecap="round"/>
+  <circle cx="676" cy="704" r="106" fill="#1f6f99"/>
+  <text x="676" y="755" fill="#fff" font-family="Arial, sans-serif" font-size="170" font-weight="700" text-anchor="middle">ر</text>
+</svg>

@@ -49,6 +49,7 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /text\/markdown/);
   assert.match(page, /showDirectoryPicker/);
   assert.match(page, /scanMarkdownDirectory/);
+  assert.match(page, /raaviDesktop/);
   assert.match(page, /کتابخانه/);
   assert.match(page, /تصویر خارجی بارگذاری نشد/);
   assert.match(page, /<ul className="library-branch">/);
@@ -57,6 +58,7 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(css, /IRANSansX-Regular\.woff2/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(packageJson, /"react-markdown"/);
+  assert.match(packageJson, /"desktop:pack"/);
   assert.doesNotMatch(
     `${page}\n${layout}\n${css}\n${packageJson}`,
     /SkeletonPreview|react-loading-skeleton|codex-preview/,

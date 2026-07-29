@@ -98,6 +98,39 @@ type DirectoryPickerWindow = Window & {
   }) => Promise<LocalDirectoryHandle>;
 };
 
+type DesktopLibraryFile = {
+  id: string;
+  name: string;
+  path: string;
+  nativePath: string;
+  size: number;
+  lastModified: number;
+};
+
+type DesktopLibraryScan = {
+  rootName: string;
+  rootPath: string;
+  files: DesktopLibraryFile[];
+  truncated: boolean;
+};
+
+type RaaviDesktopAPI = {
+  isDesktop: true;
+  chooseMarkdownFolder: () => Promise<DesktopLibraryScan | null>;
+  scanMarkdownFolder: (rootPath: string) => Promise<DesktopLibraryScan>;
+  readMarkdownFile: (filePath: string) => Promise<string>;
+  saveMarkdown: (
+    fileName: string,
+    content: string,
+  ) => Promise<{ saved: boolean; filePath?: string }>;
+};
+
+declare global {
+  interface Window {
+    raaviDesktop?: RaaviDesktopAPI;
+  }
+}
+
 type LibraryFile = {
   id: string;
   name: string;
@@ -279,6 +312,7 @@ export default function Home() {
   const [libraryState, setLibraryState] = useState<LibraryState>("idle");
   const [libraryFiles, setLibraryFiles] = useState<LibraryFile[]>([]);
   const [libraryRoot, setLibraryRoot] = useState("");
+  const [libraryRootPath, setLibraryRootPath] = useState("");
   const [libraryQuery, setLibraryQuery] = useState("");
   const [activeLibraryPath, setActiveLibraryPath] = useState("");
   const [openingLibraryPath, setOpeningLibraryPath] = useState("");
@@ -439,7 +473,21 @@ export default function Home() {
     return () => document.removeEventListener("keydown", trapFocus);
   }, [libraryOpen, libraryIsModal]);
 
-  const downloadMarkdown = () => {
+  const downloadMarkdown = async () => {
+    if (window.raaviDesktop) {
+      setError("");
+      try {
+        const result = await window.raaviDesktop.saveMarkdown(
+          getDownloadName(fileName),
+          content,
+        );
+        if (result.saved) showNotice("فایل Markdown روی دستگاه ذخیره شد.");
+      } catch {
+        setError("ذخیره‌ی فایل ممکن نبود؛ مسیر دیگری را انتخاب کنید.");
+      }
+      return;
+    }
+
     const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -470,7 +518,7 @@ export default function Home() {
       }
       if (event.key.toLowerCase() === "s") {
         event.preventDefault();
-        downloadMarkdown();
+        void downloadMarkdown();
       }
     };
 
@@ -514,6 +562,7 @@ export default function Home() {
       files.sort((a, b) => a.path.localeCompare(b.path, "fa"));
       setLibraryFiles(files);
       setLibraryRoot(handle.name);
+      setLibraryRootPath("");
       setLibraryQuery("");
       setLibraryState("ready");
       window.localStorage.setItem(LIBRARY_ROOT_KEY, handle.name);
@@ -530,7 +579,75 @@ export default function Home() {
     }
   };
 
+  const applyDesktopLibrary = (scan: DesktopLibraryScan) => {
+    const desktop = window.raaviDesktop;
+    if (!desktop) return;
+
+    const entries = scan.files.map(
+      (file) =>
+        ({
+          id: file.id,
+          name: file.name,
+          path: file.path,
+          size: file.size,
+          lastModified: file.lastModified,
+          read: () => desktop.readMarkdownFile(file.nativePath),
+        }) satisfies LibraryFile,
+    );
+
+    setDirectoryHandle(null);
+    setLibraryFiles(entries);
+    setLibraryRoot(scan.rootName);
+    setLibraryRootPath(scan.rootPath);
+    setActiveLibraryPath("");
+    setLibraryQuery("");
+    setLibraryState("ready");
+    window.localStorage.setItem(LIBRARY_ROOT_KEY, scan.rootName);
+    showNotice(
+      scan.truncated
+        ? "۲۰٬۰۰۰ فایل اول به کتابخانه اضافه شد؛ پوشه‌ی کوچک‌تری انتخاب کنید."
+        : entries.length
+          ? `${entries.length.toLocaleString("fa-IR")} فایل Markdown به کتابخانه اضافه شد.`
+          : "در این پوشه فایل Markdown پیدا نشد.",
+    );
+  };
+
+  const scanDesktopDirectory = async (rootPath: string) => {
+    const desktop = window.raaviDesktop;
+    if (!desktop) return;
+
+    setLibraryState("scanning");
+    setError("");
+    try {
+      applyDesktopLibrary(await desktop.scanMarkdownFolder(rootPath));
+    } catch {
+      setLibraryState(libraryFiles.length ? "ready" : "idle");
+      setError(
+        "اسکن پوشه کامل نشد؛ پوشه را دوباره انتخاب کنید و مجوز دسترسی را تأیید کنید.",
+      );
+    }
+  };
+
   const connectLibrary = async () => {
+    if (window.raaviDesktop) {
+      setLibraryState("scanning");
+      setError("");
+      try {
+        const scan = await window.raaviDesktop.chooseMarkdownFolder();
+        if (!scan) {
+          setLibraryState(libraryFiles.length ? "ready" : "idle");
+          return;
+        }
+        applyDesktopLibrary(scan);
+      } catch {
+        setLibraryState(libraryFiles.length ? "ready" : "idle");
+        setError(
+          "اتصال به پوشه انجام نشد؛ دوباره «انتخاب پوشه» را بزنید.",
+        );
+      }
+      return;
+    }
+
     const pickerWindow = window as DirectoryPickerWindow;
     if (!pickerWindow.showDirectoryPicker) {
       directoryInputRef.current?.click();
@@ -588,6 +705,7 @@ export default function Home() {
     setDirectoryHandle(null);
     setLibraryFiles(entries);
     setLibraryRoot(rootName);
+    setLibraryRootPath("");
     setActiveLibraryPath("");
     setLibraryQuery("");
     setLibraryState("ready");
@@ -1164,6 +1282,8 @@ export default function Home() {
                     onClick={() =>
                       directoryHandle
                         ? void scanConnectedDirectory(directoryHandle)
+                        : libraryRootPath && window.raaviDesktop
+                          ? void scanDesktopDirectory(libraryRootPath)
                         : void connectLibrary()
                     }
                     aria-label="اسکن دوباره‌ی پوشه"

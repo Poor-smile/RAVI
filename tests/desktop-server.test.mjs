@@ -1,0 +1,58 @@
+import assert from "node:assert/strict";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import {
+  createRaaviServer,
+  readMarkdownFile,
+  scanMarkdownFolder,
+} from "../desktop/server.mjs";
+
+test("desktop server renders the packaged app and its assets", async () => {
+  const server = await createRaaviServer();
+
+  try {
+    const response = await fetch(server.origin);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /راوی/);
+
+    const assetPath = html.match(/(?:src|href)="([^"]+\.(?:js|css))"/)?.[1];
+    assert.ok(assetPath, "expected a generated JS or CSS asset");
+    const assetResponse = await fetch(new URL(assetPath, server.origin));
+    assert.equal(assetResponse.status, 200);
+    assert.match(
+      assetResponse.headers.get("content-type") ?? "",
+      /(?:javascript|css)/,
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test("desktop library scans recursively and limits reads to selected roots", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "raavi-library-"));
+  const nestedPath = path.join(rootPath, "یادداشت‌ها");
+  const markdownPath = path.join(nestedPath, "نمونه.md");
+  const ignoredPath = path.join(rootPath, "ignore.txt");
+
+  try {
+    await mkdir(nestedPath);
+    await writeFile(markdownPath, "# نمونه", "utf8");
+    await writeFile(ignoredPath, "not markdown", "utf8");
+
+    const scan = await scanMarkdownFolder(rootPath);
+    assert.equal(scan.files.length, 1);
+    assert.equal(scan.files[0].path, "یادداشت‌ها/نمونه.md");
+    assert.equal(
+      await readMarkdownFile(markdownPath, new Set([path.resolve(rootPath)])),
+      "# نمونه",
+    );
+    await assert.rejects(() =>
+      readMarkdownFile(ignoredPath, new Set([path.resolve(rootPath)])),
+    );
+  } finally {
+    await rm(rootPath, { recursive: true, force: true });
+  }
+});
