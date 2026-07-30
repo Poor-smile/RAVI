@@ -458,6 +458,35 @@ test.describe("Electron keyboard integration", () => {
       await dispatchShortcut({ code: "Escape", key: "Escape" });
       await expect(editor).toBeFocused();
 
+      const markdownBody = window.locator(".markdown-body");
+      await editor.fill(
+        "# English document\n\nThis document is written entirely in English.",
+      );
+      await expect(markdownBody).toHaveAttribute("dir", "ltr");
+      await expect(markdownBody).toHaveCSS("text-align", "left");
+      await expect(markdownBody.locator("h1")).toHaveAttribute("dir", "ltr");
+      await expect(markdownBody.locator("p")).toHaveAttribute("dir", "ltr");
+
+      await editor.fill(
+        [
+          "# Mixed document",
+          "",
+          "This paragraph is written almost entirely in English with فقط one Persian word.",
+          "",
+          "این پاراگراف فارسی است و فقط چند English word در آن دیده می‌شود.",
+        ].join("\n"),
+      );
+      await expect(markdownBody).toHaveAttribute("dir", "rtl");
+      await expect(markdownBody.locator("h1")).toHaveAttribute("dir", "ltr");
+      await expect(markdownBody.locator("p").nth(0)).toHaveAttribute(
+        "dir",
+        "ltr",
+      );
+      await expect(markdownBody.locator("p").nth(1)).toHaveAttribute(
+        "dir",
+        "rtl",
+      );
+
       await dispatchShortcut({ code: "F9", key: "F9" });
       await expect(window.locator(".app-shell")).toHaveClass(/is-reading/);
       await dispatchShortcut({ code: "Escape", key: "Escape" });

@@ -103,6 +103,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /فهرست فصل‌های سند/);
   assert.match(page, /جمع‌کردن فهرست فصل‌ها/);
   assert.match(page, /بازکردن فهرست فصل‌ها/);
+  assert.match(page, /detectDocumentTextDirection/);
+  assert.match(page, /latin \/ directionalLetterCount > 0\.7/);
+  assert.match(page, /dir=\{documentTextDirection\}/);
   assert.match(page, /هشدار: ذخیره نشده/);
   assert.match(page, /تاریخچه‌ی نسخه‌ها/);
   assert.match(page, /بازیابی/);

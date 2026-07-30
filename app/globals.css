@@ -2025,6 +2025,10 @@ button {
   overflow-wrap: anywhere;
 }
 
+.markdown-body[dir="ltr"] {
+  text-align: left;
+}
+
 .markdown-body:focus-visible {
   outline: 3px solid var(--proof-blue);
   outline-offset: -5px;
@@ -2060,7 +2064,7 @@ button {
 .markdown-body h1::after {
   content: "";
   position: absolute;
-  right: 0;
+  inset-inline-start: 0;
   bottom: 0;
   width: 64px;
   height: 3px;
@@ -2110,7 +2114,8 @@ button {
 
 .markdown-body blockquote {
   position: relative;
-  padding: 20px 24px 20px 20px;
+  padding: 20px;
+  padding-inline-start: 24px;
   color: var(--ink-700);
   background: var(--paper-100);
   border: 0;
@@ -2120,7 +2125,7 @@ button {
   content: "«";
   position: absolute;
   top: 4px;
-  right: 8px;
+  inset-inline-start: 8px;
   color: var(--proof-blue);
   font-size: 28px;
   font-weight: 700;
@@ -2221,7 +2226,7 @@ button {
 }
 
 .markdown-body table {
-  direction: rtl;
+  direction: inherit;
   width: 100%;
   display: table;
   border-collapse: collapse;
@@ -3013,7 +3018,7 @@ button {
   font-size: 10px;
   font-weight: 500;
   line-height: 1.75;
-  text-align: right;
+  text-align: start;
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;

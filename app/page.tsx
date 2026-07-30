@@ -51,10 +51,13 @@ import {
   X,
 } from "lucide-react";
 import {
+  Children,
   DragEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
+  isValidElement,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -171,6 +174,7 @@ type ReadingHeading = {
   level: number;
   text: string;
 };
+type TextDirection = "ltr" | "rtl";
 
 type LocalFileHandle = {
   kind: "file";
@@ -330,6 +334,48 @@ function plainHeadingText(value: string) {
     .replace(/<[^>]+>/g, "")
     .replace(/[*_~`]/g, "")
     .trim();
+}
+
+function countDirectionalLetters(value: string) {
+  return {
+    latin: value.match(/\p{Script=Latin}/gu)?.length ?? 0,
+    arabic: value.match(/\p{Script=Arabic}/gu)?.length ?? 0,
+  };
+}
+
+function detectDocumentTextDirection(markdown: string): TextDirection {
+  const { latin, arabic } = countDirectionalLetters(markdown);
+  return latin > 0 && arabic === 0 ? "ltr" : "rtl";
+}
+
+function textFromReactNode(node: ReactNode): string {
+  let text = "";
+
+  Children.forEach(node, (child) => {
+    if (typeof child === "string" || typeof child === "number") {
+      text += String(child);
+      return;
+    }
+
+    if (isValidElement<{ children?: ReactNode }>(child)) {
+      text += textFromReactNode(child.props.children);
+    }
+  });
+
+  return text;
+}
+
+function detectBlockTextDirection(
+  node: ReactNode,
+  documentDirection: TextDirection,
+): TextDirection {
+  if (documentDirection === "ltr") return "ltr";
+
+  const { latin, arabic } = countDirectionalLetters(textFromReactNode(node));
+  const directionalLetterCount = latin + arabic;
+  if (directionalLetterCount === 0) return "rtl";
+
+  return latin / directionalLetterCount > 0.7 ? "ltr" : "rtl";
 }
 
 function extractReadingHeadings(markdown: string): ReadingHeading[] {
@@ -808,6 +854,15 @@ export default function Home() {
   const readingHeadings = useMemo(
     () => extractReadingHeadings(content),
     [content],
+  );
+  const documentTextDirection = useMemo(
+    () => detectDocumentTextDirection(content),
+    [content],
+  );
+  const blockTextDirection = useCallback(
+    (children: ReactNode) =>
+      detectBlockTextDirection(children, documentTextDirection),
+    [documentTextDirection],
   );
 
   const alignScrollPanes = useCallback((sourcePane: ScrollPane) => {
@@ -2886,6 +2941,7 @@ export default function Home() {
                       >
                         <button
                           type="button"
+                          dir="auto"
                           className={
                             activeReadingHeadingIndex === heading.documentIndex
                               ? "is-active"
@@ -3450,7 +3506,7 @@ export default function Home() {
                 className={`markdown-body ${
                   hoveredAnnotation ? "has-annotation-hover" : ""
                 }`}
-                dir="rtl"
+                dir={documentTextDirection}
                 tabIndex={-1}
                 aria-label="متن پیش‌نمایش؛ برای جابه‌جایی سریع از میان‌بر تمرکز پیش‌نمایش استفاده کنید"
                 onMouseUp={capturePreviewSelection}
@@ -3462,6 +3518,46 @@ export default function Home() {
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    p: ({ children }) => (
+                      <p dir={blockTextDirection(children)}>{children}</p>
+                    ),
+                    h1: ({ children }) => (
+                      <h1 dir={blockTextDirection(children)}>{children}</h1>
+                    ),
+                    h2: ({ children }) => (
+                      <h2 dir={blockTextDirection(children)}>{children}</h2>
+                    ),
+                    h3: ({ children }) => (
+                      <h3 dir={blockTextDirection(children)}>{children}</h3>
+                    ),
+                    h4: ({ children }) => (
+                      <h4 dir={blockTextDirection(children)}>{children}</h4>
+                    ),
+                    h5: ({ children }) => (
+                      <h5 dir={blockTextDirection(children)}>{children}</h5>
+                    ),
+                    h6: ({ children }) => (
+                      <h6 dir={blockTextDirection(children)}>{children}</h6>
+                    ),
+                    li: ({ children, className }) => (
+                      <li
+                        className={className}
+                        dir={blockTextDirection(children)}
+                      >
+                        {children}
+                      </li>
+                    ),
+                    blockquote: ({ children }) => (
+                      <blockquote dir={blockTextDirection(children)}>
+                        {children}
+                      </blockquote>
+                    ),
+                    th: ({ children }) => (
+                      <th dir={blockTextDirection(children)}>{children}</th>
+                    ),
+                    td: ({ children }) => (
+                      <td dir={blockTextDirection(children)}>{children}</td>
+                    ),
                     a: ({ ...props }) => (
                       <a
                         {...props}
