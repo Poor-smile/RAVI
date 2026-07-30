@@ -8,6 +8,7 @@ const desktopDirectory = path.dirname(fileURLToPath(import.meta.url));
 const clientDirectory = path.resolve(desktopDirectory, "..", "dist", "client");
 const MAX_LIBRARY_FILES = 20_000;
 const MAX_MARKDOWN_SIZE = 2 * 1024 * 1024;
+const MAX_RAVI_SIZE = 4 * 1024 * 1024;
 
 const CONTENT_TYPES = new Map([
   [".css", "text/css; charset=utf-8"],
@@ -143,17 +144,113 @@ function isMarkdownFile(fileName) {
   return /\.(?:md|markdown)$/i.test(fileName);
 }
 
+function isRaaviFile(fileName) {
+  return /\.ravi$/i.test(fileName);
+}
+
 export function markdownPathFromArguments(argumentsList, workingDirectory) {
-  const markdownArgument = argumentsList.find(
+  const documentArgument = argumentsList.find(
     (argument) =>
       typeof argument === "string" &&
       !argument.startsWith("--") &&
-      isMarkdownFile(argument),
+      (isMarkdownFile(argument) || isRaaviFile(argument)),
   );
 
-  return markdownArgument
-    ? path.resolve(workingDirectory ?? process.cwd(), markdownArgument)
+  return documentArgument
+    ? path.resolve(workingDirectory ?? process.cwd(), documentArgument)
     : null;
+}
+
+function sanitizeRaaviAnnotations(value) {
+  if (!Array.isArray(value)) return [];
+  const kinds = new Set(["highlight", "comment", "margin"]);
+
+  return value.flatMap((annotation, index) => {
+    if (
+      !annotation ||
+      typeof annotation !== "object" ||
+      !kinds.has(annotation.kind) ||
+      !Number.isSafeInteger(annotation.start) ||
+      !Number.isSafeInteger(annotation.end) ||
+      annotation.start < 0 ||
+      annotation.end <= annotation.start ||
+      typeof annotation.quote !== "string" ||
+      !annotation.quote
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        id:
+          typeof annotation.id === "string" && annotation.id
+            ? annotation.id.slice(0, 120)
+            : `ravi-imported-${Date.now()}-${index}`,
+        kind: annotation.kind,
+        start: annotation.start,
+        end: annotation.end,
+        quote: annotation.quote.slice(0, 5_000),
+        prefix:
+          typeof annotation.prefix === "string"
+            ? annotation.prefix.slice(0, 160)
+            : "",
+        suffix:
+          typeof annotation.suffix === "string"
+            ? annotation.suffix.slice(0, 160)
+            : "",
+        body:
+          typeof annotation.body === "string"
+            ? annotation.body.slice(0, 20_000)
+            : "",
+        createdAt:
+          typeof annotation.createdAt === "string"
+            ? annotation.createdAt.slice(0, 64)
+            : new Date().toISOString(),
+      },
+    ];
+  });
+}
+
+export async function readDocumentPath(filePath) {
+  const resolvedFile = path.resolve(filePath);
+  const details = await stat(resolvedFile);
+  if (!details.isFile()) throw new Error("Selected path is not a file.");
+
+  if (isMarkdownFile(resolvedFile)) {
+    return {
+      name: path.basename(resolvedFile),
+      path: resolvedFile,
+      content: await readMarkdownPath(resolvedFile),
+      annotations: [],
+    };
+  }
+
+  if (!isRaaviFile(resolvedFile) || details.size > MAX_RAVI_SIZE) {
+    throw new Error("Raavi document is too large or unsupported.");
+  }
+
+  const rawValue = await readFile(resolvedFile, "utf8");
+  const value = JSON.parse(rawValue);
+  if (
+    !value ||
+    value.format !== "ravi" ||
+    value.version !== 1 ||
+    !value.document ||
+    typeof value.document.markdown !== "string"
+  ) {
+    throw new Error("Raavi document is invalid or unsupported.");
+  }
+
+  const fallbackName = `${path.basename(resolvedFile, ".ravi")}.md`;
+  return {
+    name:
+      typeof value.document.name === "string" && value.document.name.trim()
+        ? value.document.name.slice(0, 240)
+        : fallbackName,
+    path: resolvedFile,
+    content: value.document.markdown,
+    annotations: sanitizeRaaviAnnotations(value.annotations),
+  };
 }
 
 export async function scanMarkdownFolder(rootPath) {

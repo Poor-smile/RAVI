@@ -1,6 +1,6 @@
 {
   "name": "raavi-markdown-viewer",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "productName": "راوی",
   "description": "ویور و ویرایشگر دسکتاپ Markdown فارسی",
   "author": "Raavi",
@@ -75,6 +75,11 @@
         ],
         "name": "Raavi.Markdown",
         "description": "فایل Markdown راوی"
+      },
+      {
+        "ext": "ravi",
+        "name": "Raavi.Document",
+        "description": "سند حاشیه‌نویسی راوی"
       }
     ],
     "win": {

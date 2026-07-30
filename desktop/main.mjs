@@ -6,14 +6,14 @@ import {
   nativeTheme,
   shell,
 } from "electron";
-import { writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createRaaviServer,
   markdownPathFromArguments,
+  readDocumentPath,
   readMarkdownFile,
-  readMarkdownPath,
   scanMarkdownFolder,
 } from "./server.mjs";
 
@@ -32,6 +32,13 @@ function safeMarkdownName(fileName) {
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
     .trim();
   return /\.(?:md|markdown)$/i.test(cleaned) ? cleaned : `${cleaned}.md`;
+}
+
+function safeRaaviName(fileName) {
+  const cleaned = String(fileName || "نوشته-راوی.ravi")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .trim();
+  return /\.ravi$/i.test(cleaned) ? cleaned : `${cleaned}.ravi`;
 }
 
 async function chooseMarkdownFolder(event) {
@@ -74,6 +81,64 @@ async function saveMarkdown(event, payload) {
   return { saved: true, filePath: result.filePath };
 }
 
+async function saveRaavi(event, payload) {
+  const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  const fileName = safeRaaviName(payload?.fileName);
+  const documentValue = payload?.document;
+  if (
+    !documentValue ||
+    documentValue.format !== "ravi" ||
+    documentValue.version !== 1 ||
+    !documentValue.document ||
+    typeof documentValue.document.markdown !== "string" ||
+    !Array.isArray(documentValue.annotations)
+  ) {
+    throw new Error("Raavi document payload is invalid.");
+  }
+
+  const result = await dialog.showSaveDialog(owner, {
+    title: "ذخیره‌ی بسته‌ی راوی",
+    buttonLabel: "ذخیره‌ی .ravi و Markdown",
+    defaultPath: path.join(app.getPath("documents"), fileName),
+    filters: [
+      { name: "سند راوی", extensions: ["ravi"] },
+      { name: "همه‌ی فایل‌ها", extensions: ["*"] },
+    ],
+  });
+
+  if (result.canceled || !result.filePath) return { saved: false };
+  const raviPath = /\.ravi$/i.test(result.filePath)
+    ? result.filePath
+    : `${result.filePath}.ravi`;
+  const markdownPath = `${raviPath.replace(/\.ravi$/i, "")}.md`;
+
+  let companionExists = false;
+  try {
+    await access(markdownPath);
+    companionExists = true;
+  } catch {
+    companionExists = false;
+  }
+
+  if (companionExists) {
+    const confirmation = await dialog.showMessageBox(owner, {
+      type: "warning",
+      title: "جایگزینی فایل Markdown",
+      message: "یک فایل Markdown با همین نام کنار بسته‌ی راوی وجود دارد.",
+      detail: `برای ذخیره‌ی هر دو فایل، «${path.basename(markdownPath)}» جایگزین می‌شود.`,
+      buttons: ["جایگزین شود", "انصراف"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (confirmation.response !== 0) return { saved: false };
+  }
+
+  await writeFile(raviPath, JSON.stringify(documentValue, null, 2), "utf8");
+  await writeFile(markdownPath, documentValue.document.markdown, "utf8");
+  return { saved: true, raviPath, markdownPath };
+}
+
 function registerDesktopHandlers() {
   ipcMain.handle("library:choose-folder", chooseMarkdownFolder);
   ipcMain.handle("library:scan-folder", rescanMarkdownFolder);
@@ -81,6 +146,7 @@ function registerDesktopHandlers() {
     readMarkdownFile(String(filePath), allowedLibraryRoots),
   );
   ipcMain.handle("document:save-markdown", saveMarkdown);
+  ipcMain.handle("document:save-ravi", saveRaavi);
 }
 
 async function openMarkdownPath(filePath) {
@@ -90,12 +156,8 @@ async function openMarkdownPath(filePath) {
   }
 
   try {
-    const content = await readMarkdownPath(filePath);
-    mainWindow.webContents.send("document:open-path", {
-      name: path.basename(filePath),
-      path: filePath,
-      content,
-    });
+    const documentValue = await readDocumentPath(filePath);
+    mainWindow.webContents.send("document:open-path", documentValue);
     if (mainWindow.isMinimized()) mainWindow.restore();
     if (!isSmokeTest) mainWindow.show();
     mainWindow.focus();
@@ -103,7 +165,7 @@ async function openMarkdownPath(filePath) {
     if (!isSmokeTest) {
       dialog.showErrorBox(
         "بازکردن فایل ممکن نبود",
-        "فایل باید Markdown و کوچک‌تر از ۲ مگابایت باشد.",
+        "فایل باید Markdown یا .ravi معتبر و در اندازه‌ی مجاز باشد.",
       );
     }
   }

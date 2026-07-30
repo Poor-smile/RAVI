@@ -6,11 +6,12 @@ import test from "node:test";
 import {
   createRaaviServer,
   markdownPathFromArguments,
+  readDocumentPath,
   readMarkdownFile,
   scanMarkdownFolder,
 } from "../desktop/server.mjs";
 
-test("desktop activation recognizes Markdown file arguments", () => {
+test("desktop activation recognizes Markdown and Raavi file arguments", () => {
   assert.equal(
     markdownPathFromArguments(
       ["Raavi.exe", "--flag", "notes/example.md"],
@@ -18,7 +19,52 @@ test("desktop activation recognizes Markdown file arguments", () => {
     ),
     path.resolve("C:\\library", "notes/example.md"),
   );
+  assert.equal(
+    markdownPathFromArguments(
+      ["Raavi.exe", "--flag", "notes/review.ravi"],
+      "C:\\library",
+    ),
+    path.resolve("C:\\library", "notes/review.ravi"),
+  );
   assert.equal(markdownPathFromArguments(["Raavi.exe", "notes.txt"]), null);
+});
+
+test("desktop reads a shared Raavi document with annotations", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "raavi-document-"));
+  const raviPath = path.join(rootPath, "review.ravi");
+  const documentValue = {
+    format: "ravi",
+    version: 1,
+    document: {
+      name: "review.md",
+      markdown: "# متن نمونه",
+    },
+    annotations: [
+      {
+        id: "note-1",
+        kind: "comment",
+        start: 0,
+        end: 3,
+        quote: "متن",
+        prefix: "",
+        suffix: " نمونه",
+        body: "این بخش بازبینی شود.",
+        createdAt: "2026-07-30T12:00:00.000Z",
+      },
+    ],
+  };
+
+  try {
+    await writeFile(raviPath, JSON.stringify(documentValue), "utf8");
+    const document = await readDocumentPath(raviPath);
+    assert.equal(document.name, "review.md");
+    assert.equal(document.content, "# متن نمونه");
+    assert.equal(document.annotations.length, 1);
+    assert.equal(document.annotations[0].kind, "comment");
+    assert.equal(document.annotations[0].body, "این بخش بازبینی شود.");
+  } finally {
+    await rm(rootPath, { recursive: true, force: true });
+  }
 });
 
 test("desktop server renders the packaged app and its assets", async () => {

@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("library:read-file", filePath),
     saveMarkdown: (fileName, content) =>
       ipcRenderer.invoke("document:save-markdown", { fileName, content }),
+    saveRaavi: (fileName, document) =>
+      ipcRenderer.invoke("document:save-ravi", { fileName, document }),
     onOpenMarkdownFile: (callback) => {
       const listener = (_event, document) => callback(document);
       ipcRenderer.on("document:open-path", listener);

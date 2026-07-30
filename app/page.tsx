@@ -20,23 +20,43 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  Highlighter,
   Italic,
   Library,
   Link2,
+  MessageCircle,
   MessageSquareText,
   Minus,
+  NotebookPen,
+  PanelLeftOpen,
   Plus,
   Quote,
   RefreshCw,
   RotateCcw,
   Search,
+  Send,
   ShieldCheck,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
-import { DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  DragEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import {
+  AnnotationKind,
+  getRaaviName,
+  makeRaaviDocument,
+  parseRaaviDocument,
+  RaaviAnnotation,
+} from "./raavi";
 
 const STORAGE_KEY = "raavi:document:v1";
 const LIBRARY_ROOT_KEY = "raavi:library-root:v1";
@@ -71,6 +91,10 @@ const SAMPLE_MARKDOWN = [
   "| پیش‌نمایش زنده | ✓ |",
   "| جدول و چک‌لیست | ✓ |",
   "| ذخیره‌ی محلی | ✓ |",
+  "| هایلایت، کامنت و حاشیه‌نویسی | ✓ |",
+  "| اشتراک با فایل `.ravi` | ✓ |",
+  "",
+  "برای افزودن یادداشت، بخشی از متنِ همین پیش‌نمایش را انتخاب کنید و از نوار بالای برگه نوع یادداشت را بزنید.",
   "",
   "- [x] متن فارسی خوانا",
   "- [x] قطعه‌کد LTR",
@@ -119,6 +143,7 @@ type DesktopOpenedDocument = {
   name: string;
   path: string;
   content: string;
+  annotations?: RaaviAnnotation[];
 };
 
 type RaaviDesktopAPI = {
@@ -130,6 +155,14 @@ type RaaviDesktopAPI = {
     fileName: string,
     content: string,
   ) => Promise<{ saved: boolean; filePath?: string }>;
+  saveRaavi: (
+    fileName: string,
+    document: ReturnType<typeof makeRaaviDocument>,
+  ) => Promise<{
+    saved: boolean;
+    raviPath?: string;
+    markdownPath?: string;
+  }>;
   onOpenMarkdownFile: (
     callback: (document: DesktopOpenedDocument) => void,
   ) => () => void;
@@ -156,6 +189,114 @@ type LibraryFolderNode = {
   folders: Map<string, LibraryFolderNode>;
   files: LibraryFile[];
 };
+
+type SelectionDraft = {
+  start: number;
+  end: number;
+  quote: string;
+  prefix: string;
+  suffix: string;
+};
+
+const ANNOTATION_LABELS: Record<AnnotationKind, string> = {
+  highlight: "هایلایت",
+  comment: "کامنت",
+  margin: "حاشیه‌نویسی",
+};
+
+function AnnotationIcon({
+  kind,
+  size = 16,
+}: {
+  kind: AnnotationKind;
+  size?: number;
+}) {
+  if (kind === "highlight") {
+    return <Highlighter size={size} aria-hidden="true" />;
+  }
+  if (kind === "comment") {
+    return <MessageCircle size={size} aria-hidden="true" />;
+  }
+  return <NotebookPen size={size} aria-hidden="true" />;
+}
+
+function annotationId() {
+  return globalThis.crypto?.randomUUID?.() ?? `ravi-${Date.now()}`;
+}
+
+function resolveAnnotationStart(text: string, annotation: RaaviAnnotation) {
+  if (
+    text.slice(annotation.start, annotation.start + annotation.quote.length) ===
+    annotation.quote
+  ) {
+    return annotation.start;
+  }
+
+  let cursor = 0;
+  let bestStart = -1;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  while (cursor <= text.length) {
+    const candidate = text.indexOf(annotation.quote, cursor);
+    if (candidate < 0) break;
+
+    const prefix = text.slice(
+      Math.max(0, candidate - annotation.prefix.length),
+      candidate,
+    );
+    const suffix = text.slice(
+      candidate + annotation.quote.length,
+      candidate + annotation.quote.length + annotation.suffix.length,
+    );
+    const contextScore =
+      (prefix.endsWith(annotation.prefix) ? 4_000 : 0) +
+      (suffix.startsWith(annotation.suffix) ? 4_000 : 0);
+    const distanceScore = -Math.abs(candidate - annotation.start);
+    const score = contextScore + distanceScore;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestStart = candidate;
+    }
+    cursor = candidate + Math.max(1, annotation.quote.length);
+  }
+
+  return bestStart;
+}
+
+function rangeFromTextOffsets(root: HTMLElement, start: number, end: number) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let consumed = 0;
+  let startNode: Text | null = null;
+  let endNode: Text | null = null;
+  let startOffset = 0;
+  let endOffset = 0;
+  let current = walker.nextNode();
+
+  while (current) {
+    const node = current as Text;
+    const next = consumed + node.data.length;
+
+    if (!startNode && start >= consumed && start <= next) {
+      startNode = node;
+      startOffset = Math.min(node.data.length, start - consumed);
+    }
+    if (end >= consumed && end <= next) {
+      endNode = node;
+      endOffset = Math.min(node.data.length, end - consumed);
+      break;
+    }
+
+    consumed = next;
+    current = walker.nextNode();
+  }
+
+  if (!startNode || !endNode) return null;
+  const range = document.createRange();
+  range.setStart(startNode, startOffset);
+  range.setEnd(endNode, endOffset);
+  return range.collapsed ? null : range;
+}
 
 function buildLibraryTree(files: LibraryFile[]): LibraryFolderNode {
   const root: LibraryFolderNode = {
@@ -328,8 +469,18 @@ export default function Home() {
   const [openingLibraryPath, setOpeningLibraryPath] = useState("");
   const [directoryHandle, setDirectoryHandle] =
     useState<LocalDirectoryHandle | null>(null);
+  const [annotations, setAnnotations] = useState<RaaviAnnotation[]>([]);
+  const [selectionDraft, setSelectionDraft] =
+    useState<SelectionDraft | null>(null);
+  const [composerKind, setComposerKind] = useState<
+    Extract<AnnotationKind, "comment" | "margin"> | null
+  >(null);
+  const [composerText, setComposerText] = useState("");
+  const [annotationPanelOpen, setAnnotationPanelOpen] = useState(false);
+  const [activeAnnotationId, setActiveAnnotationId] = useState("");
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const previewArticleRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const directoryInputRef = useRef<HTMLInputElement>(null);
   const libraryPanelRef = useRef<HTMLElement>(null);
@@ -346,6 +497,21 @@ export default function Home() {
     };
   }, [content]);
 
+  const annotationCounts = useMemo(
+    () =>
+      annotations.reduce(
+        (counts, annotation) => {
+          counts[annotation.kind] += 1;
+          return counts;
+        },
+        { highlight: 0, comment: 0, margin: 0 } as Record<
+          AnnotationKind,
+          number
+        >,
+      ),
+    [annotations],
+  );
+
   const visibleLibraryFiles = useMemo(() => {
     const query = libraryQuery.trim().toLocaleLowerCase("fa");
     if (!query) return libraryFiles;
@@ -359,13 +525,13 @@ export default function Home() {
     [visibleLibraryFiles],
   );
 
-  const showNotice = (message: string) => {
+  const showNotice = useCallback((message: string) => {
     setNotice(message);
     if (noticeTimerRef.current) {
       clearTimeout(noticeTimerRef.current);
     }
     noticeTimerRef.current = setTimeout(() => setNotice(""), 2400);
-  };
+  }, []);
 
   useEffect(() => {
     const desktop = window.raaviDesktop;
@@ -374,47 +540,60 @@ export default function Home() {
     return desktop.onOpenMarkdownFile((document) => {
       setContent(document.content);
       setFileName(document.name);
+      setAnnotations(document.annotations ?? []);
+      setSelectionDraft(null);
+      setComposerKind(null);
+      setAnnotationPanelOpen(Boolean(document.annotations?.length));
       setActiveLibraryPath("");
       setMobilePane("preview");
       setReadingMode(false);
       setError("");
       showNotice(`«${document.name}» باز شد.`);
     });
-  }, []);
+  }, [showNotice]);
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as {
-          content?: string;
-          fileName?: string;
-          readerSize?: number;
-        };
-        if (typeof parsed.content === "string") setContent(parsed.content);
-        if (typeof parsed.fileName === "string") setFileName(parsed.fileName);
-        if (typeof parsed.readerSize === "number") {
-          setReaderSize(Math.min(22, Math.max(16, parsed.readerSize)));
+    const frame = requestAnimationFrame(() => {
+      try {
+        const saved = window.localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as {
+            content?: string;
+            fileName?: string;
+            readerSize?: number;
+            annotations?: RaaviAnnotation[];
+          };
+          if (typeof parsed.content === "string") setContent(parsed.content);
+          if (typeof parsed.fileName === "string") setFileName(parsed.fileName);
+          if (Array.isArray(parsed.annotations)) {
+            setAnnotations(parsed.annotations);
+          }
+          if (typeof parsed.readerSize === "number") {
+            setReaderSize(Math.min(22, Math.max(16, parsed.readerSize)));
+          }
         }
+        const lastLibraryRoot = window.localStorage.getItem(LIBRARY_ROOT_KEY);
+        if (lastLibraryRoot) setLibraryRoot(lastLibraryRoot);
+      } catch {
+        setError(
+          "بازیابی آخرین نوشته ممکن نبود؛ می‌توانید یک فایل تازه باز کنید.",
+        );
+      } finally {
+        setHydrated(true);
       }
-      const lastLibraryRoot = window.localStorage.getItem(LIBRARY_ROOT_KEY);
-      if (lastLibraryRoot) setLibraryRoot(lastLibraryRoot);
-    } catch {
-      setError("بازیابی آخرین نوشته ممکن نبود؛ می‌توانید یک فایل تازه باز کنید.");
-    } finally {
-      setHydrated(true);
-    }
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
 
-    setSaveState("saving");
+    const savingTimer = setTimeout(() => setSaveState("saving"), 0);
     const timer = setTimeout(() => {
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ content, fileName, readerSize }),
+          JSON.stringify({ content, fileName, readerSize, annotations }),
         );
         setSaveState("saved");
       } catch {
@@ -423,8 +602,11 @@ export default function Home() {
       }
     }, 450);
 
-    return () => clearTimeout(timer);
-  }, [content, fileName, readerSize, hydrated]);
+    return () => {
+      clearTimeout(savingTimer);
+      clearTimeout(timer);
+    };
+  }, [content, fileName, readerSize, annotations, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -433,7 +615,7 @@ export default function Home() {
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ content, fileName, readerSize }),
+          JSON.stringify({ content, fileName, readerSize, annotations }),
         );
       } catch {
         // The visible save state already communicates storage failures.
@@ -442,7 +624,7 @@ export default function Home() {
 
     window.addEventListener("pagehide", flushLatestDocument);
     return () => window.removeEventListener("pagehide", flushLatestDocument);
-  }, [content, fileName, readerSize, hydrated]);
+  }, [content, fileName, readerSize, annotations, hydrated]);
 
   useEffect(() => {
     return () => {
@@ -498,7 +680,247 @@ export default function Home() {
     return () => document.removeEventListener("keydown", trapFocus);
   }, [libraryOpen, libraryIsModal]);
 
-  const downloadMarkdown = async () => {
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.dataset.raaviHighlights = "true";
+    style.textContent = `
+      ::highlight(raavi-highlight) {
+        color: inherit;
+        background: rgba(243, 214, 107, 0.78);
+      }
+      ::highlight(raavi-comment) {
+        color: inherit;
+        background: rgba(168, 191, 255, 0.66);
+        text-decoration: underline #2557e5 1.5px;
+        text-underline-offset: 3px;
+      }
+      ::highlight(raavi-margin) {
+        color: inherit;
+        background: rgba(232, 170, 152, 0.62);
+        text-decoration: underline #a34f39 1.5px dashed;
+        text-underline-offset: 3px;
+      }
+      ::highlight(raavi-active) {
+        color: white;
+        background: #2557e5;
+        text-decoration: underline white 1px;
+        text-underline-offset: 3px;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => style.remove();
+  }, []);
+
+  useEffect(() => {
+    const root = previewArticleRef.current;
+    const highlightRegistry = (
+      CSS as unknown as {
+        highlights?: {
+          set: (name: string, value: unknown) => void;
+          delete: (name: string) => void;
+        };
+      }
+    ).highlights;
+    const HighlightConstructor = (
+      window as unknown as {
+        Highlight?: new (...ranges: Range[]) => unknown;
+      }
+    ).Highlight;
+
+    if (!root || !highlightRegistry || !HighlightConstructor) return;
+
+    const names = [
+      "raavi-highlight",
+      "raavi-comment",
+      "raavi-margin",
+      "raavi-active",
+    ];
+    const frame = requestAnimationFrame(() => {
+      const text = root.textContent ?? "";
+      const buckets: Record<AnnotationKind, Range[]> = {
+        highlight: [],
+        comment: [],
+        margin: [],
+      };
+      const activeRanges: Range[] = [];
+
+      for (const annotation of annotations) {
+        const start = resolveAnnotationStart(text, annotation);
+        if (start < 0) continue;
+        const range = rangeFromTextOffsets(
+          root,
+          start,
+          start + annotation.quote.length,
+        );
+        if (!range) continue;
+        buckets[annotation.kind].push(range);
+        if (annotation.id === activeAnnotationId) activeRanges.push(range);
+      }
+
+      for (const kind of Object.keys(buckets) as AnnotationKind[]) {
+        const name = `raavi-${kind}`;
+        if (buckets[kind].length) {
+          highlightRegistry.set(
+            name,
+            new HighlightConstructor(...buckets[kind]),
+          );
+        } else {
+          highlightRegistry.delete(name);
+        }
+      }
+
+      if (activeRanges.length) {
+        highlightRegistry.set(
+          "raavi-active",
+          new HighlightConstructor(...activeRanges),
+        );
+      } else {
+        highlightRegistry.delete("raavi-active");
+      }
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      for (const name of names) highlightRegistry.delete(name);
+    };
+  }, [
+    activeAnnotationId,
+    annotations,
+    content,
+    mobilePane,
+    readingMode,
+  ]);
+
+  const capturePreviewSelection = () => {
+    requestAnimationFrame(() => {
+      const article = previewArticleRef.current;
+      const selection = window.getSelection();
+      if (!article || !selection || selection.rangeCount !== 1) return;
+
+      const range = selection.getRangeAt(0);
+      if (
+        range.collapsed ||
+        !article.contains(range.startContainer) ||
+        !article.contains(range.endContainer)
+      ) {
+        return;
+      }
+
+      const rawQuote = range.cloneContents().textContent ?? range.toString();
+      const quote = rawQuote.trim();
+      if (!quote) return;
+      if (quote.length > 2_000) {
+        setError("برای یادداشت‌گذاری، بخش کوتاه‌تری از متن را انتخاب کنید.");
+        return;
+      }
+
+      const beforeRange = document.createRange();
+      beforeRange.selectNodeContents(article);
+      beforeRange.setEnd(range.startContainer, range.startOffset);
+      const leadingWhitespace = rawQuote.indexOf(quote);
+      const beforeText =
+        beforeRange.cloneContents().textContent ?? beforeRange.toString();
+      const start = beforeText.length + leadingWhitespace;
+      const end = start + quote.length;
+      const fullText = article.textContent ?? "";
+
+      setSelectionDraft({
+        start,
+        end,
+        quote,
+        prefix: fullText.slice(Math.max(0, start - 48), start),
+        suffix: fullText.slice(end, end + 48),
+      });
+      setComposerKind(null);
+      setComposerText("");
+      setError("");
+    });
+  };
+
+  const clearNativeSelection = () => {
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const addAnnotation = (
+    kind: AnnotationKind,
+    body = "",
+    selection = selectionDraft,
+  ) => {
+    if (!selection) {
+      showNotice("ابتدا بخشی از متن پیش‌نمایش را انتخاب کنید.");
+      return;
+    }
+
+    const annotation: RaaviAnnotation = {
+      id: annotationId(),
+      kind,
+      ...selection,
+      body: body.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    setAnnotations((current) => [...current, annotation]);
+    setSelectionDraft(null);
+    setComposerKind(null);
+    setComposerText("");
+    setAnnotationPanelOpen(true);
+    setActiveAnnotationId(annotation.id);
+    clearNativeSelection();
+    showNotice(`${ANNOTATION_LABELS[kind]} ثبت شد.`);
+  };
+
+  const openAnnotationComposer = (
+    kind: Extract<AnnotationKind, "comment" | "margin">,
+  ) => {
+    if (!selectionDraft) {
+      showNotice("ابتدا بخشی از متن پیش‌نمایش را انتخاب کنید.");
+      return;
+    }
+    setComposerKind(kind);
+    setComposerText("");
+  };
+
+  const submitAnnotationComposer = () => {
+    if (!composerKind || !composerText.trim()) return;
+    addAnnotation(composerKind, composerText);
+  };
+
+  const updateAnnotationBody = (id: string, body: string) => {
+    setAnnotations((current) =>
+      current.map((annotation) =>
+        annotation.id === id ? { ...annotation, body } : annotation,
+      ),
+    );
+  };
+
+  const removeAnnotation = (id: string) => {
+    setAnnotations((current) =>
+      current.filter((annotation) => annotation.id !== id),
+    );
+    if (activeAnnotationId === id) setActiveAnnotationId("");
+    showNotice("یادداشت حذف شد.");
+  };
+
+  const focusAnnotation = (annotation: RaaviAnnotation) => {
+    setActiveAnnotationId(annotation.id);
+    const article = previewArticleRef.current;
+    if (!article) return;
+    const text = article.textContent ?? "";
+    const start = resolveAnnotationStart(text, annotation);
+    if (start < 0) {
+      showNotice("محل این یادداشت پس از ویرایش متن پیدا نشد.");
+      return;
+    }
+    const range = rangeFromTextOffsets(
+      article,
+      start,
+      start + annotation.quote.length,
+    );
+    const target = range?.startContainer.parentElement;
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const downloadMarkdown = useCallback(async () => {
     if (window.raaviDesktop) {
       setError("");
       try {
@@ -523,7 +945,53 @@ export default function Home() {
     link.remove();
     URL.revokeObjectURL(url);
     showNotice("فایل Markdown آماده‌ی دریافت شد.");
-  };
+  }, [content, fileName, showNotice]);
+
+  const downloadRaavi = useCallback(async () => {
+    const documentValue = makeRaaviDocument(fileName, content, annotations);
+    const raviName = getRaaviName(fileName);
+
+    if (window.raaviDesktop) {
+      setError("");
+      try {
+        const result = await window.raaviDesktop.saveRaavi(
+          raviName,
+          documentValue,
+        );
+        if (result.saved) {
+          showNotice("فایل .ravi و نسخه‌ی Markdown کنار هم ذخیره شدند.");
+        }
+      } catch {
+        setError("ذخیره‌ی بسته‌ی راوی ممکن نبود؛ مسیر دیگری را انتخاب کنید.");
+      }
+      return;
+    }
+
+    const downloads = [
+      {
+        name: raviName,
+        blob: new Blob([JSON.stringify(documentValue, null, 2)], {
+          type: "application/json;charset=utf-8",
+        }),
+      },
+      {
+        name: getDownloadName(fileName),
+        blob: new Blob([content], { type: "text/markdown;charset=utf-8" }),
+      },
+    ];
+
+    for (const download of downloads) {
+      const url = URL.createObjectURL(download.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = download.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+    showNotice("بسته‌ی .ravi و فایل Markdown آماده‌ی دریافت شدند.");
+  }, [annotations, content, fileName, showNotice]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -543,20 +1011,32 @@ export default function Home() {
       }
       if (event.key.toLowerCase() === "s") {
         event.preventDefault();
-        void downloadMarkdown();
+        if (event.shiftKey) {
+          void downloadRaavi();
+        } else {
+          void downloadMarkdown();
+        }
       }
     };
 
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [content, fileName, readingMode, libraryOpen]);
+  }, [
+    downloadMarkdown,
+    downloadRaavi,
+    readingMode,
+    libraryOpen,
+  ]);
 
   const readFile = async (file: File) => {
     setError("");
 
-    const hasMarkdownExtension = /\.(md|markdown)$/i.test(file.name);
-    if (!hasMarkdownExtension) {
-      setError("این فایل Markdown نیست؛ یک فایل با پسوند md یا markdown انتخاب کنید.");
+    const isRaaviFile = /\.ravi$/i.test(file.name);
+    const isMarkdownFile = /\.(md|markdown)$/i.test(file.name);
+    if (!isRaaviFile && !isMarkdownFile) {
+      setError(
+        "این فایل پشتیبانی نمی‌شود؛ یک فایل md، markdown یا ravi انتخاب کنید.",
+      );
       return;
     }
 
@@ -566,15 +1046,37 @@ export default function Home() {
     }
 
     try {
-      const nextContent = await file.text();
-      setContent(nextContent);
-      setFileName(file.name);
+      const rawContent = await file.text();
+      if (isRaaviFile) {
+        const parsed = parseRaaviDocument(
+          rawContent,
+          file.name.replace(/\.ravi$/i, ".md"),
+        );
+        setContent(parsed.content);
+        setFileName(parsed.fileName);
+        setAnnotations(parsed.annotations);
+        setAnnotationPanelOpen(Boolean(parsed.annotations.length));
+        showNotice(
+          `بسته‌ی راوی با ${parsed.annotations.length.toLocaleString("fa-IR")} یادداشت باز شد.`,
+        );
+      } else {
+        setContent(rawContent);
+        setFileName(file.name);
+        setAnnotations([]);
+        setAnnotationPanelOpen(false);
+        showNotice("فایل باز شد و پیش‌نمایش آماده است.");
+      }
+      setSelectionDraft(null);
+      setComposerKind(null);
       setActiveLibraryPath("");
       setMobilePane("preview");
       setReadingMode(false);
-      showNotice("فایل باز شد و پیش‌نمایش آماده است.");
     } catch {
-      setError("خواندن فایل ممکن نبود؛ دوباره تلاش کنید.");
+      setError(
+        isRaaviFile
+          ? "فایل .ravi معتبر نیست یا با نسخه‌ی دیگری ساخته شده است."
+          : "خواندن فایل ممکن نبود؛ دوباره تلاش کنید.",
+      );
     }
   };
 
@@ -755,6 +1257,10 @@ export default function Home() {
       const nextContent = await file.read();
       setContent(nextContent);
       setFileName(file.name);
+      setAnnotations([]);
+      setSelectionDraft(null);
+      setComposerKind(null);
+      setAnnotationPanelOpen(false);
       setActiveLibraryPath(file.path);
       setMobilePane("preview");
       setReadingMode(false);
@@ -842,6 +1348,10 @@ export default function Home() {
 
     setContent("");
     setFileName("نوشته-تازه.md");
+    setAnnotations([]);
+    setSelectionDraft(null);
+    setComposerKind(null);
+    setAnnotationPanelOpen(false);
     setReadingMode(false);
     setMobilePane("editor");
     requestAnimationFrame(() => editorRef.current?.focus());
@@ -894,9 +1404,19 @@ export default function Home() {
             className="button button--ink"
             type="button"
             onClick={downloadMarkdown}
+            title="ذخیره‌ی Markdown — Ctrl+S"
           >
             <Download size={18} aria-hidden="true" />
             <span>دریافت</span>
+          </button>
+          <button
+            className="button button--ravi"
+            type="button"
+            onClick={downloadRaavi}
+            title="ذخیره‌ی بسته‌ی راوی — Ctrl+Shift+S"
+          >
+            <MessageSquareText size={18} aria-hidden="true" />
+            <span>اشتراک .ravi</span>
           </button>
           <button
             className={`button button--quiet ${readingMode ? "is-active" : ""}`}
@@ -991,7 +1511,7 @@ export default function Home() {
           ref={fileInputRef}
           className="visually-hidden"
           type="file"
-          accept=".md,.markdown,text/markdown"
+          accept=".md,.markdown,.ravi,text/markdown,application/json"
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (file) void readFile(file);
@@ -1005,7 +1525,7 @@ export default function Home() {
             <div className="drop-seal">
               <Upload size={30} aria-hidden="true" />
             </div>
-            <strong>فایل Markdown را همین‌جا رها کنید</strong>
+            <strong>فایل Markdown یا .ravi را همین‌جا رها کنید</strong>
             <span>فایل در مرورگر شما باز می‌شود</span>
           </div>
         )}
@@ -1117,35 +1637,288 @@ export default function Home() {
               </strong>
             </div>
 
-            <div className="reader-controls" aria-label="اندازه‌ی متن">
+            <div className="preview-header-actions">
               <button
+                className={`annotation-toggle ${
+                  annotationPanelOpen ? "is-active" : ""
+                }`}
                 type="button"
-                onClick={() => setReaderSize((size) => Math.max(16, size - 1))}
-                disabled={readerSize <= 16}
-                aria-label="کوچک‌تر کردن متن"
-                title="کوچک‌تر کردن متن"
+                onClick={() =>
+                  setAnnotationPanelOpen((current) => !current)
+                }
+                aria-expanded={annotationPanelOpen}
+                aria-controls="annotation-panel"
+                title="نمایش یادداشت‌ها"
               >
-                <Minus size={15} aria-hidden="true" />
+                <PanelLeftOpen size={16} aria-hidden="true" />
+                <span>یادداشت‌ها</span>
+                <b>{annotations.length.toLocaleString("fa-IR")}</b>
               </button>
-              <span aria-live="polite">{readerSize.toLocaleString("fa-IR")}</span>
-              <button
-                type="button"
-                onClick={() => setReaderSize((size) => Math.min(22, size + 1))}
-                disabled={readerSize >= 22}
-                aria-label="بزرگ‌تر کردن متن"
-                title="بزرگ‌تر کردن متن"
-              >
-                <Plus size={15} aria-hidden="true" />
-              </button>
+              <div className="reader-controls" aria-label="اندازه‌ی متن">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setReaderSize((size) => Math.max(16, size - 1))
+                  }
+                  disabled={readerSize <= 16}
+                  aria-label="کوچک‌تر کردن متن"
+                  title="کوچک‌تر کردن متن"
+                >
+                  <Minus size={15} aria-hidden="true" />
+                </button>
+                <span aria-live="polite">
+                  {readerSize.toLocaleString("fa-IR")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setReaderSize((size) => Math.min(22, size + 1))
+                  }
+                  disabled={readerSize >= 22}
+                  aria-label="بزرگ‌تر کردن متن"
+                  title="بزرگ‌تر کردن متن"
+                >
+                  <Plus size={15} aria-hidden="true" />
+                </button>
+              </div>
             </div>
           </div>
 
           <div
-            className="preview-scroll"
-            style={{ "--reader-size": `${readerSize}px` } as React.CSSProperties}
+            className={`annotation-toolbar ${
+              selectionDraft ? "has-selection" : ""
+            } ${composerKind ? "is-composing" : ""}`}
           >
+            {composerKind && selectionDraft ? (
+              <>
+                <div className="annotation-composer-copy">
+                  <span>{ANNOTATION_LABELS[composerKind]}</span>
+                  <q dir="auto">{selectionDraft.quote}</q>
+                </div>
+                <label className="annotation-composer-field">
+                  <span className="visually-hidden">
+                    متن {ANNOTATION_LABELS[composerKind]}
+                  </span>
+                  <textarea
+                    value={composerText}
+                    onChange={(event) => setComposerText(event.target.value)}
+                    placeholder={
+                      composerKind === "comment"
+                        ? "نظر یا بازخورد خود را بنویسید…"
+                        : "یادداشت حاشیه‌ای را بنویسید…"
+                    }
+                    autoFocus
+                    dir="auto"
+                  />
+                </label>
+                <div className="annotation-composer-actions">
+                  <button
+                    className="annotation-action annotation-action--primary"
+                    type="button"
+                    onClick={submitAnnotationComposer}
+                    disabled={!composerText.trim()}
+                  >
+                    <Send size={15} aria-hidden="true" />
+                    ثبت
+                  </button>
+                  <button
+                    className="annotation-action"
+                    type="button"
+                    onClick={() => {
+                      setComposerKind(null);
+                      setComposerText("");
+                    }}
+                  >
+                    لغو
+                  </button>
+                </div>
+              </>
+            ) : selectionDraft ? (
+              <>
+                <div className="selection-summary">
+                  <span>انتخاب‌شده</span>
+                  <q dir="auto">{selectionDraft.quote}</q>
+                </div>
+                <div className="annotation-actions">
+                  <button
+                    className="annotation-action annotation-action--highlight"
+                    type="button"
+                    onClick={() => addAnnotation("highlight")}
+                  >
+                    <Highlighter size={15} aria-hidden="true" />
+                    هایلایت
+                  </button>
+                  <button
+                    className="annotation-action annotation-action--comment"
+                    type="button"
+                    onClick={() => openAnnotationComposer("comment")}
+                  >
+                    <MessageCircle size={15} aria-hidden="true" />
+                    کامنت
+                  </button>
+                  <button
+                    className="annotation-action annotation-action--margin"
+                    type="button"
+                    onClick={() => openAnnotationComposer("margin")}
+                  >
+                    <NotebookPen size={15} aria-hidden="true" />
+                    حاشیه
+                  </button>
+                  <button
+                    className="annotation-dismiss"
+                    type="button"
+                    onClick={() => {
+                      setSelectionDraft(null);
+                      clearNativeSelection();
+                    }}
+                    aria-label="لغو انتخاب"
+                    title="لغو انتخاب"
+                  >
+                    <X size={15} aria-hidden="true" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <span className="annotation-instruction">
+                <Highlighter size={15} aria-hidden="true" />
+                بخشی از متن پیش‌نمایش را انتخاب کنید؛ سپس هایلایت یا یادداشت
+                بسازید.
+              </span>
+            )}
+          </div>
+
+          <div
+            className={`preview-stage ${
+              annotationPanelOpen ? "annotations-open" : ""
+            }`}
+          >
+            {annotationPanelOpen && (
+              <aside
+                className="annotation-panel"
+                id="annotation-panel"
+                aria-label="یادداشت‌های سند"
+              >
+                <div className="annotation-panel-header">
+                  <div>
+                    <strong>حاشیه‌های سند</strong>
+                    <span>
+                      {annotations.length.toLocaleString("fa-IR")} مورد
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAnnotationPanelOpen(false)}
+                    aria-label="بستن حاشیه‌ها"
+                  >
+                    <X size={17} aria-hidden="true" />
+                  </button>
+                </div>
+
+                <div className="annotation-legend" aria-label="آمار یادداشت‌ها">
+                  <span>
+                    <Highlighter size={13} aria-hidden="true" />
+                    {annotationCounts.highlight.toLocaleString("fa-IR")}
+                  </span>
+                  <span>
+                    <MessageCircle size={13} aria-hidden="true" />
+                    {annotationCounts.comment.toLocaleString("fa-IR")}
+                  </span>
+                  <span>
+                    <NotebookPen size={13} aria-hidden="true" />
+                    {annotationCounts.margin.toLocaleString("fa-IR")}
+                  </span>
+                </div>
+
+                <div className="annotation-list">
+                  {annotations.length ? (
+                    annotations.map((annotation, index) => (
+                      <article
+                        className={`annotation-card is-${annotation.kind} ${
+                          activeAnnotationId === annotation.id
+                            ? "is-active"
+                            : ""
+                        }`}
+                        key={annotation.id}
+                      >
+                        <div className="annotation-card-heading">
+                          <span>
+                            <AnnotationIcon kind={annotation.kind} />
+                            {ANNOTATION_LABELS[annotation.kind]}
+                          </span>
+                          <b>#{(index + 1).toLocaleString("fa-IR")}</b>
+                        </div>
+                        <button
+                          className="annotation-quote"
+                          type="button"
+                          onClick={() => focusAnnotation(annotation)}
+                          title="رفتن به محل یادداشت"
+                        >
+                          <q dir="auto">{annotation.quote}</q>
+                        </button>
+                        {annotation.kind !== "highlight" && (
+                          <label className="annotation-body">
+                            <span className="visually-hidden">
+                              ویرایش {ANNOTATION_LABELS[annotation.kind]}
+                            </span>
+                            <textarea
+                              value={annotation.body}
+                              onChange={(event) =>
+                                updateAnnotationBody(
+                                  annotation.id,
+                                  event.target.value,
+                                )
+                              }
+                              dir="auto"
+                              rows={3}
+                            />
+                          </label>
+                        )}
+                        <div className="annotation-card-footer">
+                          <button
+                            type="button"
+                            onClick={() => focusAnnotation(annotation)}
+                          >
+                            نمایش در متن
+                          </button>
+                          <button
+                            className="annotation-delete"
+                            type="button"
+                            onClick={() => removeAnnotation(annotation.id)}
+                            aria-label={`حذف ${ANNOTATION_LABELS[annotation.kind]}`}
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                            حذف
+                          </button>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="annotation-empty">
+                      <NotebookPen size={28} aria-hidden="true" />
+                      <strong>هنوز یادداشتی ندارید</strong>
+                      <span>
+                        متنی را در برگه انتخاب کنید تا اولین حاشیه ساخته شود.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </aside>
+            )}
+
+            <div
+              className="preview-scroll"
+              style={
+                { "--reader-size": `${readerSize}px` } as React.CSSProperties
+              }
+            >
             {content.trim() ? (
-              <article className="markdown-body" dir="rtl">
+              <article
+                ref={previewArticleRef}
+                className="markdown-body"
+                dir="rtl"
+                onMouseUp={capturePreviewSelection}
+                onKeyUp={capturePreviewSelection}
+              >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
@@ -1210,6 +1983,7 @@ export default function Home() {
                 </button>
               </div>
             )}
+            </div>
           </div>
 
           <div className="pane-footer pane-footer--split">

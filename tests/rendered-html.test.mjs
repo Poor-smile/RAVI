@@ -37,10 +37,14 @@ test("server-renders the Persian Markdown viewer", async () => {
 });
 
 test("ships the viewer implementation instead of starter assets", async () => {
-  const [page, layout, css, packageJson] = await Promise.all([
+  const [page, layout, css, raavi, main, preload, packageJson] =
+    await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/raavi.ts", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
@@ -54,6 +58,15 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /تصویر خارجی بارگذاری نشد/);
   assert.match(page, /برای اشتراک سند همراه با هایلایت و کامنت/);
   assert.match(page, /\.ravi/);
+  assert.match(page, /capturePreviewSelection/);
+  assert.match(page, /addAnnotation/);
+  assert.match(page, /حاشیه‌نویسی/);
+  assert.match(page, /CSS[\s\S]*highlights/);
+  assert.match(page, /downloadRaavi/);
+  assert.match(raavi, /RAVI_VERSION = 1/);
+  assert.match(raavi, /makeRaaviDocument/);
+  assert.match(main, /document:save-ravi/);
+  assert.match(preload, /saveRaavi/);
   assert.match(page, /<ul className="library-branch">/);
   assert.match(layout, /lang="fa"/);
   assert.match(layout, /dir="rtl"/);
@@ -62,6 +75,7 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(packageJson, /"react-markdown"/);
   assert.match(packageJson, /"desktop:pack"/);
   assert.match(packageJson, /"fileAssociations"/);
+  assert.match(packageJson, /"ext": "ravi"/);
   assert.match(packageJson, /"perMachine":\s*true/);
   assert.doesNotMatch(
     `${page}\n${layout}\n${css}\n${packageJson}`,
