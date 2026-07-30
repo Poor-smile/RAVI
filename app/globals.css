@@ -1431,13 +1431,27 @@ html.theme-is-changing .save-type-options label {
   position: relative;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr);
+  grid-template-columns:
+    minmax(0, var(--preview-pane-track, 1fr))
+    34px
+    minmax(0, var(--editor-pane-track, 1fr));
   grid-template-areas: "preview spine editor";
   direction: ltr;
   gap: 0;
   padding: 18px clamp(14px, 2.4vw, 36px) 24px;
   background: var(--paper-200);
   overflow: hidden;
+  transition: grid-template-columns 280ms var(--ease-paper);
+}
+
+.workspace.is-resizing-panes,
+.workspace.is-resizing-panes * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+.workspace.is-resizing-panes {
+  transition: none;
 }
 
 .work-pane {
@@ -1449,6 +1463,28 @@ html.theme-is-changing .save-type-options label {
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
   direction: rtl;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 160ms ease-out,
+    transform 260ms var(--ease-paper);
+}
+
+.workspace.is-resizing-panes .work-pane {
+  transition: none;
+}
+
+.work-pane.is-pane-collapsed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.preview-pane.is-pane-collapsed {
+  transform: translateX(-10px);
+}
+
+.editor-pane.is-pane-collapsed {
+  transform: translateX(10px);
 }
 
 .editor-pane {
@@ -1490,6 +1526,41 @@ html.theme-is-changing .save-type-options label {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+}
+
+.pane-visibility-toggle {
+  flex: none;
+  width: 29px;
+  height: 29px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  color: var(--ink-500);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease,
+    transform 180ms var(--ease-paper);
+}
+
+.pane-visibility-toggle:hover {
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  border-color: color-mix(in srgb, var(--proof-blue) 28%, var(--rule));
+  transform: translateX(-1px);
+}
+
+.editor-pane .pane-visibility-toggle:hover {
+  transform: translateX(1px);
+}
+
+.pane-visibility-toggle:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .folio {
@@ -2287,13 +2358,67 @@ html.theme-is-changing .save-type-options label {
   background: var(--paper-300);
   border-block: 1px solid var(--rule);
   direction: rtl;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .registration-spine.is-scroll-synced {
   background: color-mix(in srgb, var(--proof-blue-soft) 42%, var(--paper-300));
 }
 
+.registration-spine.has-collapsed-pane {
+  background: color-mix(in srgb, var(--proof-blue-soft) 62%, var(--paper-300));
+}
+
+.registration-spine.is-collapse-ready {
+  background: var(--proof-blue-soft);
+  box-shadow:
+    inset 2px 0 0 var(--proof-blue),
+    inset -2px 0 0 var(--proof-blue);
+  animation: paneCollapseReady 460ms var(--ease-paper) infinite alternate;
+}
+
+.pane-resize-handle {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border: 0;
+  outline: 0;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.pane-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset-block: 42px;
+  left: 50%;
+  width: 3px;
+  min-height: 28px;
+  border-radius: 2px;
+  background: var(--proof-blue);
+  opacity: 0;
+  transform: translateX(-50%) scaleY(0.84);
+  transition:
+    opacity 140ms ease,
+    transform 180ms var(--ease-paper);
+}
+
+.registration-spine:hover .pane-resize-handle::before,
+.pane-resize-handle:focus-visible::before,
+.workspace.is-resizing-panes .pane-resize-handle::before {
+  opacity: 0.78;
+  transform: translateX(-50%) scaleY(1);
+}
+
+.pane-resize-handle:focus-visible {
+  box-shadow: inset 0 0 0 3px var(--focus-ring);
+}
+
 .registration-dot {
+  position: relative;
+  z-index: 1;
   flex: none;
   width: 13px;
   height: 13px;
@@ -2302,9 +2427,13 @@ html.theme-is-changing .save-type-options label {
   box-shadow:
     inset 0 0 0 3px var(--paper-300),
     inset 0 0 0 4px var(--proof-blue);
+  pointer-events: none;
 }
 
-.scroll-sync-toggle {
+.scroll-sync-toggle,
+.pane-reveal-toggle {
+  position: relative;
+  z-index: 2;
   flex: none;
   width: 28px;
   height: 28px;
@@ -2319,7 +2448,8 @@ html.theme-is-changing .save-type-options label {
   cursor: pointer;
 }
 
-.scroll-sync-toggle:hover {
+.scroll-sync-toggle:hover,
+.pane-reveal-toggle:hover {
   color: var(--proof-blue-dark);
   border-color: var(--proof-blue);
   background: var(--paper-50);
@@ -2335,30 +2465,55 @@ html.theme-is-changing .save-type-options label {
   background: var(--proof-blue-dark);
 }
 
-.scroll-sync-toggle:focus-visible {
+.scroll-sync-toggle:focus-visible,
+.pane-reveal-toggle:focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 1px;
 }
 
 .spine-line {
+  position: relative;
+  z-index: 1;
   width: 1px;
   flex: 1;
   min-height: 14px;
   background: var(--rule-strong);
+  pointer-events: none;
 }
 
 .spine-label {
+  position: relative;
+  z-index: 1;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   color: var(--ink-500);
   font-size: 8px;
   letter-spacing: 0.12em;
   white-space: nowrap;
+  pointer-events: none;
 }
 
 .registration-spine.is-scroll-synced .spine-label {
   color: var(--proof-blue-dark);
   font-weight: 700;
+}
+
+.registration-spine.has-collapsed-pane .spine-label {
+  color: var(--proof-blue-dark);
+  font-weight: 700;
+}
+
+@keyframes paneCollapseReady {
+  from {
+    box-shadow:
+      inset 1px 0 0 var(--proof-blue),
+      inset -1px 0 0 var(--proof-blue);
+  }
+  to {
+    box-shadow:
+      inset 3px 0 0 var(--proof-blue),
+      inset -3px 0 0 var(--proof-blue);
+  }
 }
 
 .preview-scroll {
@@ -3871,11 +4026,22 @@ html.theme-is-changing .save-type-options label {
     min-height: calc(100dvh - 158px);
     display: block;
     padding: 10px;
+    transition: none;
   }
 
   .work-pane {
     height: calc(100dvh - 178px);
     border: 1px solid var(--rule);
+  }
+
+  .work-pane.is-pane-collapsed {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .pane-visibility-toggle {
+    display: none;
   }
 
   .registration-spine {

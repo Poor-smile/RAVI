@@ -109,6 +109,13 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /library-pin-action/);
   assert.match(page, /قفل کردن اسکرول ادیتور و پیش‌نمایش/);
   assert.match(page, /باز کردن قفل اسکرول هماهنگ/);
+  assert.match(page, /تغییر اندازهٔ ویرایشگر و پیش‌نمایش/);
+  assert.match(page, /پنهان‌کردن ویرایشگر/);
+  assert.match(page, /پنهان‌کردن پیش‌نمایش/);
+  assert.match(page, /نمایش دوبارهٔ ویرایشگر/);
+  assert.match(page, /نمایش دوبارهٔ پیش‌نمایش/);
+  assert.match(page, /raavi:pane-layout:v1/);
+  assert.match(page, /PANE_COLLAPSE_THRESHOLD = 10/);
   assert.match(page, /فهرست فصل‌های سند/);
   assert.match(page, /جمع‌کردن فهرست فصل‌ها/);
   assert.match(page, /بازکردن فهرست فصل‌ها/);
@@ -161,6 +168,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(css, /\.save-modal/);
   assert.match(css, /\.library-pinned-section/);
   assert.match(css, /\.library-pin-action/);
+  assert.match(css, /\.pane-resize-handle/);
+  assert.match(css, /\.work-pane\.is-pane-collapsed/);
+  assert.match(css, /@keyframes paneCollapseReady/);
   assert.match(css, /height: 100dvh/);
   assert.match(packageJson, /"react-markdown"/);
   assert.match(packageJson, /"desktop:pack"/);

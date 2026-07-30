@@ -324,6 +324,122 @@ test.describe("Electron keyboard integration", () => {
       ).toBeLessThan(1);
       await scrollSyncToggle.click();
 
+      const workspace = window.locator(".workspace");
+      const editorPane = window.locator(".editor-pane");
+      const previewPane = window.locator(".preview-pane");
+      let paneSeparator = window.getByRole("separator", {
+        name: "تغییر اندازهٔ ویرایشگر و پیش‌نمایش",
+        exact: true,
+      });
+      await expect(paneSeparator).toHaveAttribute("aria-valuenow", "50");
+      const balancedPaneWidths = await Promise.all([
+        previewPane.evaluate((node: HTMLElement) =>
+          Math.round(node.getBoundingClientRect().width),
+        ),
+        editorPane.evaluate((node: HTMLElement) =>
+          Math.round(node.getBoundingClientRect().width),
+        ),
+      ]);
+      expect(Math.abs(balancedPaneWidths[0] - balancedPaneWidths[1])).toBeLessThan(
+        3,
+      );
+
+      await paneSeparator.press("ArrowLeft");
+      await expect(paneSeparator).toHaveAttribute("aria-valuenow", "45");
+      await expect
+        .poll(async () => {
+          const [previewWidth, editorWidth] = await Promise.all([
+            previewPane.evaluate(
+              (node: HTMLElement) => node.getBoundingClientRect().width,
+            ),
+            editorPane.evaluate(
+              (node: HTMLElement) => node.getBoundingClientRect().width,
+            ),
+          ]);
+          return previewWidth - editorWidth;
+        })
+        .toBeLessThan(0);
+      await paneSeparator.press("Enter");
+      await expect(paneSeparator).toHaveAttribute("aria-valuenow", "50");
+
+      await previewPane
+        .getByRole("button", {
+          name: "پنهان‌کردن پیش‌نمایش",
+          exact: true,
+        })
+        .click();
+      await expect(workspace).toHaveAttribute("data-pane-layout", "editor");
+      await expect(previewPane).toHaveAttribute("aria-hidden", "true");
+      const showPreview = window.getByRole("button", {
+        name: "نمایش پیش‌نمایش",
+        exact: true,
+      });
+      await expect(showPreview).toBeVisible();
+      await showPreview.click();
+      await expect(workspace).toHaveAttribute("data-pane-layout", "split");
+
+      await editorPane
+        .getByRole("button", {
+          name: "پنهان‌کردن ویرایشگر",
+          exact: true,
+        })
+        .click();
+      await expect(workspace).toHaveAttribute("data-pane-layout", "preview");
+      await expect(editorPane).toHaveAttribute("aria-hidden", "true");
+      await window
+        .getByRole("button", {
+          name: "نمایش ویرایشگر",
+          exact: true,
+        })
+        .click();
+      await expect(workspace).toHaveAttribute("data-pane-layout", "split");
+      await window.waitForTimeout(350);
+
+      paneSeparator = window.getByRole("separator", {
+        name: "تغییر اندازهٔ ویرایشگر و پیش‌نمایش",
+        exact: true,
+      });
+      const separatorBox = await paneSeparator.boundingBox();
+      const workspaceBox = await workspace.boundingBox();
+      const workspacePaddingLeft = await workspace.evaluate((node) =>
+        Number.parseFloat(getComputedStyle(node).paddingLeft),
+      );
+      expect(separatorBox).not.toBeNull();
+      expect(workspaceBox).not.toBeNull();
+      const dragY = separatorBox!.y + 96;
+      await window.mouse.move(
+        separatorBox!.x + separatorBox!.width / 2,
+        dragY,
+      );
+      await window.mouse.down();
+      await window.mouse.move(
+        workspaceBox!.x + workspacePaddingLeft + 2,
+        dragY,
+        { steps: 8 },
+      );
+      await expect(workspace).toHaveAttribute(
+        "data-collapse-candidate",
+        "preview",
+      );
+      await expect(paneSeparator).toHaveAttribute("aria-valuenow", "10");
+      await window.mouse.up();
+      await expect(workspace).toHaveAttribute("data-pane-layout", "editor");
+      await expect(previewPane).toHaveAttribute("aria-hidden", "true");
+      await window
+        .getByRole("button", {
+          name: "نمایش پیش‌نمایش",
+          exact: true,
+        })
+        .click();
+      await expect(workspace).toHaveAttribute("data-pane-layout", "split");
+      await expect
+        .poll(() =>
+          window.evaluate(() =>
+            window.localStorage.getItem("raavi:pane-layout:v1"),
+          ),
+        )
+        .toContain('"mode":"split"');
+
       const readingModeButton = topbar.getByRole("button", {
         name: /حالت مطالعه/,
       });

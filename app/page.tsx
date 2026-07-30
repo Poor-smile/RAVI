@@ -36,6 +36,7 @@ import {
   Minus,
   Moon,
   NotebookPen,
+  PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
@@ -96,9 +97,12 @@ import {
 const STORAGE_KEY = "raavi:document:v1";
 const THEME_STORAGE_KEY = "raavi:theme:v1";
 const PINNED_LIBRARY_STORAGE_KEY = "raavi:library-pins:v1";
+const PANE_LAYOUT_STORAGE_KEY = "raavi:pane-layout:v1";
 const DEFAULT_FILE_NAME = "راهنمای-راوی.md";
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const MAX_LOCAL_VERSIONS = 10;
+const PANE_COLLAPSE_THRESHOLD = 10;
+const PANE_SPINE_WIDTH = 34;
 
 function detectCommandEnvironment(): CommandEnvironment {
   if (typeof navigator === "undefined") {
@@ -171,6 +175,7 @@ const SAMPLE_MARKDOWN = [
 type SaveState = "saved" | "dirty" | "saving" | "error";
 type MobilePane = "editor" | "preview";
 type ScrollPane = "editor" | "preview";
+type DesktopPaneMode = "split" | ScrollPane;
 type LibraryTab = "history" | "library";
 type LibraryState = "idle" | "scanning" | "ready";
 type DocumentFileType = "markdown" | "ravi";
@@ -865,6 +870,13 @@ export default function Home() {
   const [readerSize, setReaderSize] = useState(18);
   const [mobilePane, setMobilePane] = useState<MobilePane>("preview");
   const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
+  const [desktopPaneMode, setDesktopPaneMode] =
+    useState<DesktopPaneMode>("split");
+  const [previewPanePercent, setPreviewPanePercent] = useState(50);
+  const [paneLayoutHydrated, setPaneLayoutHydrated] = useState(false);
+  const [paneDragging, setPaneDragging] = useState(false);
+  const [paneCollapseCandidate, setPaneCollapseCandidate] =
+    useState<ScrollPane | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -932,6 +944,8 @@ export default function Home() {
   const readingHeaderFrameRef = useRef<number | null>(null);
   const readingOutlineFrameRef = useRef<number | null>(null);
   const readingLastScrollTopRef = useRef(0);
+  const lastExpandedPreviewPercentRef = useRef(50);
+  const paneDragCleanupRef = useRef<(() => void) | null>(null);
   const scrollSyncFrameRef = useRef<number | null>(null);
   const scrollSyncTargetRef = useRef<{
     pane: ScrollPane;
@@ -1015,6 +1029,63 @@ export default function Home() {
     [],
   );
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const savedLayout = window.localStorage.getItem(
+          PANE_LAYOUT_STORAGE_KEY,
+        );
+        if (savedLayout) {
+          const parsed = JSON.parse(savedLayout) as {
+            mode?: DesktopPaneMode;
+            previewPercent?: number;
+          };
+          if (
+            parsed.mode === "split" ||
+            parsed.mode === "editor" ||
+            parsed.mode === "preview"
+          ) {
+            setDesktopPaneMode(parsed.mode);
+          }
+          if (typeof parsed.previewPercent === "number") {
+            const savedPercent = Math.min(
+              90,
+              Math.max(
+                10,
+                Math.round(parsed.previewPercent * 10) / 10,
+              ),
+            );
+            lastExpandedPreviewPercentRef.current = savedPercent;
+            setPreviewPanePercent(savedPercent);
+          }
+        }
+      } catch {
+        // A balanced split is a safe fallback when layout storage is invalid.
+      } finally {
+        setPaneLayoutHydrated(true);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!paneLayoutHydrated) return;
+    const timer = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          PANE_LAYOUT_STORAGE_KEY,
+          JSON.stringify({
+            mode: desktopPaneMode,
+            previewPercent: previewPanePercent,
+          }),
+        );
+      } catch {
+        // The layout remains usable for this session without persistence.
+      }
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [desktopPaneMode, paneLayoutHydrated, previewPanePercent]);
+
   const alignScrollPanes = useCallback((sourcePane: ScrollPane) => {
     const source =
       sourcePane === "editor"
@@ -1051,7 +1122,7 @@ export default function Home() {
   const handleSyncedScroll = useCallback(
     (sourcePane: ScrollPane) => {
       lastScrolledPaneRef.current = sourcePane;
-      if (!scrollSyncEnabled) return;
+      if (!scrollSyncEnabled || desktopPaneMode !== "split") return;
 
       const guardedTarget = scrollSyncTargetRef.current;
       if (guardedTarget?.pane === sourcePane) {
@@ -1078,7 +1149,7 @@ export default function Home() {
         if (pendingSource) alignScrollPanes(pendingSource);
       });
     },
-    [alignScrollPanes, scrollSyncEnabled],
+    [alignScrollPanes, desktopPaneMode, scrollSyncEnabled],
   );
 
   const toggleScrollSync = useCallback(() => {
@@ -1092,6 +1163,233 @@ export default function Home() {
       });
     }
   }, [alignScrollPanes, scrollSyncEnabled]);
+
+  const setPaneCandidate = useCallback((pane: ScrollPane | null) => {
+    setPaneCollapseCandidate(pane);
+  }, []);
+
+  const focusDesktopPane = useCallback((pane: ScrollPane) => {
+    window.requestAnimationFrame(() => {
+      if (pane === "editor") {
+        editorRef.current?.focus();
+      } else {
+        previewArticleRef.current?.focus();
+      }
+    });
+  }, []);
+
+  const clearPaneTransientUi = useCallback(() => {
+    setEditorSelectionMenuPosition(null);
+    setSelectionDraft(null);
+    setSelectionMenuPosition(null);
+    setComposerKind(null);
+    setComposerText("");
+    setHoverPreview(null);
+    window.getSelection()?.removeAllRanges();
+  }, []);
+
+  const collapseDesktopPane = useCallback(
+    (pane: ScrollPane) => {
+      clearPaneTransientUi();
+      setPaneDragging(false);
+      setPaneCandidate(null);
+      setPreviewPanePercent(lastExpandedPreviewPercentRef.current);
+      setDesktopPaneMode(pane === "preview" ? "editor" : "preview");
+      focusDesktopPane(pane === "preview" ? "editor" : "preview");
+    },
+    [clearPaneTransientUi, focusDesktopPane, setPaneCandidate],
+  );
+
+  const restoreDesktopPanes = useCallback(
+    (focusPane: ScrollPane) => {
+      setPreviewPanePercent(lastExpandedPreviewPercentRef.current);
+      setDesktopPaneMode("split");
+      setPaneDragging(false);
+      setPaneCandidate(null);
+      focusDesktopPane(focusPane);
+      window.requestAnimationFrame(() => {
+        if (scrollSyncEnabled) {
+          alignScrollPanes(lastScrolledPaneRef.current);
+        }
+      });
+    },
+    [
+      alignScrollPanes,
+      focusDesktopPane,
+      scrollSyncEnabled,
+      setPaneCandidate,
+    ],
+  );
+
+  const panePercentFromClientX = useCallback((clientX: number) => {
+    const workspace = workspaceRef.current;
+    if (!workspace) return 50;
+
+    const bounds = workspace.getBoundingClientRect();
+    const styles = window.getComputedStyle(workspace);
+    const paddingLeft = Number.parseFloat(styles.paddingLeft) || 0;
+    const paddingRight = Number.parseFloat(styles.paddingRight) || 0;
+    const availableWidth = Math.max(
+      1,
+      bounds.width - paddingLeft - paddingRight - PANE_SPINE_WIDTH,
+    );
+    return (
+      ((clientX - bounds.left - paddingLeft) / availableWidth) * 100
+    );
+  }, []);
+
+  const updatePaneSplitFromPointer = useCallback(
+    (clientX: number) => {
+      const rawPercent = panePercentFromClientX(clientX);
+      const candidate =
+        rawPercent <= PANE_COLLAPSE_THRESHOLD
+          ? "preview"
+          : rawPercent >= 100 - PANE_COLLAPSE_THRESHOLD
+            ? "editor"
+            : null;
+      setPaneCandidate(candidate);
+      const nextPercent = Math.min(
+        100 - PANE_COLLAPSE_THRESHOLD,
+        Math.max(PANE_COLLAPSE_THRESHOLD, rawPercent),
+      );
+      if (!candidate) {
+        lastExpandedPreviewPercentRef.current = nextPercent;
+      }
+      setPreviewPanePercent(nextPercent);
+      return candidate;
+    },
+    [panePercentFromClientX, setPaneCandidate],
+  );
+
+  const handlePaneResizePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (
+        desktopPaneMode !== "split" ||
+        readingMode ||
+        (event.pointerType === "mouse" && event.button !== 0)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      clearPaneTransientUi();
+      const pointerId = event.pointerId;
+      const resizeHandle = event.currentTarget;
+      setPaneDragging(true);
+      updatePaneSplitFromPointer(event.clientX);
+
+      const cleanup = () => {
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("pointercancel", handlePointerCancel);
+        paneDragCleanupRef.current = null;
+      };
+      const finish = (clientX: number, cancel = false) => {
+        cleanup();
+        if (
+          resizeHandle.hasPointerCapture?.(pointerId)
+        ) {
+          resizeHandle.releasePointerCapture(pointerId);
+        }
+        setPaneDragging(false);
+
+        if (cancel) {
+          setPaneCandidate(null);
+          return;
+        }
+
+        const candidate = updatePaneSplitFromPointer(clientX);
+        if (candidate) {
+          collapseDesktopPane(candidate);
+        } else {
+          setDesktopPaneMode("split");
+          setPaneCandidate(null);
+        }
+      };
+      function handlePointerMove(pointerEvent: PointerEvent) {
+        if (pointerEvent.pointerId !== pointerId) return;
+        pointerEvent.preventDefault();
+        updatePaneSplitFromPointer(pointerEvent.clientX);
+      }
+      function handlePointerUp(pointerEvent: PointerEvent) {
+        if (pointerEvent.pointerId !== pointerId) return;
+        finish(pointerEvent.clientX);
+      }
+      function handlePointerCancel(pointerEvent: PointerEvent) {
+        if (pointerEvent.pointerId !== pointerId) return;
+        finish(pointerEvent.clientX, true);
+      }
+
+      paneDragCleanupRef.current?.();
+      paneDragCleanupRef.current = cleanup;
+      window.addEventListener("pointermove", handlePointerMove, {
+        passive: false,
+      });
+      window.addEventListener("pointerup", handlePointerUp);
+      window.addEventListener("pointercancel", handlePointerCancel);
+      try {
+        resizeHandle.setPointerCapture(pointerId);
+      } catch {
+        // Window listeners still keep the drag reliable without pointer capture.
+      }
+    },
+    [
+      clearPaneTransientUi,
+      collapseDesktopPane,
+      desktopPaneMode,
+      readingMode,
+      setPaneCandidate,
+      updatePaneSplitFromPointer,
+    ],
+  );
+
+  useEffect(
+    () => () => {
+      paneDragCleanupRef.current?.();
+    },
+    [],
+  );
+
+  const handlePaneResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      let nextPercent = previewPanePercent;
+      if (event.key === "ArrowLeft") {
+        nextPercent -= 5;
+      } else if (event.key === "ArrowRight") {
+        nextPercent += 5;
+      } else if (event.key === "Home") {
+        nextPercent = PANE_COLLAPSE_THRESHOLD;
+      } else if (event.key === "End") {
+        nextPercent = 100 - PANE_COLLAPSE_THRESHOLD;
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        lastExpandedPreviewPercentRef.current = 50;
+        setPreviewPanePercent(50);
+        setPaneCandidate(null);
+        return;
+      } else {
+        return;
+      }
+
+      event.preventDefault();
+      if (nextPercent <= PANE_COLLAPSE_THRESHOLD) {
+        collapseDesktopPane("preview");
+      } else if (
+        nextPercent >=
+        100 - PANE_COLLAPSE_THRESHOLD
+      ) {
+        collapseDesktopPane("editor");
+      } else {
+        lastExpandedPreviewPercentRef.current = nextPercent;
+        setPreviewPanePercent(nextPercent);
+        setPaneCandidate(null);
+      }
+    },
+    [
+      collapseDesktopPane,
+      previewPanePercent,
+      setPaneCandidate,
+    ],
+  );
 
   const focusReadingHeading = useCallback((documentIndex: number) => {
     const heading = previewArticleRef.current?.querySelectorAll<HTMLElement>(
@@ -1120,7 +1418,7 @@ export default function Home() {
   );
 
   useEffect(() => {
-    if (!scrollSyncEnabled) return;
+    if (!scrollSyncEnabled || desktopPaneMode !== "split") return;
 
     const frame = window.requestAnimationFrame(() => {
       alignScrollPanes(lastScrolledPaneRef.current);
@@ -1131,6 +1429,7 @@ export default function Home() {
     alignScrollPanes,
     annotationPanelOpen,
     content,
+    desktopPaneMode,
     readerSize,
     scrollSyncEnabled,
   ]);
@@ -3071,6 +3370,25 @@ export default function Home() {
     isCommandEnabled,
   });
 
+  const editorPaneCollapsed =
+    !readingMode && !libraryIsModal && desktopPaneMode === "preview";
+  const previewPaneCollapsed =
+    !readingMode && !libraryIsModal && desktopPaneMode === "editor";
+  const workspacePaneStyle = {
+    "--preview-pane-track":
+      desktopPaneMode === "editor"
+        ? "0fr"
+        : desktopPaneMode === "preview"
+          ? "100fr"
+          : `${previewPanePercent}fr`,
+    "--editor-pane-track":
+      desktopPaneMode === "preview"
+        ? "0fr"
+        : desktopPaneMode === "editor"
+          ? "100fr"
+          : `${100 - previewPanePercent}fr`,
+  } as React.CSSProperties;
+
   return (
     <div
       className={`app-shell ${readingMode ? "is-reading" : ""} ${
@@ -3370,7 +3688,12 @@ export default function Home() {
                 ? "reading-outline-is-open"
                 : "reading-outline-is-collapsed"
               : ""
-          }`}
+          } ${
+            !readingMode ? `pane-layout-is-${desktopPaneMode}` : ""
+          } ${paneDragging ? "is-resizing-panes" : ""}`}
+          style={workspacePaneStyle}
+          data-pane-layout={desktopPaneMode}
+          data-collapse-candidate={paneCollapseCandidate ?? undefined}
           inert={libraryOpen && libraryIsModal ? true : undefined}
           onDragEnter={(event) => {
             event.preventDefault();
@@ -3486,13 +3809,24 @@ export default function Home() {
           ref={editorPaneRef}
           className={`work-pane editor-pane ${
             mobilePane !== "editor" ? "is-hidden-mobile" : ""
-          }`}
+          } ${editorPaneCollapsed ? "is-pane-collapsed" : ""}`}
           aria-label="ویرایشگر Markdown"
+          aria-hidden={editorPaneCollapsed || undefined}
+          inert={editorPaneCollapsed ? true : undefined}
         >
           <div className="pane-header">
             <div className="pane-title">
               <span className="folio">برگ ۱</span>
               <strong>ویرایش</strong>
+              <button
+                className="pane-visibility-toggle"
+                type="button"
+                onClick={() => collapseDesktopPane("editor")}
+                aria-label="پنهان‌کردن ویرایشگر"
+                title="پنهان‌کردن ویرایشگر و گسترش پیش‌نمایش"
+              >
+                <PanelRightClose size={16} aria-hidden="true" />
+              </button>
             </div>
 
             <div className="format-tools" aria-label="ابزار قالب‌بندی">
@@ -3715,35 +4049,102 @@ export default function Home() {
 
         <div
           className={`registration-spine ${
-            scrollSyncEnabled ? "is-scroll-synced" : ""
+            scrollSyncEnabled && desktopPaneMode === "split"
+              ? "is-scroll-synced"
+              : ""
+          } ${
+            desktopPaneMode !== "split" ? "has-collapsed-pane" : ""
+          } ${
+            paneCollapseCandidate
+              ? `is-collapse-ready is-collapse-ready-${paneCollapseCandidate}`
+              : ""
           }`}
         >
+          {desktopPaneMode === "split" && !readingMode && (
+            <div
+              className="pane-resize-handle"
+              role="separator"
+              tabIndex={0}
+              aria-label="تغییر اندازهٔ ویرایشگر و پیش‌نمایش"
+              aria-orientation="vertical"
+              aria-valuemin={PANE_COLLAPSE_THRESHOLD}
+              aria-valuemax={100 - PANE_COLLAPSE_THRESHOLD}
+              aria-valuenow={Math.round(previewPanePercent)}
+              aria-valuetext={`پیش‌نمایش ${Math.round(
+                previewPanePercent,
+              ).toLocaleString("fa-IR")} درصد، ویرایشگر ${(
+                100 - Math.round(previewPanePercent)
+              ).toLocaleString("fa-IR")} درصد`}
+              title="برای تغییر اندازه بکشید؛ Enter تقسیم را برابر می‌کند"
+              onPointerDown={handlePaneResizePointerDown}
+              onKeyDown={handlePaneResizeKeyDown}
+              onDoubleClick={() => {
+                lastExpandedPreviewPercentRef.current = 50;
+                setPreviewPanePercent(50);
+                setPaneCandidate(null);
+              }}
+            />
+          )}
           <span className="registration-dot" aria-hidden="true" />
           <span className="spine-line" aria-hidden="true" />
-          <button
-            className="scroll-sync-toggle"
-            type="button"
-            onClick={toggleScrollSync}
-            aria-label={
-              scrollSyncEnabled
-                ? "باز کردن قفل اسکرول هماهنگ"
-                : "قفل کردن اسکرول ادیتور و پیش‌نمایش"
-            }
-            aria-pressed={scrollSyncEnabled}
-            title={
-              scrollSyncEnabled
-                ? "اسکرول هماهنگ فعال است؛ برای آزاد کردن کلیک کنید"
-                : "قفل اسکرول ادیتور و پیش‌نمایش"
-            }
-          >
-            {scrollSyncEnabled ? (
-              <Lock size={14} aria-hidden="true" />
-            ) : (
-              <LockOpen size={14} aria-hidden="true" />
-            )}
-          </button>
+          {desktopPaneMode === "split" ? (
+            <button
+              className="scroll-sync-toggle"
+              type="button"
+              onClick={toggleScrollSync}
+              aria-label={
+                scrollSyncEnabled
+                  ? "باز کردن قفل اسکرول هماهنگ"
+                  : "قفل کردن اسکرول ادیتور و پیش‌نمایش"
+              }
+              aria-pressed={scrollSyncEnabled}
+              title={
+                scrollSyncEnabled
+                  ? "اسکرول هماهنگ فعال است؛ برای آزاد کردن کلیک کنید"
+                  : "قفل کردن اسکرول ادیتور و پیش‌نمایش"
+              }
+            >
+              {scrollSyncEnabled ? (
+                <Lock size={14} aria-hidden="true" />
+              ) : (
+                <LockOpen size={14} aria-hidden="true" />
+              )}
+            </button>
+          ) : (
+            <button
+              className="pane-reveal-toggle"
+              type="button"
+              onClick={() =>
+                restoreDesktopPanes(
+                  desktopPaneMode === "editor" ? "preview" : "editor",
+                )
+              }
+              aria-label={
+                desktopPaneMode === "editor"
+                  ? "نمایش پیش‌نمایش"
+                  : "نمایش ویرایشگر"
+              }
+              title={
+                desktopPaneMode === "editor"
+                  ? "نمایش دوبارهٔ پیش‌نمایش"
+                  : "نمایش دوبارهٔ ویرایشگر"
+              }
+            >
+              {desktopPaneMode === "editor" ? (
+                <PanelLeftOpen size={16} aria-hidden="true" />
+              ) : (
+                <PanelRightOpen size={16} aria-hidden="true" />
+              )}
+            </button>
+          )}
           <span className="spine-label" aria-hidden="true">
-            {scrollSyncEnabled ? "اسکرول هماهنگ" : "اسکرول آزاد"}
+            {desktopPaneMode === "editor"
+              ? "نمایش پیش‌نمایش"
+              : desktopPaneMode === "preview"
+                ? "نمایش ویرایشگر"
+                : scrollSyncEnabled
+                  ? "اسکرول هماهنگ"
+                  : "اسکرول آزاد"}
           </span>
           <span className="spine-line" aria-hidden="true" />
           <span
@@ -3755,8 +4156,10 @@ export default function Home() {
         <section
           className={`work-pane preview-pane ${
             mobilePane !== "preview" ? "is-hidden-mobile" : ""
-          }`}
+          } ${previewPaneCollapsed ? "is-pane-collapsed" : ""}`}
           aria-label="پیش‌نمایش Markdown"
+          aria-hidden={previewPaneCollapsed || undefined}
+          inert={previewPaneCollapsed ? true : undefined}
         >
           <div className="pane-header">
             <div className="pane-title">
@@ -3765,6 +4168,15 @@ export default function Home() {
                 <Eye size={16} aria-hidden="true" />
                 پیش‌نمایش
               </strong>
+              <button
+                className="pane-visibility-toggle"
+                type="button"
+                onClick={() => collapseDesktopPane("preview")}
+                aria-label="پنهان‌کردن پیش‌نمایش"
+                title="پنهان‌کردن پیش‌نمایش و گسترش ویرایشگر"
+              >
+                <PanelLeftClose size={16} aria-hidden="true" />
+              </button>
             </div>
 
             <div className="preview-header-actions">
