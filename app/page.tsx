@@ -70,6 +70,8 @@ import {
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import packageMetadata from "../package.json";
+import { AboutDialog } from "./components/about-dialog";
 import {
   AccessibleModal,
   useModalFocus,
@@ -851,6 +853,7 @@ export default function Home() {
     documentSnapshot(SAMPLE_MARKDOWN, []),
   );
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [aboutModalOpen, setAboutModalOpen] = useState(false);
   const [saveFileType, setSaveFileType] =
     useState<SaveFileType>("ravi");
   const [saveFileName, setSaveFileName] = useState(
@@ -932,6 +935,7 @@ export default function Home() {
   const composerOriginRef = useRef<HTMLButtonElement | null>(null);
   const readingReturnFocusRef = useRef<HTMLElement | null>(null);
   const saveModalCloseRef = useRef<HTMLButtonElement>(null);
+  const brandButtonRef = useRef<HTMLButtonElement>(null);
   const saveFileNameRef = useRef<HTMLInputElement>(null);
   const saveModalRef = useRef<HTMLDivElement>(null);
   const openedDocumentRef = useRef(false);
@@ -1959,6 +1963,10 @@ export default function Home() {
     );
     return () => cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => {
+    syncLayer("about", aboutModalOpen);
+  }, [aboutModalOpen, syncLayer]);
 
   useEffect(() => {
     syncLayer("save", saveModalOpen);
@@ -3204,6 +3212,10 @@ export default function Home() {
       clearAnnotationHover();
       return;
     }
+    if (topLayer === "about") {
+      setAboutModalOpen(false);
+      return;
+    }
     if (topLayer === "shortcuts") {
       setShortcutHelpOpen(false);
       return;
@@ -3406,6 +3418,7 @@ export default function Home() {
             : ""
         }`}
         inert={
+          aboutModalOpen ||
           saveModalOpen ||
           shortcutHelpOpen ||
           (libraryOpen && libraryIsModal)
@@ -3420,7 +3433,16 @@ export default function Home() {
           />
         )}
         <div className="brand-cluster">
-          <div className="brand" aria-label="راوی، ویور Markdown فارسی">
+          <button
+            ref={brandButtonRef}
+            className="brand"
+            type="button"
+            onClick={() => setAboutModalOpen(true)}
+            aria-label="دربارهٔ راوی و نسخهٔ فعلی"
+            aria-haspopup="dialog"
+            aria-expanded={aboutModalOpen}
+            title="دربارهٔ راوی و تغییرات نسخه"
+          >
             <span className="brand-mark" aria-hidden="true">
               ر
             </span>
@@ -3428,7 +3450,7 @@ export default function Home() {
               <strong>راوی</strong>
               <small>میز Markdown فارسی</small>
             </span>
-          </div>
+          </button>
           <button
             className={`theme-toggle is-${themeMode}`}
             type="button"
@@ -3583,6 +3605,7 @@ export default function Home() {
         className="proofbar"
         aria-label="وضعیت سند"
         inert={
+          aboutModalOpen ||
           saveModalOpen ||
           shortcutHelpOpen ||
           (libraryOpen && libraryIsModal)
@@ -3658,6 +3681,7 @@ export default function Home() {
           className="error-banner"
           role="alert"
           inert={
+            aboutModalOpen ||
             saveModalOpen ||
             shortcutHelpOpen ||
             (libraryOpen && libraryIsModal)
@@ -3676,7 +3700,11 @@ export default function Home() {
         className={`workspace-frame ${
           libraryOpen ? "library-is-open" : ""
         }`}
-        inert={saveModalOpen || shortcutHelpOpen ? true : undefined}
+        inert={
+          aboutModalOpen || saveModalOpen || shortcutHelpOpen
+            ? true
+            : undefined
+        }
       >
         <main
           ref={workspaceRef}
@@ -5003,6 +5031,14 @@ export default function Home() {
           </aside>
         )}
       </div>
+
+      <AboutDialog
+        open={aboutModalOpen}
+        isTopLayer={topLayer === "about"}
+        version={packageMetadata.version}
+        returnFocusRef={brandButtonRef}
+        onClose={() => setAboutModalOpen(false)}
+      />
 
       <AccessibleModal
         open={saveModalOpen}

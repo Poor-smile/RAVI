@@ -254,6 +254,45 @@ test.describe("Electron keyboard integration", () => {
         topbar.getByRole("button", { name: "میان‌برها", exact: true }),
       ).toHaveCount(0);
 
+      const aboutTrigger = topbar.getByRole("button", {
+        name: "دربارهٔ راوی و نسخهٔ فعلی",
+        exact: true,
+      });
+      await expect(aboutTrigger).toBeVisible();
+      await aboutTrigger.click();
+      const aboutDialog = window.getByRole("dialog", {
+        name: "دربارهٔ راوی",
+        exact: true,
+      });
+      const aboutTitle = aboutDialog.locator("#about-modal-title");
+      await expect(aboutDialog).toBeVisible();
+      await expect(aboutTitle).toBeFocused();
+      await expect(
+        aboutDialog.getByText("0.16.0", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        aboutDialog.getByRole("heading", {
+          name: "ویژگی‌های متمایز راوی",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        aboutDialog.getByRole("heading", {
+          name: "دفتر تغییرات",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        aboutDialog.getByText(
+          "تبدیل لوگوی راوی به ورودی شناسنامهٔ محصول",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(topbar).toHaveAttribute("inert", "");
+      await window.keyboard.press("Escape");
+      await expect(aboutDialog).toBeHidden();
+      await expect(aboutTrigger).toBeFocused();
+
       const previewScroll = window.locator(".preview-scroll");
       const scrollSyncToggle = window.locator(".scroll-sync-toggle");
       await expect(scrollSyncToggle).toHaveAttribute(

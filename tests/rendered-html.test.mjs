@@ -48,6 +48,7 @@ test("ships the viewer implementation instead of starter assets", async () => {
     commandRegistry,
     commandResolver,
     shortcutHelp,
+    aboutDialog,
   ] =
     await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
@@ -67,6 +68,10 @@ test("ships the viewer implementation instead of starter assets", async () => {
     ),
     readFile(
       new URL("../app/components/shortcut-help-dialog.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/components/about-dialog.tsx", import.meta.url),
       "utf8",
     ),
   ]);
@@ -144,6 +149,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /aria-keyshortcuts/);
   assert.match(page, /theme-transition-overlay/);
   assert.match(page, /view\.theme/);
+  assert.match(page, /دربارهٔ راوی و نسخهٔ فعلی/);
+  assert.match(page, /packageMetadata\.version/);
+  assert.match(page, /topLayer === "about"/);
   assert.match(commandRegistry, /COMMAND_REGISTRY/);
   assert.match(commandRegistry, /code: "KeyS"/);
   assert.match(commandRegistry, /code: "KeyT"/);
@@ -151,6 +159,10 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(commandResolver, /event\.isComposing/);
   assert.match(shortcutHelp, /صفحه‌کلید فارسی/);
   assert.match(shortcutHelp, /CommandShortcutKeys/);
+  assert.match(aboutDialog, /ویژگی‌های متمایز راوی/);
+  assert.match(aboutDialog, /دفتر تغییرات/);
+  assert.match(aboutDialog, /نسخهٔ جاری/);
+  assert.match(aboutDialog, /returnFocusRef/);
   assert.match(layout, /lang="fa"/);
   assert.match(layout, /dir="rtl"/);
   assert.match(layout, /raavi:theme:v1/);
@@ -166,6 +178,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(css, /@keyframes selectionMiniMenuAboveIn/);
   assert.match(css, /\.markdown-body\.has-annotation-hover/);
   assert.match(css, /\.save-modal/);
+  assert.match(css, /\.about-modal/);
+  assert.match(css, /\.about-feature-list/);
+  assert.match(css, /\.about-release-list/);
   assert.match(css, /\.library-pinned-section/);
   assert.match(css, /\.library-pin-action/);
   assert.match(css, /\.pane-resize-handle/);
