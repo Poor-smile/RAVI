@@ -230,6 +230,10 @@ button {
   outline-offset: 2px;
 }
 
+.shortcut-trigger {
+  color: var(--paper-200);
+}
+
 .button--primary {
   color: white;
   background: var(--proof-blue);
@@ -1772,6 +1776,31 @@ button {
   font-size: 9px;
 }
 
+.editor-shortcut-help {
+  min-height: 28px;
+  margin-inline-start: auto;
+  padding: 3px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--proof-blue-dark);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.editor-shortcut-help:hover {
+  background: var(--proof-blue-soft);
+}
+
+.editor-shortcut-help:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
 .pane-footer--split {
   justify-content: space-between;
   gap: 10px 18px;
@@ -1857,6 +1886,16 @@ button {
   font-size: var(--reader-size);
   line-height: 2;
   overflow-wrap: anywhere;
+}
+
+.markdown-body:focus-visible {
+  outline: 3px solid var(--proof-blue);
+  outline-offset: -5px;
+}
+
+.annotation-panel:focus-visible {
+  outline: 3px solid var(--proof-blue);
+  outline-offset: -3px;
 }
 
 .markdown-body > :first-child {
@@ -2203,6 +2242,229 @@ button {
   background: rgba(18, 22, 19, 0.62);
   backdrop-filter: blur(3px);
   animation: fadeIn 160ms ease both;
+}
+
+.shortcut-modal-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  direction: rtl;
+  background: rgba(18, 22, 19, 0.68);
+  backdrop-filter: blur(4px);
+  animation: fadeIn 160ms ease both;
+}
+
+.shortcut-modal {
+  width: min(760px, 100%);
+  max-height: min(820px, calc(100dvh - 32px));
+  overflow: auto;
+  color: var(--ink-950);
+  background: var(--paper-50);
+  border: 1px solid var(--ink-500);
+  box-shadow: 0 34px 96px rgba(10, 14, 11, 0.38);
+  animation: paperOpen 260ms var(--ease-paper) both;
+}
+
+.shortcut-modal-header {
+  min-height: 84px;
+  padding: 14px 18px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  color: white;
+  background: var(--ink-950);
+}
+
+.shortcut-modal-mark {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: var(--proof-blue);
+}
+
+.shortcut-modal-header > div {
+  min-width: 0;
+  display: grid;
+}
+
+.shortcut-modal-header > div > span {
+  color: var(--paper-300);
+  font-size: 9px;
+}
+
+.shortcut-modal-header h2 {
+  margin: 0;
+  color: white;
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+.shortcut-modal-header h2:focus {
+  outline: 0;
+}
+
+.shortcut-modal-header > button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  color: var(--paper-200);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.shortcut-modal-header > button:hover {
+  color: white;
+  background: var(--ink-700);
+}
+
+.shortcut-modal-intro {
+  margin: 0;
+  padding: 16px 20px;
+  color: var(--ink-700);
+  background: var(--proof-blue-soft);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--proof-blue) 22%, var(--rule));
+  font-size: 10px;
+  line-height: 1.9;
+}
+
+.shortcut-groups {
+  padding: 17px 20px 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  gap: 18px 24px;
+}
+
+.shortcut-group {
+  min-width: 0;
+}
+
+.shortcut-group h3 {
+  margin: 0 0 6px;
+  padding-bottom: 7px;
+  color: var(--proof-blue-dark);
+  border-bottom: 1px solid var(--rule);
+  font-size: 10px;
+}
+
+.shortcut-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shortcut-group li {
+  min-height: 48px;
+  padding-block: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--rule) 65%, transparent);
+}
+
+.shortcut-command-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.shortcut-command-copy strong {
+  color: var(--ink-950);
+  font-size: 9px;
+}
+
+.shortcut-command-copy small {
+  color: var(--ink-500);
+  font-size: 7px;
+  line-height: 1.6;
+}
+
+.shortcut-binding-options,
+.shortcut-binding-options > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.shortcut-binding-options {
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.shortcut-binding-options small {
+  color: var(--ink-500);
+  font-size: 7px;
+}
+
+.shortcut-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.shortcut-keys kbd {
+  min-width: 26px;
+  height: 26px;
+  padding-inline: 6px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--ink-950);
+  background: white;
+  border: 1px solid var(--rule);
+  border-bottom-color: var(--ink-500);
+  border-radius: 4px;
+  box-shadow: 0 2px 0 var(--paper-300);
+  font-family:
+    "IRANSansX", "IRANSans", "Vazirmatn", Tahoma, Arial, sans-serif;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.shortcut-modal-footer {
+  min-height: 62px;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--ink-700);
+  background: var(--paper-100);
+  border-top: 1px solid var(--rule);
+  font-size: 9px;
+}
+
+.shortcut-modal-footer button {
+  min-height: 36px;
+  padding-inline: 14px;
+  color: white;
+  background: var(--proof-blue);
+  border: 0;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.shortcut-modal-footer button:hover {
+  background: var(--proof-blue-dark);
+}
+
+.shortcut-modal button:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .save-modal {
@@ -2646,6 +2908,15 @@ button {
     display: none;
   }
 
+  .shortcut-trigger {
+    width: 42px;
+    padding: 0;
+  }
+
+  .shortcut-trigger span {
+    display: none;
+  }
+
   .markdown-body {
     padding-inline: clamp(20px, 4vw, 42px);
   }
@@ -2861,6 +3132,23 @@ button {
 
   .save-modal-backdrop {
     padding: 10px;
+  }
+
+  .shortcut-modal-backdrop {
+    padding: 10px;
+  }
+
+  .shortcut-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .shortcut-modal-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .shortcut-modal-footer button {
+    width: 100%;
   }
 
   .save-modal-body {

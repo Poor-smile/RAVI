@@ -97,7 +97,9 @@ async function handleRequest(nodeRequest) {
   );
 }
 
-export async function createRaaviServer() {
+export async function createRaaviServer(options = {}) {
+  const host = options.host ?? "127.0.0.1";
+  const port = options.port ?? 0;
   const server = createServer(async (request, response) => {
     try {
       const workerResponse = await handleRequest(request);
@@ -125,7 +127,7 @@ export async function createRaaviServer() {
 
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
+    server.listen(port, host, resolve);
   });
 
   const address = server.address();
@@ -135,7 +137,7 @@ export async function createRaaviServer() {
   }
 
   return {
-    origin: `http://127.0.0.1:${address.port}`,
+    origin: `http://${host}:${address.port}`,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }

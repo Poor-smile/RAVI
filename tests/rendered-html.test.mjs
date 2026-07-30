@@ -37,7 +37,18 @@ test("server-renders the Persian Markdown viewer", async () => {
 });
 
 test("ships the viewer implementation instead of starter assets", async () => {
-  const [page, layout, css, raavi, main, preload, packageJson] =
+  const [
+    page,
+    layout,
+    css,
+    raavi,
+    main,
+    preload,
+    packageJson,
+    commandRegistry,
+    commandResolver,
+    shortcutHelp,
+  ] =
     await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
@@ -46,6 +57,18 @@ test("ships the viewer implementation instead of starter assets", async () => {
     readFile(new URL("../desktop/main.mjs", import.meta.url), "utf8"),
     readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(
+      new URL("../app/keyboard/command-registry.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/keyboard/command-resolver.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/components/shortcut-help-dialog.tsx", import.meta.url),
+      "utf8",
+    ),
   ]);
 
   assert.match(page, /ReactMarkdown/);
@@ -85,6 +108,15 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(preload, /saveRaavi/);
   assert.match(preload, /rendererReady/);
   assert.match(page, /<ul className="library-branch">/);
+  assert.match(page, /useCommandSystem/);
+  assert.match(page, /data-editable-kind="editor"/);
+  assert.match(page, /aria-keyshortcuts/);
+  assert.match(commandRegistry, /COMMAND_REGISTRY/);
+  assert.match(commandRegistry, /code: "KeyS"/);
+  assert.match(commandResolver, /event\.code === binding\.code/);
+  assert.match(commandResolver, /event\.isComposing/);
+  assert.match(shortcutHelp, /صفحه‌کلید فارسی/);
+  assert.match(shortcutHelp, /CommandShortcutKeys/);
   assert.match(layout, /lang="fa"/);
   assert.match(layout, /dir="rtl"/);
   assert.match(css, /IRANSansX-Regular\.woff2/);

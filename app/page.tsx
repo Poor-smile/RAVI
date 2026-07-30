@@ -25,6 +25,7 @@ import {
   Highlighter,
   History,
   Italic,
+  Keyboard,
   Library,
   Link2,
   MessageCircle,
@@ -57,6 +58,22 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  AccessibleModal,
+  useModalFocus,
+  useModalStack,
+} from "./components/accessible-modal";
+import {
+  commandAriaKeyShortcuts,
+  commandTitle,
+} from "./components/command-tooltip";
+import { ShortcutHelpDialog } from "./components/shortcut-help-dialog";
+import { useCommandSystem } from "./hooks/use-command-system";
+import {
+  ALL_COMMAND_IDS,
+  CommandEnvironment,
+  CommandId,
+} from "./keyboard/command-registry";
+import {
   AnnotationKind,
   makeRaaviDocument,
   parseRaaviDocument,
@@ -68,6 +85,33 @@ const STORAGE_KEY = "raavi:document:v1";
 const DEFAULT_FILE_NAME = "راهنمای-راوی.md";
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const MAX_LOCAL_VERSIONS = 10;
+
+function detectCommandEnvironment(): CommandEnvironment {
+  if (typeof navigator === "undefined") {
+    return { platform: "windows", surface: "web" };
+  }
+  const navigatorWithPlatform = navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  };
+  const platformValue = (
+    navigatorWithPlatform.userAgentData?.platform ??
+    navigator.platform ??
+    ""
+  ).toLocaleLowerCase("en-US");
+  const platform =
+    platformValue.includes("mac")
+      ? "mac"
+      : platformValue.includes("linux")
+        ? "linux"
+        : "windows";
+  return {
+    platform,
+    surface:
+      typeof window !== "undefined" && window.raaviDesktop
+        ? "electron"
+        : "web",
+  };
+}
 
 const SAMPLE_MARKDOWN = [
   "# راهنمای راوی",
@@ -620,6 +664,9 @@ export default function Home() {
   const [saveFileName, setSaveFileName] = useState(
     saveNameForType(DEFAULT_FILE_NAME, "ravi"),
   );
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const [commandEnvironment, setCommandEnvironment] =
+    useState<CommandEnvironment>(() => detectCommandEnvironment());
   const [readingMode, setReadingMode] = useState(false);
   const [readerSize, setReaderSize] = useState(18);
   const [mobilePane, setMobilePane] = useState<MobilePane>("preview");
@@ -651,21 +698,29 @@ export default function Home() {
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const previewArticleRef = useRef<HTMLElement>(null);
+  const librarySearchRef = useRef<HTMLInputElement>(null);
+  const annotationPanelRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const directoryInputRef = useRef<HTMLInputElement>(null);
   const libraryPanelRef = useRef<HTMLElement>(null);
   const libraryCloseRef = useRef<HTMLButtonElement>(null);
   const libraryTriggerRef = useRef<HTMLButtonElement>(null);
+  const shortcutTriggerRef = useRef<HTMLButtonElement>(null);
+  const annotationToggleRef = useRef<HTMLButtonElement>(null);
+  const commentButtonRef = useRef<HTMLButtonElement>(null);
+  const marginButtonRef = useRef<HTMLButtonElement>(null);
+  const composerOriginRef = useRef<HTMLButtonElement | null>(null);
+  const readingReturnFocusRef = useRef<HTMLElement | null>(null);
   const saveModalCloseRef = useRef<HTMLButtonElement>(null);
   const saveFileNameRef = useRef<HTMLInputElement>(null);
   const saveModalRef = useRef<HTMLDivElement>(null);
-  const libraryWasOpenRef = useRef(false);
   const openedDocumentRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const annotationHoverFrameRef = useRef<number | null>(null);
   const directoryHandlesRef = useRef(
     new Map<string, LocalDirectoryHandle>(),
   );
+  const { topLayer, syncLayer } = useModalStack();
 
   const stats = useMemo(() => {
     const cleanText = content.trim();
@@ -755,6 +810,8 @@ export default function Home() {
       setActiveLibraryPath("");
       setMobilePane("preview");
       setReadingMode(Boolean(document.openInReadingMode));
+      setShortcutHelpOpen(false);
+      setSaveModalOpen(false);
       if (document.openInReadingMode) {
         setLibraryOpen(false);
       } else if (!window.matchMedia("(max-width: 820px)").matches) {
@@ -847,40 +904,6 @@ export default function Home() {
     });
     return () => cancelAnimationFrame(frame);
   }, []);
-
-  useEffect(() => {
-    if (!saveModalOpen) return;
-
-    requestAnimationFrame(() => {
-      saveFileNameRef.current?.focus();
-      saveFileNameRef.current?.select();
-    });
-
-    const trapFocus = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const modal = saveModalRef.current;
-      if (!modal) return;
-      const focusable = Array.from(
-        modal.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => element.offsetParent !== null);
-      if (!focusable.length) return;
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", trapFocus);
-    return () => document.removeEventListener("keydown", trapFocus);
-  }, [saveModalOpen]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -982,44 +1005,31 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (libraryWasOpenRef.current && !libraryOpen) {
-      requestAnimationFrame(() => libraryTriggerRef.current?.focus());
-    }
-    libraryWasOpenRef.current = libraryOpen;
-  }, [libraryOpen]);
+    const frame = requestAnimationFrame(() =>
+      setCommandEnvironment(detectCommandEnvironment()),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
-    if (!libraryOpen || !libraryIsModal) return;
+    syncLayer("save", saveModalOpen);
+  }, [saveModalOpen, syncLayer]);
 
-    requestAnimationFrame(() => libraryCloseRef.current?.focus());
+  useEffect(() => {
+    syncLayer("shortcuts", shortcutHelpOpen);
+  }, [shortcutHelpOpen, syncLayer]);
 
-    const trapFocus = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const panel = libraryPanelRef.current;
-      if (!panel) return;
+  useEffect(() => {
+    syncLayer("library", libraryOpen && libraryIsModal);
+  }, [libraryIsModal, libraryOpen, syncLayer]);
 
-      const focusable = Array.from(
-        panel.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => element.offsetParent !== null);
-
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener("keydown", trapFocus);
-    return () => document.removeEventListener("keydown", trapFocus);
-  }, [libraryOpen, libraryIsModal]);
+  useModalFocus({
+    open: libraryOpen && libraryIsModal,
+    isTopLayer: topLayer === "library",
+    containerRef: libraryPanelRef,
+    initialFocusRef: libraryCloseRef,
+    returnFocusRef: libraryTriggerRef,
+  });
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -1200,6 +1210,7 @@ export default function Home() {
     setSelectionDraft(null);
     setComposerKind(null);
     setComposerText("");
+    composerOriginRef.current = null;
     setAnnotationPanelOpen(true);
     setActiveAnnotationId(annotation.id);
     clearNativeSelection();
@@ -1208,11 +1219,13 @@ export default function Home() {
 
   const openAnnotationComposer = (
     kind: Extract<AnnotationKind, "comment" | "margin">,
+    origin?: HTMLButtonElement | null,
   ) => {
     if (!selectionDraft) {
       showNotice("ابتدا بخشی از متن پیش‌نمایش را انتخاب کنید.");
       return;
     }
+    composerOriginRef.current = origin ?? null;
     setComposerKind(kind);
     setComposerText("");
   };
@@ -1220,6 +1233,13 @@ export default function Home() {
   const submitAnnotationComposer = () => {
     if (!composerKind || !composerText.trim()) return;
     addAnnotation(composerKind, composerText);
+  };
+
+  const cancelAnnotationComposer = () => {
+    const origin = composerOriginRef.current;
+    setComposerKind(null);
+    setComposerText("");
+    requestAnimationFrame(() => origin?.focus());
   };
 
   const updateAnnotationBody = (id: string, body: string) => {
@@ -1519,64 +1539,7 @@ export default function Home() {
     openSaveFileModal,
   ]);
 
-  useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && saveModalOpen) {
-        setSaveModalOpen(false);
-        return;
-      }
-      if (event.key === "Escape" && libraryOpen) {
-        if (libraryIsModal) setLibraryOpen(false);
-        return;
-      }
-      if (event.key === "Escape" && readingMode) {
-        setReadingMode(false);
-        if (!window.matchMedia("(max-width: 820px)").matches) {
-          setLibraryOpen(true);
-        }
-        return;
-      }
-
-      if (!(event.ctrlKey || event.metaKey)) return;
-      if (event.key.toLowerCase() === "o") {
-        event.preventDefault();
-        if (window.raaviDesktop) {
-          void window.raaviDesktop.chooseDocument().then((document) => {
-            if (document) {
-              applyOpenedDocument(
-                document,
-                `«${document.name}» باز شد.`,
-              );
-            }
-          });
-        } else {
-          fileInputRef.current?.click();
-        }
-      }
-      if (event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        if (event.shiftKey) {
-          openSaveFileModal(documentType);
-        } else {
-          void saveCurrentFile();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [
-    applyOpenedDocument,
-    documentType,
-    libraryIsModal,
-    libraryOpen,
-    openSaveFileModal,
-    readingMode,
-    saveCurrentFile,
-    saveModalOpen,
-  ]);
-
-  const openDocumentPicker = async () => {
+  const openDocumentPicker = useCallback(async () => {
     if (window.raaviDesktop) {
       setError("");
       try {
@@ -1590,7 +1553,7 @@ export default function Home() {
       return;
     }
     fileInputRef.current?.click();
-  };
+  }, [applyOpenedDocument]);
 
   const readFile = async (file: File) => {
     setError("");
@@ -2110,9 +2073,237 @@ export default function Home() {
     );
   };
 
+  const leaveReadingMode = () => {
+    setReadingMode(false);
+    if (!window.matchMedia("(max-width: 820px)").matches) {
+      setLibraryOpen(true);
+    }
+    const returnTarget = readingReturnFocusRef.current;
+    requestAnimationFrame(() =>
+      returnTarget?.isConnected
+        ? returnTarget.focus()
+        : previewArticleRef.current?.focus(),
+    );
+  };
+
+  const toggleReadingMode = () => {
+    if (readingMode) {
+      leaveReadingMode();
+      return;
+    }
+    readingReturnFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    setReadingMode(true);
+    setLibraryOpen(false);
+    setMobilePane("preview");
+    requestAnimationFrame(() => previewArticleRef.current?.focus());
+  };
+
+  const focusEditor = () => {
+    if (readingMode) setReadingMode(false);
+    setMobilePane("editor");
+    if (!window.matchMedia("(max-width: 820px)").matches) setLibraryOpen(true);
+    requestAnimationFrame(() => editorRef.current?.focus());
+  };
+
+  const focusPreview = () => {
+    setMobilePane("preview");
+    requestAnimationFrame(() => previewArticleRef.current?.focus());
+  };
+
+  const focusLibrarySearch = () => {
+    if (readingMode) setReadingMode(false);
+    setLibraryOpen(true);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => librarySearchRef.current?.focus()),
+    );
+  };
+
+  const focusAnnotationPanel = () => {
+    if (readingMode) setReadingMode(false);
+    setMobilePane("preview");
+    setAnnotationPanelOpen(true);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => annotationPanelRef.current?.focus()),
+    );
+  };
+
+  const closeTopLayer = () => {
+    if (hoverPreview) {
+      clearAnnotationHover();
+      return;
+    }
+    if (topLayer === "shortcuts") {
+      setShortcutHelpOpen(false);
+      return;
+    }
+    if (topLayer === "save") {
+      setSaveModalOpen(false);
+      return;
+    }
+    if (topLayer === "library") {
+      setLibraryOpen(false);
+      return;
+    }
+    if (composerKind) {
+      cancelAnnotationComposer();
+      return;
+    }
+    if (selectionDraft) {
+      setSelectionDraft(null);
+      clearNativeSelection();
+      requestAnimationFrame(() => previewArticleRef.current?.focus());
+      return;
+    }
+    if (activeAnnotationId) {
+      setActiveAnnotationId("");
+      return;
+    }
+    if (annotationPanelOpen) {
+      setAnnotationPanelOpen(false);
+      requestAnimationFrame(() => annotationToggleRef.current?.focus());
+      return;
+    }
+    if (readingMode) leaveReadingMode();
+  };
+
+  const hasDismissableLayer = Boolean(
+    hoverPreview ||
+      topLayer ||
+      composerKind ||
+      selectionDraft ||
+      activeAnnotationId ||
+      annotationPanelOpen ||
+      readingMode,
+  );
+
+  const commandHandlers: Partial<
+    Record<CommandId, (event: KeyboardEvent) => void>
+  > = {
+    "file.open": () => void openDocumentPicker(),
+    "file.save": () => {
+      if (topLayer === "save") void saveAsFile();
+      else void saveCurrentFile();
+    },
+    "file.saveAs": () => openSaveFileModal(documentType),
+    "file.new": resetDocument,
+    "help.shortcuts": () => {
+      clearAnnotationHover();
+      setShortcutHelpOpen((current) => !current);
+    },
+    "edit.bold": () => insertInline("**", "**", "متن پررنگ"),
+    "edit.italic": () => insertInline("_", "_", "متن مورب"),
+    "edit.code": () => insertInline("`", "`", "code"),
+    "edit.link": () =>
+      insertInline("[", "](https://example.com)", "عنوان پیوند"),
+    "edit.quote": insertQuote,
+    "view.reading": toggleReadingMode,
+    "focus.editor": focusEditor,
+    "focus.preview": focusPreview,
+    "focus.library": focusLibrarySearch,
+    "focus.annotations": focusAnnotationPanel,
+    "view.text.decrease": () =>
+      setReaderSize((size) => Math.max(16, size - 1)),
+    "view.text.increase": () =>
+      setReaderSize((size) => Math.min(22, size + 1)),
+    "annotation.highlight": () => addAnnotation("highlight"),
+    "annotation.comment": () =>
+      openAnnotationComposer("comment", commentButtonRef.current),
+    "annotation.margin": () =>
+      openAnnotationComposer("margin", marginButtonRef.current),
+    "annotation.submit": submitAnnotationComposer,
+    "layer.dismiss": closeTopLayer,
+  };
+
+  const enabledCommandIds = new Set(ALL_COMMAND_IDS);
+  const modalIsOpen = Boolean(topLayer);
+
+  const isCommandEnabled = (id: CommandId, event: KeyboardEvent) => {
+    const activeElement = document.activeElement;
+    const editorFocused = activeElement === editorRef.current;
+    const previewFocused = Boolean(
+      previewArticleRef.current &&
+        (activeElement === previewArticleRef.current ||
+          previewArticleRef.current.contains(activeElement)),
+    );
+
+    switch (id) {
+      case "help.shortcuts":
+        return true;
+      case "layer.dismiss":
+        if (
+          topLayer !== "library" &&
+          event.target instanceof Element &&
+          event.target.closest('[data-editable-kind="librarySearch"]')
+        ) {
+          return false;
+        }
+        return hasDismissableLayer;
+      case "file.save":
+        return topLayer === "save" || (!modalIsOpen && !composerKind);
+      case "file.open":
+      case "file.saveAs":
+      case "file.new":
+        return !modalIsOpen && !composerKind;
+      case "edit.bold":
+      case "edit.italic":
+      case "edit.code":
+      case "edit.link":
+      case "edit.quote":
+        return !modalIsOpen && !composerKind && editorFocused;
+      case "view.reading":
+      case "focus.editor":
+      case "focus.preview":
+      case "focus.annotations":
+        return !modalIsOpen && !composerKind;
+      case "focus.library":
+        return (!modalIsOpen || topLayer === "library") && !composerKind;
+      case "view.text.decrease":
+        return (
+          !modalIsOpen &&
+          !composerKind &&
+          (readingMode || previewFocused) &&
+          readerSize > 16
+        );
+      case "view.text.increase":
+        return (
+          !modalIsOpen &&
+          !composerKind &&
+          (readingMode || previewFocused) &&
+          readerSize < 22
+        );
+      case "annotation.highlight":
+      case "annotation.comment":
+      case "annotation.margin":
+        return !modalIsOpen && !composerKind && Boolean(selectionDraft);
+      case "annotation.submit":
+        return !modalIsOpen && Boolean(composerKind && composerText.trim());
+      default:
+        return false;
+    }
+  };
+
+  useCommandSystem({
+    environment: commandEnvironment,
+    context: { enabledCommandIds },
+    handlers: commandHandlers,
+    isCommandEnabled,
+  });
+
   return (
     <div className={`app-shell ${readingMode ? "is-reading" : ""}`}>
-      <header className="topbar">
+      <header
+        className="topbar"
+        inert={
+          saveModalOpen ||
+          shortcutHelpOpen ||
+          (libraryOpen && libraryIsModal)
+            ? true
+            : undefined
+        }
+      >
         <div className="brand" aria-label="راوی، ویور Markdown فارسی">
           <span className="brand-mark" aria-hidden="true">
             ر
@@ -2137,6 +2328,10 @@ export default function Home() {
             onClick={() => setLibraryOpen((current) => !current)}
             aria-controls="library-panel"
             aria-expanded={libraryOpen}
+            aria-keyshortcuts={commandAriaKeyShortcuts(
+              "focus.library",
+              commandEnvironment,
+            )}
           >
             <Library size={18} aria-hidden="true" />
             <span>کتابخانه</span>
@@ -2148,6 +2343,15 @@ export default function Home() {
             className="button button--primary"
             type="button"
             onClick={() => void openDocumentPicker()}
+            aria-keyshortcuts={commandAriaKeyShortcuts(
+              "file.open",
+              commandEnvironment,
+            )}
+            title={commandTitle(
+              "file.open",
+              commandEnvironment,
+              "باز کردن فایل",
+            )}
           >
             <Upload size={18} aria-hidden="true" />
             <span>باز کردن فایل</span>
@@ -2157,7 +2361,15 @@ export default function Home() {
             type="button"
             onClick={() => void saveCurrentFile()}
             disabled={saveState === "saving"}
-            title="ذخیره‌ی نسخه‌ی جدید — Ctrl+S"
+            aria-keyshortcuts={commandAriaKeyShortcuts(
+              "file.save",
+              commandEnvironment,
+            )}
+            title={commandTitle(
+              "file.save",
+              commandEnvironment,
+              "ذخیره‌ی نسخه‌ی جدید",
+            )}
           >
             <Save size={18} aria-hidden="true" />
             <span>ذخیره</span>
@@ -2166,22 +2378,51 @@ export default function Home() {
             className="button button--ravi"
             type="button"
             onClick={() => openSaveFileModal(documentType)}
-            title="ذخیره با نام و نوع فایل — Ctrl+Shift+S"
+            aria-keyshortcuts={commandAriaKeyShortcuts(
+              "file.saveAs",
+              commandEnvironment,
+            )}
+            title={commandTitle(
+              "file.saveAs",
+              commandEnvironment,
+              "ذخیره با نام و نوع فایل",
+            )}
           >
             <FileArchive size={18} aria-hidden="true" />
             <span>ذخیره فایل</span>
           </button>
           <button
+            ref={shortcutTriggerRef}
+            className="button button--quiet shortcut-trigger"
+            type="button"
+            onClick={() => setShortcutHelpOpen(true)}
+            aria-keyshortcuts={commandAriaKeyShortcuts(
+              "help.shortcuts",
+              commandEnvironment,
+            )}
+            title={commandTitle(
+              "help.shortcuts",
+              commandEnvironment,
+              "راهنمای میان‌برها",
+            )}
+          >
+            <Keyboard size={18} aria-hidden="true" />
+            <span>میان‌برها</span>
+          </button>
+          <button
             className={`button button--quiet ${readingMode ? "is-active" : ""}`}
             type="button"
-            onClick={() =>
-              setReadingMode((current) => {
-                const nextMode = !current;
-                setLibraryOpen(nextMode ? false : true);
-                return nextMode;
-              })
-            }
+            onClick={toggleReadingMode}
             aria-pressed={readingMode}
+            aria-keyshortcuts={commandAriaKeyShortcuts(
+              "view.reading",
+              commandEnvironment,
+            )}
+            title={commandTitle(
+              "view.reading",
+              commandEnvironment,
+              readingMode ? "بازگشت به میز" : "حالت مطالعه",
+            )}
           >
             {readingMode ? (
               <X size={18} aria-hidden="true" />
@@ -2193,7 +2434,17 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="proofbar" aria-label="وضعیت سند">
+      <div
+        className="proofbar"
+        aria-label="وضعیت سند"
+        inert={
+          saveModalOpen ||
+          shortcutHelpOpen ||
+          (libraryOpen && libraryIsModal)
+            ? true
+            : undefined
+        }
+      >
         <div className="document-identity" title={fileName}>
           <FileText size={16} aria-hidden="true" />
           <span>{fileName}</span>
@@ -2205,7 +2456,15 @@ export default function Home() {
           onClick={() => void saveCurrentFile()}
           disabled={effectiveSaveState === "saving"}
           aria-live="polite"
-          title="برای ذخیره‌ی نسخه‌ی جدید کلیک کنید"
+          aria-keyshortcuts={commandAriaKeyShortcuts(
+            "file.save",
+            commandEnvironment,
+          )}
+          title={commandTitle(
+            "file.save",
+            commandEnvironment,
+            "برای ذخیره‌ی نسخه‌ی جدید کلیک کنید",
+          )}
         >
           <span
             className={`status-dot is-${effectiveSaveState}`}
@@ -2250,7 +2509,17 @@ export default function Home() {
       </div>
 
       {error && (
-        <div className="error-banner" role="alert">
+        <div
+          className="error-banner"
+          role="alert"
+          inert={
+            saveModalOpen ||
+            shortcutHelpOpen ||
+            (libraryOpen && libraryIsModal)
+              ? true
+              : undefined
+          }
+        >
           <span>{error}</span>
           <button type="button" onClick={() => setError("")} aria-label="بستن خطا">
             <X size={17} aria-hidden="true" />
@@ -2262,6 +2531,7 @@ export default function Home() {
         className={`workspace-frame ${
           libraryOpen ? "library-is-open" : ""
         }`}
+        inert={saveModalOpen || shortcutHelpOpen ? true : undefined}
       >
         <main
           className={`workspace ${readingMode ? "workspace--reading" : ""}`}
@@ -2314,7 +2584,11 @@ export default function Home() {
                 type="button"
                 onClick={() => insertInline("**", "**", "متن پررنگ")}
                 aria-label="پررنگ"
-                title="پررنگ"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.bold",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.bold", commandEnvironment)}
               >
                 <Bold size={16} aria-hidden="true" />
               </button>
@@ -2322,7 +2596,11 @@ export default function Home() {
                 type="button"
                 onClick={() => insertInline("_", "_", "متن مورب")}
                 aria-label="مورب"
-                title="مورب"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.italic",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.italic", commandEnvironment)}
               >
                 <Italic size={16} aria-hidden="true" />
               </button>
@@ -2330,7 +2608,11 @@ export default function Home() {
                 type="button"
                 onClick={() => insertInline("`", "`", "code")}
                 aria-label="کد درون‌خطی"
-                title="کد درون‌خطی"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.code",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.code", commandEnvironment)}
               >
                 <Code2 size={16} aria-hidden="true" />
               </button>
@@ -2338,7 +2620,11 @@ export default function Home() {
                 type="button"
                 onClick={insertQuote}
                 aria-label="نقل‌قول"
-                title="نقل‌قول"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.quote",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.quote", commandEnvironment)}
               >
                 <Quote size={16} aria-hidden="true" />
               </button>
@@ -2348,7 +2634,11 @@ export default function Home() {
                   insertInline("[", "](https://example.com)", "عنوان پیوند")
                 }
                 aria-label="افزودن پیوند"
-                title="افزودن پیوند"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.link",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.link", commandEnvironment)}
               >
                 <Link2 size={16} aria-hidden="true" />
               </button>
@@ -2357,7 +2647,15 @@ export default function Home() {
                 type="button"
                 onClick={resetDocument}
                 aria-label="برگه‌ی تازه"
-                title="برگه‌ی تازه"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "file.new",
+                  commandEnvironment,
+                )}
+                title={commandTitle(
+                  "file.new",
+                  commandEnvironment,
+                  "برگه‌ی تازه",
+                )}
               >
                 <RotateCcw size={16} aria-hidden="true" />
               </button>
@@ -2375,13 +2673,21 @@ export default function Home() {
               setContent(event.target.value);
               if (saveState === "error") setSaveState("saved");
             }}
+            data-editable-kind="editor"
             spellCheck
             dir="auto"
             aria-describedby="editor-hint"
           />
           <div className="pane-footer" id="editor-hint">
-            میان‌برها: Ctrl+O برای بازکردن، Ctrl+S برای ذخیره و Ctrl+Shift+S
-            برای ذخیره با نام
+            <span>Markdown با ذخیرهٔ نسخه‌ای</span>
+            <button
+              className="editor-shortcut-help"
+              type="button"
+              onClick={() => setShortcutHelpOpen(true)}
+            >
+              <Keyboard size={14} aria-hidden="true" />
+              نمایش همهٔ میان‌برها
+            </button>
           </div>
         </section>
 
@@ -2410,6 +2716,7 @@ export default function Home() {
 
             <div className="preview-header-actions">
               <button
+                ref={annotationToggleRef}
                 className={`annotation-toggle ${
                   annotationPanelOpen ? "is-active" : ""
                 }`}
@@ -2419,7 +2726,15 @@ export default function Home() {
                 }
                 aria-expanded={annotationPanelOpen}
                 aria-controls="annotation-panel"
-                title="نمایش یادداشت‌ها"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "focus.annotations",
+                  commandEnvironment,
+                )}
+                title={commandTitle(
+                  "focus.annotations",
+                  commandEnvironment,
+                  "نمایش یادداشت‌ها",
+                )}
               >
                 <PanelLeftOpen size={16} aria-hidden="true" />
                 <span>یادداشت‌ها</span>
@@ -2433,7 +2748,15 @@ export default function Home() {
                   }
                   disabled={readerSize <= 16}
                   aria-label="کوچک‌تر کردن متن"
-                  title="کوچک‌تر کردن متن"
+                  aria-keyshortcuts={commandAriaKeyShortcuts(
+                    "view.text.decrease",
+                    commandEnvironment,
+                  )}
+                  title={commandTitle(
+                    "view.text.decrease",
+                    commandEnvironment,
+                    "کوچک‌تر کردن متن",
+                  )}
                 >
                   <Minus size={15} aria-hidden="true" />
                 </button>
@@ -2447,7 +2770,15 @@ export default function Home() {
                   }
                   disabled={readerSize >= 22}
                   aria-label="بزرگ‌تر کردن متن"
-                  title="بزرگ‌تر کردن متن"
+                  aria-keyshortcuts={commandAriaKeyShortcuts(
+                    "view.text.increase",
+                    commandEnvironment,
+                  )}
+                  title={commandTitle(
+                    "view.text.increase",
+                    commandEnvironment,
+                    "بزرگ‌تر کردن متن",
+                  )}
                 >
                   <Plus size={15} aria-hidden="true" />
                 </button>
@@ -2480,6 +2811,11 @@ export default function Home() {
                     }
                     autoFocus
                     dir="auto"
+                    data-editable-kind="composer"
+                    aria-keyshortcuts={commandAriaKeyShortcuts(
+                      "annotation.submit",
+                      commandEnvironment,
+                    )}
                   />
                 </label>
                 <div className="annotation-composer-actions">
@@ -2496,8 +2832,7 @@ export default function Home() {
                     className="annotation-action"
                     type="button"
                     onClick={() => {
-                      setComposerKind(null);
-                      setComposerText("");
+                      cancelAnnotationComposer();
                     }}
                   >
                     لغو
@@ -2515,22 +2850,58 @@ export default function Home() {
                     className="annotation-action annotation-action--highlight"
                     type="button"
                     onClick={() => addAnnotation("highlight")}
+                    aria-keyshortcuts={commandAriaKeyShortcuts(
+                      "annotation.highlight",
+                      commandEnvironment,
+                    )}
+                    title={commandTitle(
+                      "annotation.highlight",
+                      commandEnvironment,
+                    )}
                   >
                     <Highlighter size={15} aria-hidden="true" />
                     هایلایت
                   </button>
                   <button
+                    ref={commentButtonRef}
                     className="annotation-action annotation-action--comment"
                     type="button"
-                    onClick={() => openAnnotationComposer("comment")}
+                    onClick={() =>
+                      openAnnotationComposer(
+                        "comment",
+                        commentButtonRef.current,
+                      )
+                    }
+                    aria-keyshortcuts={commandAriaKeyShortcuts(
+                      "annotation.comment",
+                      commandEnvironment,
+                    )}
+                    title={commandTitle(
+                      "annotation.comment",
+                      commandEnvironment,
+                    )}
                   >
                     <MessageCircle size={15} aria-hidden="true" />
                     کامنت
                   </button>
                   <button
+                    ref={marginButtonRef}
                     className="annotation-action annotation-action--margin"
                     type="button"
-                    onClick={() => openAnnotationComposer("margin")}
+                    onClick={() =>
+                      openAnnotationComposer(
+                        "margin",
+                        marginButtonRef.current,
+                      )
+                    }
+                    aria-keyshortcuts={commandAriaKeyShortcuts(
+                      "annotation.margin",
+                      commandEnvironment,
+                    )}
+                    title={commandTitle(
+                      "annotation.margin",
+                      commandEnvironment,
+                    )}
                   >
                     <NotebookPen size={15} aria-hidden="true" />
                     حاشیه
@@ -2565,9 +2936,11 @@ export default function Home() {
           >
             {annotationPanelOpen && (
               <aside
+                ref={annotationPanelRef}
                 className="annotation-panel"
                 id="annotation-panel"
                 aria-label="یادداشت‌های سند"
+                tabIndex={-1}
               >
                 <div className="annotation-panel-header">
                   <div>
@@ -2642,6 +3015,7 @@ export default function Home() {
                               }
                               dir="auto"
                               rows={3}
+                              data-editable-kind="annotationBody"
                             />
                           </label>
                         )}
@@ -2690,6 +3064,8 @@ export default function Home() {
                   hoveredAnnotation ? "has-annotation-hover" : ""
                 }`}
                 dir="rtl"
+                tabIndex={-1}
+                aria-label="متن پیش‌نمایش؛ برای جابه‌جایی سریع از میان‌بر تمرکز پیش‌نمایش استفاده کنید"
                 onMouseUp={capturePreviewSelection}
                 onKeyUp={capturePreviewSelection}
                 onPointerMove={handleAnnotationPointerMove}
@@ -2910,11 +3286,17 @@ export default function Home() {
                 <Search size={16} aria-hidden="true" />
                 <span className="visually-hidden">جست‌وجو در کتابخانه</span>
                 <input
+                  ref={librarySearchRef}
                   type="search"
                   value={libraryQuery}
                   onChange={(event) => setLibraryQuery(event.target.value)}
                   placeholder="جست‌وجوی نام یا مسیر…"
                   dir="auto"
+                  data-editable-kind="librarySearch"
+                  aria-keyshortcuts={commandAriaKeyShortcuts(
+                    "focus.library",
+                    commandEnvironment,
+                  )}
                 />
                 {libraryQuery && (
                   <button
@@ -3000,22 +3382,17 @@ export default function Home() {
         )}
       </div>
 
-      {saveModalOpen && (
-        <div
-          className="save-modal-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setSaveModalOpen(false);
-          }}
-        >
-          <div
-            ref={saveModalRef}
-            className="save-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="save-modal-title"
-            aria-describedby="save-modal-description"
-          >
+      <AccessibleModal
+        open={saveModalOpen}
+        isTopLayer={topLayer === "save"}
+        onClose={() => setSaveModalOpen(false)}
+        dialogRef={saveModalRef}
+        initialFocusRef={saveFileNameRef}
+        backdropClassName="save-modal-backdrop"
+        dialogClassName="save-modal"
+        labelledBy="save-modal-title"
+        describedBy="save-modal-description"
+      >
             <div className="save-modal-header">
               <span className="save-modal-mark" aria-hidden="true">
                 <Save size={22} />
@@ -3055,10 +3432,14 @@ export default function Home() {
                   onChange={(event) => setSaveFileName(event.target.value)}
                   dir="auto"
                   required
+                  data-editable-kind="saveName"
                 />
               </label>
 
-              <fieldset className="save-type-options">
+              <fieldset
+                className="save-type-options"
+                data-editable-kind="saveName"
+              >
                 <legend>نوع فایل</legend>
                 <label className={saveFileType === "markdown" ? "is-selected" : ""}>
                   <input
@@ -3157,15 +3538,24 @@ export default function Home() {
                   className="button button--primary"
                   type="submit"
                   disabled={saveState === "saving"}
+                  aria-keyshortcuts={commandAriaKeyShortcuts(
+                    "file.save",
+                    commandEnvironment,
+                  )}
                 >
                   <Save size={17} aria-hidden="true" />
                   {saveState === "saving" ? "در حال ذخیره…" : "ذخیره فایل"}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </AccessibleModal>
+
+      <ShortcutHelpDialog
+        open={shortcutHelpOpen}
+        isTopLayer={topLayer === "shortcuts"}
+        environment={commandEnvironment}
+        onClose={() => setShortcutHelpOpen(false)}
+      />
 
       {hoverPreview && hoveredAnnotation && (
         <div

@@ -102,6 +102,22 @@ test("desktop server renders the packaged app and its assets", async () => {
   }
 });
 
+test("desktop server can bind a requested local port", async () => {
+  const server = await createRaaviServer({
+    host: "127.0.0.1",
+    port: 0,
+  });
+
+  try {
+    assert.match(server.origin, /^http:\/\/127\.0\.0\.1:\d+$/);
+    const response = await fetch(`${server.origin}/fonts/IRANSansX-Regular.woff2`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /font\/woff2/);
+  } finally {
+    await server.close();
+  }
+});
+
 test("desktop library scans recursively and limits reads to selected roots", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "raavi-library-"));
   const nestedPath = path.join(rootPath, "یادداشت‌ها");
