@@ -42,6 +42,8 @@ import {
 } from "lucide-react";
 import {
   DragEvent,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -198,6 +200,13 @@ type SelectionDraft = {
   suffix: string;
 };
 
+type AnnotationHoverPreview = {
+  annotationId: string;
+  x: number;
+  y: number;
+  placement: "above" | "below";
+};
+
 const ANNOTATION_LABELS: Record<AnnotationKind, string> = {
   highlight: "هایلایت",
   comment: "کامنت",
@@ -296,6 +305,44 @@ function rangeFromTextOffsets(root: HTMLElement, start: number, end: number) {
   range.setStart(startNode, startOffset);
   range.setEnd(endNode, endOffset);
   return range.collapsed ? null : range;
+}
+
+function findAnnotationAtPoint(
+  root: HTMLElement,
+  annotations: RaaviAnnotation[],
+  clientX: number,
+  clientY: number,
+) {
+  const text = root.textContent ?? "";
+  const matches = annotations.filter((annotation) => {
+    const start = resolveAnnotationStart(text, annotation);
+    if (start < 0) return false;
+    const range = rangeFromTextOffsets(
+      root,
+      start,
+      start + annotation.quote.length,
+    );
+    if (!range) return false;
+
+    return Array.from(range.getClientRects()).some(
+      (rect) =>
+        clientX >= rect.left - 2 &&
+        clientX <= rect.right + 2 &&
+        clientY >= rect.top - 2 &&
+        clientY <= rect.bottom + 2,
+    );
+  });
+
+  matches.sort((first, second) => {
+    const firstPriority = first.kind === "highlight" ? 0 : 1;
+    const secondPriority = second.kind === "highlight" ? 0 : 1;
+    if (firstPriority !== secondPriority) {
+      return secondPriority - firstPriority;
+    }
+    return first.quote.length - second.quote.length;
+  });
+
+  return matches[0] ?? null;
 }
 
 function buildLibraryTree(files: LibraryFile[]): LibraryFolderNode {
@@ -478,6 +525,8 @@ export default function Home() {
   const [composerText, setComposerText] = useState("");
   const [annotationPanelOpen, setAnnotationPanelOpen] = useState(false);
   const [activeAnnotationId, setActiveAnnotationId] = useState("");
+  const [hoverPreview, setHoverPreview] =
+    useState<AnnotationHoverPreview | null>(null);
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const previewArticleRef = useRef<HTMLElement>(null);
@@ -488,6 +537,7 @@ export default function Home() {
   const libraryTriggerRef = useRef<HTMLButtonElement>(null);
   const libraryWasOpenRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const annotationHoverFrameRef = useRef<number | null>(null);
 
   const stats = useMemo(() => {
     const cleanText = content.trim();
@@ -510,6 +560,16 @@ export default function Home() {
         >,
       ),
     [annotations],
+  );
+
+  const hoveredAnnotation = useMemo(
+    () =>
+      hoverPreview
+        ? annotations.find(
+            (annotation) => annotation.id === hoverPreview.annotationId,
+          ) ?? null
+        : null,
+    [annotations, hoverPreview],
   );
 
   const visibleLibraryFiles = useMemo(() => {
@@ -629,6 +689,9 @@ export default function Home() {
   useEffect(() => {
     return () => {
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+      if (annotationHoverFrameRef.current) {
+        cancelAnimationFrame(annotationHoverFrameRef.current);
+      }
     };
   }, []);
 
@@ -685,26 +748,22 @@ export default function Home() {
     style.dataset.raaviHighlights = "true";
     style.textContent = `
       ::highlight(raavi-highlight) {
-        color: inherit;
-        background: rgba(243, 214, 107, 0.78);
+        background: #f8e69d;
       }
       ::highlight(raavi-comment) {
-        color: inherit;
-        background: rgba(168, 191, 255, 0.66);
+        background: #dce6ff;
         text-decoration: underline #2557e5 1.5px;
         text-underline-offset: 3px;
       }
       ::highlight(raavi-margin) {
-        color: inherit;
-        background: rgba(232, 170, 152, 0.62);
+        background: #f3d9d1;
         text-decoration: underline #a34f39 1.5px dashed;
         text-underline-offset: 3px;
       }
       ::highlight(raavi-active) {
-        color: white;
-        background: #2557e5;
-        text-decoration: underline white 1px;
-        text-underline-offset: 3px;
+        background: transparent;
+        text-decoration: underline #1742bd 2.5px;
+        text-underline-offset: 4px;
       }
     `;
     document.head.appendChild(style);
@@ -903,21 +962,99 @@ export default function Home() {
 
   const focusAnnotation = (annotation: RaaviAnnotation) => {
     setActiveAnnotationId(annotation.id);
+    setAnnotationPanelOpen(true);
+    setHoverPreview(null);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const article = previewArticleRef.current;
+        if (!article) return;
+        const text = article.textContent ?? "";
+        const start = resolveAnnotationStart(text, annotation);
+        if (start < 0) {
+          showNotice("محل این یادداشت پس از ویرایش متن پیدا نشد.");
+          return;
+        }
+        const range = rangeFromTextOffsets(
+          article,
+          start,
+          start + annotation.quote.length,
+        );
+        const target = range?.startContainer.parentElement;
+        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document
+          .getElementById(`annotation-card-${annotation.id}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    });
+  };
+
+  const handleAnnotationPointerMove = (
+    event: ReactPointerEvent<HTMLElement>,
+  ) => {
+    if (event.pointerType === "touch") return;
     const article = previewArticleRef.current;
-    if (!article) return;
-    const text = article.textContent ?? "";
-    const start = resolveAnnotationStart(text, annotation);
-    if (start < 0) {
-      showNotice("محل این یادداشت پس از ویرایش متن پیدا نشد.");
-      return;
+    if (!article || !annotations.length) return;
+    const { clientX, clientY } = event;
+
+    if (annotationHoverFrameRef.current !== null) {
+      cancelAnimationFrame(annotationHoverFrameRef.current);
     }
-    const range = rangeFromTextOffsets(
+
+    annotationHoverFrameRef.current = requestAnimationFrame(() => {
+      annotationHoverFrameRef.current = null;
+      const annotation = findAnnotationAtPoint(
+        article,
+        annotations,
+        clientX,
+        clientY,
+      );
+
+      if (!annotation) {
+        setHoverPreview(null);
+        return;
+      }
+
+      setHoverPreview((current) => {
+        if (current?.annotationId === annotation.id) return current;
+        const width = 286;
+        const x = Math.min(
+          window.innerWidth - width - 14,
+          Math.max(14, clientX - width / 2),
+        );
+        const placement =
+          clientY > window.innerHeight - 190 ? "above" : "below";
+        const y =
+          placement === "above"
+            ? Math.max(14, clientY - 168)
+            : clientY + 18;
+        return { annotationId: annotation.id, x, y, placement };
+      });
+    });
+  };
+
+  const clearAnnotationHover = () => {
+    if (annotationHoverFrameRef.current !== null) {
+      cancelAnimationFrame(annotationHoverFrameRef.current);
+      annotationHoverFrameRef.current = null;
+    }
+    setHoverPreview(null);
+  };
+
+  const handleAnnotationClick = (event: ReactMouseEvent<HTMLElement>) => {
+    const article = previewArticleRef.current;
+    if (!article || window.getSelection()?.toString().trim()) return;
+    const annotation = findAnnotationAtPoint(
       article,
-      start,
-      start + annotation.quote.length,
+      annotations,
+      event.clientX,
+      event.clientY,
     );
-    const target = range?.startContainer.parentElement;
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!annotation) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    focusAnnotation(annotation);
   };
 
   const downloadMarkdown = useCallback(async () => {
@@ -1833,6 +1970,7 @@ export default function Home() {
                   {annotations.length ? (
                     annotations.map((annotation, index) => (
                       <article
+                        id={`annotation-card-${annotation.id}`}
                         className={`annotation-card is-${annotation.kind} ${
                           activeAnnotationId === annotation.id
                             ? "is-active"
@@ -1914,10 +2052,15 @@ export default function Home() {
             {content.trim() ? (
               <article
                 ref={previewArticleRef}
-                className="markdown-body"
+                className={`markdown-body ${
+                  hoveredAnnotation ? "has-annotation-hover" : ""
+                }`}
                 dir="rtl"
                 onMouseUp={capturePreviewSelection}
                 onKeyUp={capturePreviewSelection}
+                onPointerMove={handleAnnotationPointerMove}
+                onPointerLeave={clearAnnotationHover}
+                onClick={handleAnnotationClick}
               >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
@@ -2187,6 +2330,29 @@ export default function Home() {
           </aside>
         )}
       </div>
+
+      {hoverPreview && hoveredAnnotation && (
+        <div
+          className={`annotation-hover-preview is-${hoveredAnnotation.kind} is-${hoverPreview.placement}`}
+          role="tooltip"
+          style={{ left: hoverPreview.x, top: hoverPreview.y }}
+        >
+          <div className="annotation-hover-heading">
+            <span>
+              <AnnotationIcon kind={hoveredAnnotation.kind} />
+              <strong>{ANNOTATION_LABELS[hoveredAnnotation.kind]}</strong>
+            </span>
+            <small>برای بازکردن کلیک کنید</small>
+          </div>
+          <q dir="auto">{hoveredAnnotation.quote}</q>
+          <p dir="auto">
+            {hoveredAnnotation.body ||
+              (hoveredAnnotation.kind === "highlight"
+                ? "این بخش برای توجه بیشتر هایلایت شده است."
+                : "برای این نشانه هنوز متنی نوشته نشده است.")}
+          </p>
+        </div>
+      )}
 
       {notice && (
         <div className="toast" role="status">

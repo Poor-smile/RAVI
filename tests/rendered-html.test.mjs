@@ -60,6 +60,11 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /\.ravi/);
   assert.match(page, /capturePreviewSelection/);
   assert.match(page, /addAnnotation/);
+  assert.match(page, /findAnnotationAtPoint/);
+  assert.match(page, /onPointerMove=\{handleAnnotationPointerMove\}/);
+  assert.match(page, /onClick=\{handleAnnotationClick\}/);
+  assert.match(page, /annotation-hover-preview/);
+  assert.match(page, /background: #f8e69d/);
   assert.match(page, /حاشیه‌نویسی/);
   assert.match(page, /CSS[\s\S]*highlights/);
   assert.match(page, /downloadRaavi/);
@@ -72,6 +77,8 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(layout, /dir="rtl"/);
   assert.match(css, /IRANSansX-Regular\.woff2/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
+  assert.match(css, /\.annotation-hover-preview/);
+  assert.match(css, /\.markdown-body\.has-annotation-hover/);
   assert.match(packageJson, /"react-markdown"/);
   assert.match(packageJson, /"desktop:pack"/);
   assert.match(packageJson, /"fileAssociations"/);

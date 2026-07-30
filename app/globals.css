@@ -1396,6 +1396,98 @@ button {
   line-height: 1.8;
 }
 
+.markdown-body.has-annotation-hover {
+  cursor: pointer;
+}
+
+.annotation-hover-preview {
+  position: fixed;
+  z-index: 60;
+  width: min(286px, calc(100vw - 28px));
+  padding: 11px 12px 12px;
+  direction: rtl;
+  color: var(--paper-50);
+  background: var(--ink-950);
+  border-radius: 6px;
+  box-shadow: 0 14px 34px rgba(17, 25, 20, 0.28);
+  pointer-events: none;
+  animation: annotationPreviewIn 150ms var(--ease-paper) both;
+}
+
+.annotation-hover-preview::after {
+  content: "";
+  position: absolute;
+  inset: -6px 50% auto auto;
+  width: 12px;
+  height: 12px;
+  background: var(--ink-950);
+  transform: translateX(50%) rotate(45deg);
+}
+
+.annotation-hover-preview.is-above::after {
+  inset: auto 50% -6px auto;
+}
+
+.annotation-hover-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.annotation-hover-heading > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.annotation-hover-heading strong {
+  font-size: 10px;
+}
+
+.annotation-hover-heading small {
+  color: var(--paper-300);
+  font-size: 7px;
+  white-space: nowrap;
+}
+
+.annotation-hover-preview.is-highlight .annotation-hover-heading svg {
+  color: var(--mark-yellow);
+}
+
+.annotation-hover-preview.is-comment .annotation-hover-heading svg {
+  color: var(--comment-blue);
+}
+
+.annotation-hover-preview.is-margin .annotation-hover-heading svg {
+  color: var(--margin-coral);
+}
+
+.annotation-hover-preview q {
+  margin-top: 9px;
+  padding: 6px 8px;
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--paper-200);
+  background: var(--ink-900);
+  border-radius: 3px;
+  font-size: 8px;
+  line-height: 1.75;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.annotation-hover-preview p {
+  margin: 8px 0 0;
+  display: -webkit-box;
+  overflow: hidden;
+  color: white;
+  font-size: 10px;
+  line-height: 1.8;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
 #markdown-editor {
   width: 100%;
   height: 100%;
@@ -1939,6 +2031,19 @@ button {
   }
   to {
     opacity: 1;
+    clip-path: inset(0);
+  }
+}
+
+@keyframes annotationPreviewIn {
+  from {
+    opacity: 0.65;
+    transform: translateY(-4px);
+    clip-path: inset(0 0 10% 0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
     clip-path: inset(0);
   }
 }
