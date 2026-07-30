@@ -359,6 +359,7 @@ html.theme-is-changing .pane-header,
 html.theme-is-changing #markdown-editor,
 html.theme-is-changing .preview-scroll,
 html.theme-is-changing .annotation-toolbar,
+html.theme-is-changing .selection-mini-menu,
 html.theme-is-changing .annotation-panel,
 html.theme-is-changing .annotation-card,
 html.theme-is-changing .reading-outline,
@@ -430,7 +431,6 @@ html.theme-is-changing .save-type-options label {
 .reader-controls button:focus-visible,
 .annotation-toggle:focus-visible,
 .annotation-action:focus-visible,
-.annotation-dismiss:focus-visible,
 .annotation-panel button:focus-visible,
 .annotation-panel textarea:focus-visible,
 .annotation-composer-field textarea:focus-visible,
@@ -1625,7 +1625,6 @@ html.theme-is-changing .save-type-options label {
 }
 
 .annotation-instruction,
-.selection-summary,
 .annotation-composer-copy {
   min-width: 0;
   display: flex;
@@ -1638,20 +1637,17 @@ html.theme-is-changing .save-type-options label {
   color: var(--saving);
 }
 
-.selection-summary,
 .annotation-composer-copy {
   display: grid;
   gap: 1px;
 }
 
-.selection-summary > span,
 .annotation-composer-copy > span {
   color: var(--proof-blue-dark);
   font-size: 8px;
   font-weight: 700;
 }
 
-.selection-summary q,
 .annotation-composer-copy q {
   min-width: 0;
   max-width: 32ch;
@@ -1662,7 +1658,6 @@ html.theme-is-changing .save-type-options label {
   white-space: nowrap;
 }
 
-.annotation-actions,
 .annotation-composer-actions {
   display: flex;
   align-items: center;
@@ -1724,24 +1719,6 @@ html.theme-is-changing .save-type-options label {
   cursor: not-allowed;
 }
 
-.annotation-dismiss {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  color: var(--ink-500);
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.annotation-dismiss:hover {
-  color: var(--error);
-  background: var(--error-soft);
-}
-
 .annotation-composer-field {
   min-width: 0;
   display: block;
@@ -1777,8 +1754,47 @@ html.theme-is-changing .save-type-options label {
 }
 
 .preview-scroll {
+  position: relative;
   min-width: 0;
   flex: 1;
+}
+
+.selection-mini-menu {
+  position: absolute;
+  z-index: 30;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  direction: rtl;
+  color: var(--ink-950);
+  background: var(--paper-50);
+  border-radius: 6px;
+  box-shadow: 0 10px 26px var(--shadow-color);
+  white-space: nowrap;
+  will-change: transform, opacity, clip-path;
+}
+
+.selection-mini-menu.is-above {
+  transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;
+  animation: selectionMiniMenuAboveIn 180ms var(--ease-paper) both;
+}
+
+.selection-mini-menu.is-below {
+  transform: translate(-50%, 0);
+  transform-origin: 50% 0;
+  animation: selectionMiniMenuBelowIn 180ms var(--ease-paper) both;
+}
+
+.selection-mini-menu .annotation-action {
+  min-height: 30px;
+  padding: 3px 8px;
+  flex: none;
+  gap: 4px;
+  font-size: 8px;
 }
 
 .annotation-panel {
@@ -3598,6 +3614,32 @@ html.theme-is-changing .save-type-options label {
   }
 }
 
+@keyframes selectionMiniMenuAboveIn {
+  from {
+    opacity: 0.35;
+    clip-path: inset(42% 8% 0 round 5px);
+    transform: translate(-50%, calc(-100% + 5px)) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 round 5px);
+    transform: translate(-50%, -100%) scale(1);
+  }
+}
+
+@keyframes selectionMiniMenuBelowIn {
+  from {
+    opacity: 0.35;
+    clip-path: inset(0 8% 42% round 5px);
+    transform: translate(-50%, -5px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 round 5px);
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -4019,22 +4061,14 @@ html.theme-is-changing .save-type-options label {
     min-height: 50px;
   }
 
-  .annotation-toolbar.has-selection:not(.is-composing) {
-    display: grid;
-  }
-
-  .selection-summary {
-    display: none;
-  }
-
-  .annotation-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .annotation-action {
     min-height: 36px;
     flex: 1;
+  }
+
+  .selection-mini-menu .annotation-action {
+    min-height: 32px;
+    padding-inline: 7px;
   }
 
   .annotation-toolbar.is-composing {

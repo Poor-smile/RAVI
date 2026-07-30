@@ -746,6 +746,44 @@ test.describe("Electron keyboard integration", () => {
       await expect(window.locator(".app-shell")).toHaveClass(/is-reading/);
       await dispatchShortcut({ code: "Escape", key: "Escape" });
       await expect(window.locator(".app-shell")).not.toHaveClass(/is-reading/);
+
+      const selectionTarget = markdownBody.locator("p").nth(1);
+      await selectionTarget.selectText();
+      const selectionTargetBox = await selectionTarget.boundingBox();
+      expect(selectionTargetBox).not.toBeNull();
+      const selectionPointer = {
+        clientX: selectionTargetBox!.x + selectionTargetBox!.width * 0.55,
+        clientY: selectionTargetBox!.y + selectionTargetBox!.height * 0.7,
+      };
+      await selectionTarget.dispatchEvent("mouseup", selectionPointer);
+
+      const selectionMenu = window.getByRole("toolbar", {
+        name: "ابزار متن انتخاب‌شده",
+      });
+      await expect(selectionMenu).toBeVisible();
+      await expect(
+        selectionMenu.getByRole("button", { name: /هایلایت/ }),
+      ).toBeVisible();
+      await expect(
+        selectionMenu.getByRole("button", { name: /کامنت/ }),
+      ).toBeVisible();
+      await expect(
+        selectionMenu.getByRole("button", { name: /حاشیه/ }),
+      ).toBeVisible();
+
+      const selectionMenuBox = await selectionMenu.boundingBox();
+      expect(selectionMenuBox).not.toBeNull();
+      expect(
+        Math.abs(
+          selectionMenuBox!.x +
+            selectionMenuBox!.width / 2 -
+            selectionPointer.clientX,
+        ),
+      ).toBeLessThan(120);
+
+      await selectionMenu.getByRole("button", { name: /هایلایت/ }).click();
+      await expect(selectionMenu).toBeHidden();
+      await expect(window.locator("#annotation-panel")).toBeVisible();
     } finally {
       await app.close();
       await rm(userDataPath, { recursive: true, force: true });

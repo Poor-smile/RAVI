@@ -328,6 +328,12 @@ type SelectionDraft = {
   suffix: string;
 };
 
+type SelectionMenuPosition = {
+  x: number;
+  y: number;
+  placement: "above" | "below";
+};
+
 type AnnotationHoverPreview = {
   annotationId: string;
   x: number;
@@ -879,6 +885,8 @@ export default function Home() {
   const [annotations, setAnnotations] = useState<RaaviAnnotation[]>([]);
   const [selectionDraft, setSelectionDraft] =
     useState<SelectionDraft | null>(null);
+  const [selectionMenuPosition, setSelectionMenuPosition] =
+    useState<SelectionMenuPosition | null>(null);
   const [composerKind, setComposerKind] = useState<
     Extract<AnnotationKind, "comment" | "margin"> | null
   >(null);
@@ -902,6 +910,7 @@ export default function Home() {
   const historyTabRef = useRef<HTMLButtonElement>(null);
   const libraryTabRef = useRef<HTMLButtonElement>(null);
   const annotationToggleRef = useRef<HTMLButtonElement>(null);
+  const selectionMenuRef = useRef<HTMLDivElement>(null);
   const commentButtonRef = useRef<HTMLButtonElement>(null);
   const marginButtonRef = useRef<HTMLButtonElement>(null);
   const composerOriginRef = useRef<HTMLButtonElement | null>(null);
@@ -1570,6 +1579,36 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!selectionDraft || composerKind) return;
+
+    const dismissSelectionMenu = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (
+        selectionMenuRef.current?.contains(target) ||
+        previewArticleRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setSelectionDraft(null);
+      setSelectionMenuPosition(null);
+      window.getSelection()?.removeAllRanges();
+    };
+    const dismissSelectionMenuOnResize = () => {
+      setSelectionDraft(null);
+      setSelectionMenuPosition(null);
+      window.getSelection()?.removeAllRanges();
+    };
+
+    document.addEventListener("pointerdown", dismissSelectionMenu, true);
+    window.addEventListener("resize", dismissSelectionMenuOnResize);
+    return () => {
+      document.removeEventListener("pointerdown", dismissSelectionMenu, true);
+      window.removeEventListener("resize", dismissSelectionMenuOnResize);
+    };
+  }, [composerKind, selectionDraft]);
+
+  useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 820px)");
     const syncLibraryMode = () => {
       setLibraryIsModal(mediaQuery.matches);
@@ -1714,11 +1753,21 @@ export default function Home() {
     readingMode,
   ]);
 
-  const capturePreviewSelection = () => {
+  const capturePreviewSelection = (
+    pointer?: { clientX: number; clientY: number },
+  ) => {
     requestAnimationFrame(() => {
       const article = previewArticleRef.current;
+      const previewScroll = previewScrollRef.current;
       const selection = window.getSelection();
-      if (!article || !selection || selection.rangeCount !== 1) return;
+      if (
+        !article ||
+        !previewScroll ||
+        !selection ||
+        selection.rangeCount !== 1
+      ) {
+        return;
+      }
 
       const range = selection.getRangeAt(0);
       if (
@@ -1726,13 +1775,23 @@ export default function Home() {
         !article.contains(range.startContainer) ||
         !article.contains(range.endContainer)
       ) {
+        if (!composerKind) {
+          setSelectionDraft(null);
+          setSelectionMenuPosition(null);
+        }
         return;
       }
 
       const rawQuote = range.cloneContents().textContent ?? range.toString();
       const quote = rawQuote.trim();
-      if (!quote) return;
+      if (!quote) {
+        setSelectionDraft(null);
+        setSelectionMenuPosition(null);
+        return;
+      }
       if (quote.length > 2_000) {
+        setSelectionDraft(null);
+        setSelectionMenuPosition(null);
         setError("برای یادداشت‌گذاری، بخش کوتاه‌تری از متن را انتخاب کنید.");
         return;
       }
@@ -1746,6 +1805,24 @@ export default function Home() {
       const start = beforeText.length + leadingWhitespace;
       const end = start + quote.length;
       const fullText = article.textContent ?? "";
+      const rangeRect = range.getBoundingClientRect();
+      const scrollRect = previewScroll.getBoundingClientRect();
+      const anchorClientX =
+        pointer?.clientX ?? (rangeRect.left + rangeRect.right) / 2;
+      const distanceAbove = (pointer?.clientY ?? rangeRect.top) - scrollRect.top;
+      const placement = distanceAbove >= 58 ? "above" : "below";
+      const anchorClientY =
+        pointer?.clientY ??
+        (placement === "above" ? rangeRect.top : rangeRect.bottom);
+      const menuHalfWidth = Math.min(
+        112,
+        Math.max(72, scrollRect.width / 2 - 12),
+      );
+      const minimumX = previewScroll.scrollLeft + menuHalfWidth;
+      const maximumX =
+        previewScroll.scrollLeft + scrollRect.width - menuHalfWidth;
+      const rawX =
+        anchorClientX - scrollRect.left + previewScroll.scrollLeft;
 
       setSelectionDraft({
         start,
@@ -1753,6 +1830,15 @@ export default function Home() {
         quote,
         prefix: fullText.slice(Math.max(0, start - 48), start),
         suffix: fullText.slice(end, end + 48),
+      });
+      setSelectionMenuPosition({
+        x: Math.min(Math.max(rawX, minimumX), Math.max(minimumX, maximumX)),
+        y:
+          anchorClientY -
+          scrollRect.top +
+          previewScroll.scrollTop +
+          (placement === "above" ? -10 : 10),
+        placement,
       });
       setComposerKind(null);
       setComposerText("");
@@ -1784,6 +1870,7 @@ export default function Home() {
 
     setAnnotations((current) => [...current, annotation]);
     setSelectionDraft(null);
+    setSelectionMenuPosition(null);
     setComposerKind(null);
     setComposerText("");
     composerOriginRef.current = null;
@@ -3562,8 +3649,10 @@ export default function Home() {
 
           <div
             className={`annotation-toolbar ${
-              selectionDraft ? "has-selection" : ""
-            } ${composerKind ? "is-composing" : ""}`}
+              composerKind && selectionDraft
+                ? "has-selection is-composing"
+                : ""
+            }`}
           >
             {composerKind && selectionDraft ? (
               <>
@@ -3610,87 +3699,6 @@ export default function Home() {
                     }}
                   >
                     لغو
-                  </button>
-                </div>
-              </>
-            ) : selectionDraft ? (
-              <>
-                <div className="selection-summary">
-                  <span>انتخاب‌شده</span>
-                  <q dir="auto">{selectionDraft.quote}</q>
-                </div>
-                <div className="annotation-actions">
-                  <button
-                    className="annotation-action annotation-action--highlight"
-                    type="button"
-                    onClick={() => addAnnotation("highlight")}
-                    aria-keyshortcuts={commandAriaKeyShortcuts(
-                      "annotation.highlight",
-                      commandEnvironment,
-                    )}
-                    title={commandTitle(
-                      "annotation.highlight",
-                      commandEnvironment,
-                    )}
-                  >
-                    <Highlighter size={15} aria-hidden="true" />
-                    هایلایت
-                  </button>
-                  <button
-                    ref={commentButtonRef}
-                    className="annotation-action annotation-action--comment"
-                    type="button"
-                    onClick={() =>
-                      openAnnotationComposer(
-                        "comment",
-                        commentButtonRef.current,
-                      )
-                    }
-                    aria-keyshortcuts={commandAriaKeyShortcuts(
-                      "annotation.comment",
-                      commandEnvironment,
-                    )}
-                    title={commandTitle(
-                      "annotation.comment",
-                      commandEnvironment,
-                    )}
-                  >
-                    <MessageCircle size={15} aria-hidden="true" />
-                    کامنت
-                  </button>
-                  <button
-                    ref={marginButtonRef}
-                    className="annotation-action annotation-action--margin"
-                    type="button"
-                    onClick={() =>
-                      openAnnotationComposer(
-                        "margin",
-                        marginButtonRef.current,
-                      )
-                    }
-                    aria-keyshortcuts={commandAriaKeyShortcuts(
-                      "annotation.margin",
-                      commandEnvironment,
-                    )}
-                    title={commandTitle(
-                      "annotation.margin",
-                      commandEnvironment,
-                    )}
-                  >
-                    <NotebookPen size={15} aria-hidden="true" />
-                    حاشیه
-                  </button>
-                  <button
-                    className="annotation-dismiss"
-                    type="button"
-                    onClick={() => {
-                      setSelectionDraft(null);
-                      clearNativeSelection();
-                    }}
-                    aria-label="لغو انتخاب"
-                    title="لغو انتخاب"
-                  >
-                    <X size={15} aria-hidden="true" />
                   </button>
                 </div>
               </>
@@ -3833,6 +3841,87 @@ export default function Home() {
                 { "--reader-size": `${readerSize}px` } as React.CSSProperties
               }
             >
+            {selectionDraft &&
+              selectionMenuPosition &&
+              !composerKind && (
+                <div
+                  ref={selectionMenuRef}
+                  className={`selection-mini-menu is-${selectionMenuPosition.placement}`}
+                  role="toolbar"
+                  aria-label="ابزار متن انتخاب‌شده"
+                  aria-orientation="horizontal"
+                  style={
+                    {
+                      left: selectionMenuPosition.x,
+                      top: selectionMenuPosition.y,
+                    } as React.CSSProperties
+                  }
+                  onPointerDown={(event) => {
+                    if (event.pointerType === "mouse") event.preventDefault();
+                  }}
+                >
+                  <button
+                    className="annotation-action annotation-action--highlight"
+                    type="button"
+                    onClick={() => addAnnotation("highlight")}
+                    aria-keyshortcuts={commandAriaKeyShortcuts(
+                      "annotation.highlight",
+                      commandEnvironment,
+                    )}
+                    title={commandTitle(
+                      "annotation.highlight",
+                      commandEnvironment,
+                    )}
+                  >
+                    <Highlighter size={14} aria-hidden="true" />
+                    هایلایت
+                  </button>
+                  <button
+                    ref={commentButtonRef}
+                    className="annotation-action annotation-action--comment"
+                    type="button"
+                    onClick={() =>
+                      openAnnotationComposer(
+                        "comment",
+                        commentButtonRef.current,
+                      )
+                    }
+                    aria-keyshortcuts={commandAriaKeyShortcuts(
+                      "annotation.comment",
+                      commandEnvironment,
+                    )}
+                    title={commandTitle(
+                      "annotation.comment",
+                      commandEnvironment,
+                    )}
+                  >
+                    <MessageCircle size={14} aria-hidden="true" />
+                    کامنت
+                  </button>
+                  <button
+                    ref={marginButtonRef}
+                    className="annotation-action annotation-action--margin"
+                    type="button"
+                    onClick={() =>
+                      openAnnotationComposer(
+                        "margin",
+                        marginButtonRef.current,
+                      )
+                    }
+                    aria-keyshortcuts={commandAriaKeyShortcuts(
+                      "annotation.margin",
+                      commandEnvironment,
+                    )}
+                    title={commandTitle(
+                      "annotation.margin",
+                      commandEnvironment,
+                    )}
+                  >
+                    <NotebookPen size={14} aria-hidden="true" />
+                    حاشیه
+                  </button>
+                </div>
+              )}
             {content.trim() ? (
               <article
                 ref={previewArticleRef}
@@ -3842,8 +3931,13 @@ export default function Home() {
                 dir={documentTextDirection}
                 tabIndex={-1}
                 aria-label="متن پیش‌نمایش؛ برای جابه‌جایی سریع از میان‌بر تمرکز پیش‌نمایش استفاده کنید"
-                onMouseUp={capturePreviewSelection}
-                onKeyUp={capturePreviewSelection}
+                onMouseUp={(event) =>
+                  capturePreviewSelection({
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                  })
+                }
+                onKeyUp={() => capturePreviewSelection()}
                 onPointerMove={handleAnnotationPointerMove}
                 onPointerLeave={clearAnnotationHover}
                 onClick={handleAnnotationClick}
