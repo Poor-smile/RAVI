@@ -18,6 +18,7 @@ import {
   Code2,
   Eye,
   FileArchive,
+  FilePlus2,
   FileText,
   Folder,
   FolderPlus,
@@ -44,7 +45,6 @@ import {
   Plus,
   Quote,
   RefreshCw,
-  RotateCcw,
   Save,
   Search,
   Send,
@@ -77,6 +77,11 @@ import {
   useModalFocus,
   useModalStack,
 } from "./components/accessible-modal";
+import {
+  NewDocumentDialog,
+  NewDocumentSpec,
+  titleFromDocumentName,
+} from "./components/new-document-dialog";
 import {
   commandAriaKeyShortcuts,
   commandTitle,
@@ -853,6 +858,9 @@ export default function Home() {
     documentSnapshot(SAMPLE_MARKDOWN, []),
   );
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [newDocumentModalOpen, setNewDocumentModalOpen] = useState(false);
+  const [newDocumentCreating, setNewDocumentCreating] = useState(false);
+  const [newDocumentError, setNewDocumentError] = useState("");
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
   const [saveFileType, setSaveFileType] =
     useState<SaveFileType>("ravi");
@@ -935,6 +943,7 @@ export default function Home() {
   const composerOriginRef = useRef<HTMLButtonElement | null>(null);
   const readingReturnFocusRef = useRef<HTMLElement | null>(null);
   const saveModalCloseRef = useRef<HTMLButtonElement>(null);
+  const newDocumentButtonRef = useRef<HTMLButtonElement>(null);
   const brandButtonRef = useRef<HTMLButtonElement>(null);
   const saveFileNameRef = useRef<HTMLInputElement>(null);
   const saveModalRef = useRef<HTMLDivElement>(null);
@@ -1705,6 +1714,7 @@ export default function Home() {
       setReadingHeaderVisible(true);
       setShortcutHelpOpen(false);
       setSaveModalOpen(false);
+      setNewDocumentModalOpen(false);
       if (document.openInReadingMode) {
         setLibraryOpen(false);
       } else if (!window.matchMedia("(max-width: 820px)").matches) {
@@ -1971,6 +1981,10 @@ export default function Home() {
   useEffect(() => {
     syncLayer("save", saveModalOpen);
   }, [saveModalOpen, syncLayer]);
+
+  useEffect(() => {
+    syncLayer("new", newDocumentModalOpen);
+  }, [newDocumentModalOpen, syncLayer]);
 
   useEffect(() => {
     syncLayer("shortcuts", shortcutHelpOpen);
@@ -2544,6 +2558,100 @@ export default function Home() {
     openSaveFileModal,
   ]);
 
+  const openNewDocumentModal = useCallback(() => {
+    setNewDocumentError("");
+    setNewDocumentCreating(false);
+    setNewDocumentModalOpen(true);
+  }, []);
+
+  const createNewDocument = useCallback(
+    async (spec: NewDocumentSpec) => {
+      const initialContent = spec.includeTitle
+        ? `# ${titleFromDocumentName(spec.baseName)}\n`
+        : "";
+      const initialAnnotations: RaaviAnnotation[] = [];
+      const raavi = makeRaaviDocument(
+        saveNameForType(spec.fileName, "markdown"),
+        initialContent,
+        initialAnnotations,
+        1,
+        [],
+      );
+      const payload: DocumentSavePayload = {
+        content: initialContent,
+        annotations: initialAnnotations,
+        revision: 1,
+        versions: [],
+        raavi,
+      };
+
+      setNewDocumentCreating(true);
+      setNewDocumentError("");
+
+      try {
+        const desktop = window.raaviDesktop;
+        let nextPath = "";
+
+        if (desktop) {
+          const result =
+            spec.fileType === "ravi"
+              ? await desktop.saveRaavi(spec.fileName, payload)
+              : await desktop.saveMarkdown(spec.fileName, payload);
+          if (!result.saved) return;
+          nextPath = result.filePath ?? "";
+        } else {
+          const blob =
+            spec.fileType === "ravi"
+              ? new Blob([JSON.stringify(raavi, null, 2)], {
+                  type: "application/json;charset=utf-8",
+                })
+              : new Blob([initialContent], {
+                  type: "text/markdown;charset=utf-8",
+                });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = spec.fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+        }
+
+        applyOpenedDocument(
+          {
+            name: spec.fileName,
+            path: nextPath,
+            documentType: spec.fileType,
+            content: initialContent,
+            annotations: initialAnnotations,
+            revision: 1,
+            versions: [],
+            openInReadingMode: false,
+          },
+          `«${spec.fileName}» ساخته شد؛ ویرایش را شروع کنید.`,
+        );
+        setMobilePane("editor");
+        setNewDocumentModalOpen(false);
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => editorRef.current?.focus()),
+        );
+      } catch {
+        setNewDocumentError(
+          "فایل ساخته نشد؛ نام، مسیر انتخاب‌شده و مجوز نوشتن را بررسی کنید.",
+        );
+      } finally {
+        setNewDocumentCreating(false);
+      }
+    },
+    [applyOpenedDocument],
+  );
+
+  const saveBeforeCreatingNew = useCallback(() => {
+    setNewDocumentModalOpen(false);
+    requestAnimationFrame(() => void saveCurrentFile());
+  }, [saveCurrentFile]);
+
   const openDocumentPicker = useCallback(async () => {
     if (window.raaviDesktop) {
       setError("");
@@ -3038,9 +3146,14 @@ export default function Home() {
     setEditorSelectionMenuPosition(null);
     const start = editor.selectionStart;
     const end = editor.selectionEnd;
-    const selected = content.slice(start, end) || placeholder;
+    const editorContent = editor.value;
+    const selected = editorContent.slice(start, end) || placeholder;
     const nextContent =
-      content.slice(0, start) + before + selected + after + content.slice(end);
+      editorContent.slice(0, start) +
+      before +
+      selected +
+      after +
+      editorContent.slice(end);
 
     setContent(nextContent);
     requestAnimationFrame(() => {
@@ -3059,49 +3172,20 @@ export default function Home() {
     setEditorSelectionMenuPosition(null);
     const start = editor.selectionStart;
     const end = editor.selectionEnd;
-    const selected = content.slice(start, end) || "متن نقل‌قول";
+    const editorContent = editor.value;
+    const selected = editorContent.slice(start, end) || "متن نقل‌قول";
     const quoted = selected
       .split(/\r?\n/u)
       .map((line) => `> ${line}`)
       .join("\n");
     const nextContent =
-      content.slice(0, start) + quoted + content.slice(end);
+      editorContent.slice(0, start) + quoted + editorContent.slice(end);
 
     setContent(nextContent);
     requestAnimationFrame(() => {
       editor.focus();
       editor.setSelectionRange(start, start + quoted.length);
     });
-  };
-
-  const resetDocument = () => {
-    if (
-      content.trim() &&
-      !window.confirm(
-        "نوشته‌ی فعلی با یک برگه‌ی خالی جایگزین شود؟ پیش از ادامه، در صورت نیاز آن را ذخیره کنید.",
-      )
-    ) {
-      return;
-    }
-
-    openedDocumentRef.current = false;
-    setContent("");
-    setFileName("نوشته-تازه.md");
-    setAnnotations([]);
-    setActiveDocumentPath("");
-    setDocumentType("markdown");
-    setRevision(1);
-    setVersions([]);
-    setLastSavedSnapshot(documentSnapshot(SAMPLE_MARKDOWN, []));
-    setSaveState("saved");
-    setEditorSelectionMenuPosition(null);
-    setSelectionDraft(null);
-    setComposerKind(null);
-    setAnnotationPanelOpen(false);
-    setReadingMode(false);
-    setMobilePane("editor");
-    requestAnimationFrame(() => editorRef.current?.focus());
-    showNotice("یک برگه‌ی تازه آماده شد.");
   };
 
   const restoreVersion = (version: RaaviVersion) => {
@@ -3224,6 +3308,10 @@ export default function Home() {
       setSaveModalOpen(false);
       return;
     }
+    if (topLayer === "new") {
+      if (!newDocumentCreating) setNewDocumentModalOpen(false);
+      return;
+    }
     if (topLayer === "library") {
       setLibraryOpen(false);
       return;
@@ -3275,7 +3363,7 @@ export default function Home() {
       else void saveCurrentFile();
     },
     "file.saveAs": () => openSaveFileModal(documentType),
-    "file.new": resetDocument,
+    "file.new": openNewDocumentModal,
     "help.shortcuts": () => {
       clearAnnotationHover();
       setShortcutHelpOpen((current) => !current);
@@ -3419,6 +3507,7 @@ export default function Home() {
         }`}
         inert={
           aboutModalOpen ||
+          newDocumentModalOpen ||
           saveModalOpen ||
           shortcutHelpOpen ||
           (libraryOpen && libraryIsModal)
@@ -3542,6 +3631,27 @@ export default function Home() {
             )}
           </button>
           <button
+            ref={newDocumentButtonRef}
+            className="button button--quiet new-document-trigger"
+            type="button"
+            onClick={openNewDocumentModal}
+            disabled={saveState === "saving"}
+            aria-haspopup="dialog"
+            aria-expanded={newDocumentModalOpen}
+            aria-keyshortcuts={commandAriaKeyShortcuts(
+              "file.new",
+              commandEnvironment,
+            )}
+            title={commandTitle(
+              "file.new",
+              commandEnvironment,
+              "ساخت فایل جدید",
+            )}
+          >
+            <FilePlus2 size={18} aria-hidden="true" />
+            <span>فایل جدید</span>
+          </button>
+          <button
             className="button button--primary"
             type="button"
             onClick={() => void openDocumentPicker()}
@@ -3606,6 +3716,7 @@ export default function Home() {
         aria-label="وضعیت سند"
         inert={
           aboutModalOpen ||
+          newDocumentModalOpen ||
           saveModalOpen ||
           shortcutHelpOpen ||
           (libraryOpen && libraryIsModal)
@@ -3682,6 +3793,7 @@ export default function Home() {
           role="alert"
           inert={
             aboutModalOpen ||
+            newDocumentModalOpen ||
             saveModalOpen ||
             shortcutHelpOpen ||
             (libraryOpen && libraryIsModal)
@@ -3701,7 +3813,10 @@ export default function Home() {
           libraryOpen ? "library-is-open" : ""
         }`}
         inert={
-          aboutModalOpen || saveModalOpen || shortcutHelpOpen
+          aboutModalOpen ||
+          newDocumentModalOpen ||
+          saveModalOpen ||
+          shortcutHelpOpen
             ? true
             : undefined
         }
@@ -3923,8 +4038,8 @@ export default function Home() {
               <span className="tool-divider" aria-hidden="true" />
               <button
                 type="button"
-                onClick={resetDocument}
-                aria-label="برگه‌ی تازه"
+                onClick={openNewDocumentModal}
+                aria-label="ساخت فایل جدید"
                 aria-keyshortcuts={commandAriaKeyShortcuts(
                   "file.new",
                   commandEnvironment,
@@ -3932,10 +4047,10 @@ export default function Home() {
                 title={commandTitle(
                   "file.new",
                   commandEnvironment,
-                  "برگه‌ی تازه",
+                  "ساخت فایل جدید",
                 )}
               >
-                <RotateCcw size={16} aria-hidden="true" />
+                <FilePlus2 size={16} aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -5031,6 +5146,23 @@ export default function Home() {
           </aside>
         )}
       </div>
+
+      <NewDocumentDialog
+        open={newDocumentModalOpen}
+        isTopLayer={topLayer === "new"}
+        isDesktop={commandEnvironment.surface === "electron"}
+        hasUnsavedChanges={effectiveSaveState !== "saved"}
+        creating={newDocumentCreating}
+        creationError={newDocumentError}
+        returnFocusRef={newDocumentButtonRef}
+        onClose={() => {
+          if (newDocumentCreating) return;
+          setNewDocumentModalOpen(false);
+          setNewDocumentError("");
+        }}
+        onCreate={(spec) => void createNewDocument(spec)}
+        onSaveCurrent={saveBeforeCreatingNew}
+      />
 
       <AboutDialog
         open={aboutModalOpen}

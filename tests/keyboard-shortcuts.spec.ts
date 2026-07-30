@@ -268,7 +268,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(aboutDialog).toBeVisible();
       await expect(aboutTitle).toBeFocused();
       await expect(
-        aboutDialog.getByText("0.16.0", { exact: true }),
+        aboutDialog.getByText("0.17.0", { exact: true }),
       ).toBeVisible();
       await expect(
         aboutDialog.getByRole("heading", {
@@ -284,7 +284,7 @@ test.describe("Electron keyboard integration", () => {
       ).toBeVisible();
       await expect(
         aboutDialog.getByText(
-          "تبدیل لوگوی راوی به ورودی شناسنامهٔ محصول",
+          "افزودن جریان کامل ساخت فایل جدید",
           { exact: true },
         ),
       ).toBeVisible();
@@ -292,6 +292,66 @@ test.describe("Electron keyboard integration", () => {
       await window.keyboard.press("Escape");
       await expect(aboutDialog).toBeHidden();
       await expect(aboutTrigger).toBeFocused();
+
+      const initialEditorValue = await editor.inputValue();
+      await editor.fill(`${initialEditorValue}\n\nتغییر ذخیره‌نشده`);
+      const newDocumentTrigger = topbar.getByRole("button", {
+        name: "فایل جدید",
+        exact: true,
+      });
+      await expect(newDocumentTrigger).toBeVisible();
+      await newDocumentTrigger.click();
+      const newDocumentDialog = window.getByRole("dialog", {
+        name: "ساخت فایل جدید",
+        exact: true,
+      });
+      const newDocumentName = newDocumentDialog.locator(
+        '[data-editable-kind="saveName"]',
+      ).first();
+      await expect(newDocumentDialog).toBeVisible();
+      await expect(newDocumentName).toBeFocused();
+      await expect(
+        newDocumentDialog.getByText("سند فعلی تغییر ذخیره‌نشده دارد", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        newDocumentDialog.getByText("نوشته تازه.md", { exact: true }),
+      ).toBeVisible();
+
+      await newDocumentName.fill("CON");
+      await expect(
+        newDocumentDialog.getByText(
+          "این نام در ویندوز رزرو شده است؛ نام دیگری انتخاب کنید.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(
+        newDocumentDialog.getByRole("button", {
+          name: "ساخت بدون ذخیرهٔ قبلی",
+          exact: true,
+        }),
+      ).toBeDisabled();
+
+      await newDocumentName.fill("گزارش هفتگی.md");
+      await expect(newDocumentName).toHaveValue("گزارش هفتگی");
+      await expect(
+        newDocumentDialog.getByText("گزارش هفتگی.md", { exact: true }),
+      ).toBeVisible();
+      await newDocumentDialog
+        .getByRole("radio", { name: /سند راوی/ })
+        .check();
+      await expect(
+        newDocumentDialog.getByText("گزارش هفتگی.ravi", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        newDocumentDialog.getByText(/نسخهٔ خوانای Markdown/),
+      ).toBeVisible();
+      await expect(topbar).toHaveAttribute("inert", "");
+      await window.keyboard.press("Escape");
+      await expect(newDocumentDialog).toBeHidden();
+      await expect(newDocumentTrigger).toBeFocused();
+      await editor.fill(initialEditorValue);
 
       const previewScroll = window.locator(".preview-scroll");
       const scrollSyncToggle = window.locator(".scroll-sync-toggle");

@@ -11,7 +11,12 @@ import {
   useState,
 } from "react";
 
-export type ModalLayerId = "about" | "library" | "save" | "shortcuts";
+export type ModalLayerId =
+  | "about"
+  | "library"
+  | "new"
+  | "save"
+  | "shortcuts";
 
 export function useModalStack() {
   const [stack, setStack] = useState<ModalLayerId[]>([]);

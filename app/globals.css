@@ -3831,6 +3831,266 @@ html.theme-is-changing .save-type-options label {
   border-color: var(--rule);
 }
 
+.new-document-modal {
+  width: min(640px, 100%);
+}
+
+.new-document-modal-body {
+  overflow-x: hidden;
+}
+
+.new-document-unsaved-warning {
+  margin-bottom: 17px;
+  padding: 11px 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: 4px;
+}
+
+.new-document-unsaved-warning > svg {
+  align-self: start;
+  margin-top: 2px;
+}
+
+.new-document-unsaved-warning > span {
+  display: grid;
+  gap: 3px;
+}
+
+.new-document-unsaved-warning strong {
+  font-size: 10px;
+}
+
+.new-document-unsaved-warning small {
+  color: color-mix(in srgb, var(--warning-text) 82%, var(--ink-700));
+  font-size: 8px;
+  line-height: 1.8;
+}
+
+.new-document-unsaved-warning button {
+  min-height: 34px;
+  padding-inline: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--warning-text);
+  background: transparent;
+  border: 1px solid var(--warning-border);
+  border-radius: 4px;
+  font-size: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.new-document-unsaved-warning button:hover {
+  color: var(--ink-950);
+  background: color-mix(in srgb, var(--warning-bg) 68%, var(--paper-50));
+}
+
+.new-document-name-field > small {
+  min-height: 18px;
+  color: var(--ink-500);
+  font-size: 8px;
+  font-weight: 400;
+  line-height: 1.8;
+}
+
+.new-document-name-control {
+  width: 100%;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  direction: ltr;
+  color: var(--ink-950);
+  background: var(--input-bg);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.new-document-name-control:focus-within {
+  border-color: var(--proof-blue);
+  box-shadow: inset 0 0 0 1px var(--proof-blue);
+}
+
+.new-document-name-control.has-error {
+  border-color: var(--error);
+  box-shadow: inset 0 0 0 1px var(--error);
+}
+
+.new-document-name-control input {
+  height: 44px;
+  padding-inline: 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-align: start;
+}
+
+.new-document-name-control input:focus {
+  border: 0;
+  box-shadow: none;
+}
+
+.new-document-name-control > b {
+  min-width: 58px;
+  padding-inline: 11px;
+  display: grid;
+  place-items: center;
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  border-inline-start: 1px solid
+    color-mix(in srgb, var(--proof-blue) 24%, var(--rule));
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+}
+
+.new-document-field-error {
+  color: var(--error) !important;
+}
+
+.new-document-type-options {
+  margin-top: 15px;
+}
+
+.new-document-title-option {
+  min-height: 64px;
+  margin-top: 13px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  color: var(--ink-700);
+  background: var(--paper-100);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.new-document-title-option:hover {
+  border-color: color-mix(in srgb, var(--proof-blue) 55%, var(--rule));
+}
+
+.new-document-title-option input {
+  margin-top: 4px;
+  accent-color: var(--proof-blue);
+}
+
+.new-document-title-option > span {
+  display: grid;
+  gap: 3px;
+}
+
+.new-document-title-option strong {
+  color: var(--ink-950);
+  font-size: 9px;
+}
+
+.new-document-title-option small {
+  color: var(--ink-700);
+  font-size: 8px;
+  line-height: 1.8;
+}
+
+.new-document-result {
+  min-height: 62px;
+  margin-top: 14px;
+  padding: 9px 1px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-block: 1px solid var(--rule);
+}
+
+.new-document-result-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  color: var(--on-accent);
+  background: var(--proof-blue);
+  border-radius: 4px;
+}
+
+.new-document-result > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.new-document-result small {
+  color: var(--ink-500);
+  font-size: 7px;
+}
+
+.new-document-result strong {
+  overflow: hidden;
+  color: var(--ink-950);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-document-location-note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--ink-700);
+  font-size: 8px;
+  line-height: 1.7;
+}
+
+.new-document-location-note svg {
+  flex: none;
+  color: var(--proof-blue-dark);
+}
+
+.new-document-ravi-note {
+  margin-top: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: color-mix(in srgb, var(--success) 62%, var(--ink-950));
+  font-size: 8px;
+  line-height: 1.8;
+}
+
+.new-document-ravi-note svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.new-document-creation-error {
+  margin: 12px 0 0 !important;
+  padding: 9px 11px;
+  color: var(--error) !important;
+  background: var(--error-soft);
+  border: 1px solid color-mix(in srgb, var(--error) 32%, var(--rule));
+  border-radius: 4px;
+}
+
+.new-document-modal-actions {
+  align-items: center;
+}
+
+.new-document-modal-actions .button--primary {
+  min-width: 176px;
+}
+
+.is-reading .new-document-trigger {
+  display: none;
+}
+
 .workspace--reading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
@@ -4655,6 +4915,24 @@ html.theme-is-changing .save-type-options label {
   .save-type-options label {
     min-height: 88px;
   }
+
+  .new-document-unsaved-warning {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .new-document-unsaved-warning button {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .new-document-result {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .new-document-location-note {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 520px) {
@@ -4732,6 +5010,24 @@ html.theme-is-changing .save-type-options label {
 
   .about-modal-footer button {
     width: 100%;
+  }
+
+  .new-document-modal-header {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding-inline: 12px;
+  }
+
+  .new-document-modal-actions {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .new-document-modal-actions .button {
+    width: 100%;
+  }
+
+  .new-document-modal-actions .button--primary {
+    grid-row: 1;
   }
 
   .topbar-actions .button--primary {
