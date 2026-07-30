@@ -2880,13 +2880,16 @@ button {
   align-items: start;
   gap: 18px;
   overflow: auto;
-  padding: clamp(24px, 4vw, 56px);
+  padding: clamp(78px, 7vw, 96px) clamp(24px, 4vw, 56px)
+    clamp(24px, 4vw, 56px);
   background: var(--paper-300);
   direction: ltr;
 }
 
 .workspace--reading.reading-outline-is-collapsed {
-  grid-template-columns: minmax(0, 1fr) 48px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "preview";
+  gap: 0;
 }
 
 .reading-outline {
@@ -2894,7 +2897,7 @@ button {
   position: sticky;
   top: 0;
   width: 100%;
-  height: calc(100dvh - 58px - clamp(48px, 8vw, 112px));
+  height: calc(100dvh - clamp(118px, 11vw, 160px));
   min-height: 360px;
   display: flex;
   flex-direction: column;
@@ -2906,11 +2909,6 @@ button {
   direction: rtl;
 }
 
-.reading-outline.is-collapsed {
-  width: 48px;
-  justify-self: end;
-}
-
 .reading-outline-header {
   min-height: 52px;
   padding: 8px 10px 8px 8px;
@@ -2920,12 +2918,6 @@ button {
   gap: 8px;
   border-bottom: 1px solid var(--rule);
   background: var(--paper-50);
-}
-
-.reading-outline.is-collapsed .reading-outline-header {
-  padding: 7px 5px;
-  justify-content: center;
-  border-bottom-color: transparent;
 }
 
 .reading-outline-title {
@@ -3086,12 +3078,29 @@ button {
   line-height: 1.9;
 }
 
-.is-reading {
-  grid-template-rows: auto minmax(0, 1fr);
+.is-reading .topbar {
+  position: fixed;
+  z-index: 30;
+  inset: 0 0 auto;
+  min-height: 58px;
+  padding-block: 8px;
+  box-shadow: 0 12px 30px rgba(18, 22, 19, 0.18);
+  transform: translateY(0);
+  transition:
+    transform 180ms var(--ease-paper),
+    box-shadow 180ms ease-out;
 }
 
-.is-reading .topbar {
-  min-height: 58px;
+.is-reading .topbar.is-concealed {
+  pointer-events: none;
+  box-shadow: none;
+  transform: translateY(calc(-100% - 1px));
+}
+
+.is-reading .topbar.is-concealed:focus-within {
+  pointer-events: auto;
+  box-shadow: 0 12px 30px rgba(18, 22, 19, 0.18);
+  transform: translateY(0);
 }
 
 .is-reading .proofbar,
@@ -3102,12 +3111,70 @@ button {
   display: none;
 }
 
-.is-reading .topbar-actions {
-  margin-inline-start: auto;
+.is-reading .brand {
+  display: none;
 }
 
-.is-reading .brand-copy small {
+.reading-header-document {
   display: none;
+}
+
+.is-reading .reading-header-document {
+  min-width: 0;
+  max-width: min(62vw, 780px);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.reading-header-document > svg {
+  flex: none;
+  color: var(--proof-blue);
+}
+
+.reading-header-document > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--paper-50);
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reading-header-outline-toggle {
+  flex: none;
+  min-height: 36px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--paper-200);
+  background: transparent;
+  border: 1px solid var(--ink-500);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.reading-header-outline-toggle:hover {
+  color: var(--ink-950);
+  background: var(--paper-50);
+  border-color: var(--paper-50);
+}
+
+.reading-header-outline-toggle:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.is-reading .topbar-actions {
+  margin-inline-start: 0;
+}
+
+.is-reading .topbar-actions .button {
+  min-width: max-content;
 }
 
 .workspace--reading .editor-pane,
@@ -3407,15 +3474,10 @@ button {
   .workspace--reading {
     min-height: calc(100dvh - 158px);
     display: block;
-    padding: 14px 10px 24px;
+    padding: 72px 10px 24px;
   }
 
-  .workspace--reading.reading-outline-is-collapsed {
-    padding-inline-end: 58px;
-  }
-
-  .reading-outline,
-  .reading-outline.is-collapsed {
+  .reading-outline {
     position: fixed;
     z-index: 16;
     top: 58px;
@@ -3428,16 +3490,44 @@ button {
     border-block: 0;
     border-inline-end: 0;
     box-shadow: -16px 0 34px rgba(23, 27, 24, 0.18);
+    transition:
+      top 180ms var(--ease-paper),
+      height 180ms var(--ease-paper);
   }
 
-  .reading-outline.is-collapsed {
-    width: 48px;
-    box-shadow: none;
+  .reading-header-is-hidden .reading-outline {
+    top: 0;
+    height: 100dvh;
   }
 
   .reading-outline-toggle {
     width: 44px;
     height: 44px;
+  }
+
+  .is-reading .topbar {
+    min-height: 58px;
+    padding: 7px 10px;
+  }
+
+  .is-reading .reading-header-document {
+    max-width: calc(100vw - 66px);
+    gap: 7px;
+  }
+
+  .reading-header-document > strong {
+    font-size: 12px;
+  }
+
+  .reading-header-outline-toggle {
+    width: 40px;
+    min-height: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .reading-header-outline-toggle span {
+    display: none;
   }
 
   .workspace--reading .preview-pane {

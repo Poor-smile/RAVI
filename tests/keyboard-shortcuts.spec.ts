@@ -287,6 +287,21 @@ test.describe("Electron keyboard integration", () => {
       });
       await readingModeButton.click();
 
+      const readingHeader = window.locator(".reading-topbar");
+      const readingFileName = readingHeader.locator(
+        ".reading-header-document strong",
+      );
+      const backToDesk = readingHeader.getByRole("button", {
+        name: /بازگشت به میز/,
+      });
+      await expect(readingFileName).toHaveText("راهنمای-راوی.md");
+      await expect(backToDesk).toBeVisible();
+      const readingFileNameBox = await readingFileName.boundingBox();
+      const backToDeskBox = await backToDesk.boundingBox();
+      expect(readingFileNameBox).not.toBeNull();
+      expect(backToDeskBox).not.toBeNull();
+      expect(backToDeskBox!.x).toBeLessThan(readingFileNameBox!.x);
+
       const readingOutline = window.getByRole("complementary", {
         name: "فهرست فصل‌های سند",
         exact: true,
@@ -314,16 +329,52 @@ test.describe("Electron keyboard integration", () => {
         "جمع‌کردن فهرست فصل‌ها",
       );
       await readingOutlineToggle.click();
-      await expect(readingOutline).toHaveClass(/is-collapsed/);
-      await expect(readingOutlineToggle).toHaveAttribute(
+      await expect(readingOutline).toHaveCount(0);
+      const headerOutlineToggle = readingHeader.getByRole("button", {
+        name: "بازکردن فهرست فصل‌ها",
+        exact: true,
+      });
+      await expect(headerOutlineToggle).toHaveAttribute(
         "aria-label",
         "بازکردن فهرست فصل‌ها",
       );
       await expect(secondChapter).toBeHidden();
 
-      await readingOutlineToggle.click();
-      await expect(readingOutline).toHaveClass(/is-open/);
+      await headerOutlineToggle.click();
+      await expect(readingOutline).toBeVisible();
       await expect(secondChapter).toBeVisible();
+
+      const readingWorkspace = window.locator(".workspace--reading");
+      await readingWorkspace.evaluate(
+        (node: HTMLElement) =>
+          new Promise<void>((resolve) => {
+            node.scrollTop = 0;
+            node.dispatchEvent(new Event("scroll"));
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
+      await expect(readingHeader).toHaveClass(/is-visible/);
+      await readingWorkspace.evaluate(
+        (node: HTMLElement) =>
+          new Promise<void>((resolve) => {
+            node.scrollTop = Math.min(
+              260,
+              node.scrollHeight - node.clientHeight,
+            );
+            node.dispatchEvent(new Event("scroll"));
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
+      await expect(readingHeader).toHaveClass(/is-concealed/);
+      await readingWorkspace.evaluate(
+        (node: HTMLElement) =>
+          new Promise<void>((resolve) => {
+            node.scrollTop = Math.max(0, node.scrollTop - 80);
+            node.dispatchEvent(new Event("scroll"));
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
+      await expect(readingHeader).toHaveClass(/is-visible/);
       await topbar.getByRole("button", { name: /بازگشت به میز/ }).click();
 
       const dispatchShortcut = async ({

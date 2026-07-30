@@ -782,6 +782,7 @@ export default function Home() {
   const [commandEnvironment, setCommandEnvironment] =
     useState<CommandEnvironment>(() => detectCommandEnvironment());
   const [readingMode, setReadingMode] = useState(false);
+  const [readingHeaderVisible, setReadingHeaderVisible] = useState(true);
   const [readingOutlineOpen, setReadingOutlineOpen] = useState(true);
   const [activeReadingHeadingIndex, setActiveReadingHeadingIndex] =
     useState(-1);
@@ -839,7 +840,9 @@ export default function Home() {
   const openedDocumentRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const annotationHoverFrameRef = useRef<number | null>(null);
+  const readingHeaderFrameRef = useRef<number | null>(null);
   const readingOutlineFrameRef = useRef<number | null>(null);
+  const readingLastScrollTopRef = useRef(0);
   const scrollSyncFrameRef = useRef<number | null>(null);
   const scrollSyncTargetRef = useRef<{
     pane: ScrollPane;
@@ -989,6 +992,56 @@ export default function Home() {
     if (!readingMode) return;
 
     const scrollRoot = workspaceRef.current;
+    if (!scrollRoot) return;
+
+    const currentScrollTop = () =>
+      Math.max(scrollRoot.scrollTop, window.scrollY);
+
+    readingLastScrollTopRef.current = currentScrollTop();
+
+    const updateHeaderVisibility = () => {
+      readingHeaderFrameRef.current = null;
+      const nextScrollTop = currentScrollTop();
+      const previousScrollTop = readingLastScrollTopRef.current;
+      const delta = nextScrollTop - previousScrollTop;
+
+      if (nextScrollTop <= 24 || delta <= -4) {
+        setReadingHeaderVisible(true);
+      } else if (nextScrollTop >= 88 && delta >= 4) {
+        setReadingHeaderVisible(false);
+      }
+
+      readingLastScrollTopRef.current = nextScrollTop;
+    };
+
+    const scheduleHeaderUpdate = () => {
+      if (readingHeaderFrameRef.current !== null) return;
+      readingHeaderFrameRef.current = window.requestAnimationFrame(
+        updateHeaderVisibility,
+      );
+    };
+
+    scrollRoot.addEventListener("scroll", scheduleHeaderUpdate, {
+      passive: true,
+    });
+    window.addEventListener("scroll", scheduleHeaderUpdate, {
+      passive: true,
+    });
+
+    return () => {
+      scrollRoot.removeEventListener("scroll", scheduleHeaderUpdate);
+      window.removeEventListener("scroll", scheduleHeaderUpdate);
+      if (readingHeaderFrameRef.current !== null) {
+        window.cancelAnimationFrame(readingHeaderFrameRef.current);
+        readingHeaderFrameRef.current = null;
+      }
+    };
+  }, [readingMode]);
+
+  useEffect(() => {
+    if (!readingMode) return;
+
+    const scrollRoot = workspaceRef.current;
     const article = previewArticleRef.current;
     if (!scrollRoot || !article) return;
 
@@ -1123,6 +1176,7 @@ export default function Home() {
       setActiveLibraryPath("");
       setMobilePane("preview");
       setReadingMode(Boolean(document.openInReadingMode));
+      setReadingHeaderVisible(true);
       setShortcutHelpOpen(false);
       setSaveModalOpen(false);
       if (document.openInReadingMode) {
@@ -2388,6 +2442,7 @@ export default function Home() {
 
   const leaveReadingMode = () => {
     setReadingMode(false);
+    setReadingHeaderVisible(true);
     if (!window.matchMedia("(max-width: 820px)").matches) {
       setLibraryOpen(true);
     }
@@ -2409,6 +2464,7 @@ export default function Home() {
         ? document.activeElement
         : null;
     setReadingMode(true);
+    setReadingHeaderVisible(true);
     setLibraryOpen(false);
     setMobilePane("preview");
     requestAnimationFrame(() => previewArticleRef.current?.focus());
@@ -2631,9 +2687,21 @@ export default function Home() {
   });
 
   return (
-    <div className={`app-shell ${readingMode ? "is-reading" : ""}`}>
+    <div
+      className={`app-shell ${readingMode ? "is-reading" : ""} ${
+        readingMode && !readingHeaderVisible
+          ? "reading-header-is-hidden"
+          : ""
+      }`}
+    >
       <header
-        className="topbar"
+        className={`topbar ${
+          readingMode
+            ? readingHeaderVisible
+              ? "reading-topbar is-visible"
+              : "reading-topbar is-concealed"
+            : ""
+        }`}
         inert={
           saveModalOpen ||
           shortcutHelpOpen ||
@@ -2651,6 +2719,35 @@ export default function Home() {
             <small>میز Markdown فارسی</small>
           </span>
         </div>
+
+        {readingMode && (
+          <div
+            className="reading-header-document"
+            aria-label={`سند در حال مطالعه: ${fileName}`}
+          >
+            <FileText size={18} aria-hidden="true" />
+            <strong dir="auto" title={fileName}>
+              {fileName}
+            </strong>
+            {!readingOutlineOpen && (
+              <button
+                className="reading-header-outline-toggle"
+                type="button"
+                onClick={() => {
+                  setReadingOutlineOpen(true);
+                  setReadingHeaderVisible(true);
+                }}
+                aria-controls="reading-outline-navigation"
+                aria-expanded={false}
+                aria-label="بازکردن فهرست فصل‌ها"
+                title="بازکردن فهرست فصل‌ها"
+              >
+                <PanelRightOpen size={18} aria-hidden="true" />
+                <span>فهرست</span>
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="topbar-actions">
           <span className="local-note">
@@ -2880,99 +2977,82 @@ export default function Home() {
           </div>
         )}
 
-        {readingMode && (
+        {readingMode && readingOutlineOpen && (
           <aside
-            className={`reading-outline ${
-              readingOutlineOpen ? "is-open" : "is-collapsed"
-            }`}
+            className="reading-outline is-open"
             aria-label="فهرست فصل‌های سند"
           >
             <div className="reading-outline-header">
-              {readingOutlineOpen && (
-                <div className="reading-outline-title">
-                  <ListTree size={18} aria-hidden="true" />
-                  <span>
-                    <strong>فصل‌ها</strong>
-                    <small>
-                      {readingHeadings.length.toLocaleString("fa-IR")} بخش
-                    </small>
-                  </span>
-                </div>
-              )}
+              <div className="reading-outline-title">
+                <ListTree size={18} aria-hidden="true" />
+                <span>
+                  <strong>فصل‌ها</strong>
+                  <small>
+                    {readingHeadings.length.toLocaleString("fa-IR")} بخش
+                  </small>
+                </span>
+              </div>
               <button
                 className="reading-outline-toggle"
                 type="button"
-                onClick={() =>
-                  setReadingOutlineOpen((current) => !current)
-                }
+                onClick={() => {
+                  setReadingOutlineOpen(false);
+                  setReadingHeaderVisible(true);
+                }}
                 aria-controls="reading-outline-navigation"
-                aria-expanded={readingOutlineOpen}
-                aria-label={
-                  readingOutlineOpen
-                    ? "جمع‌کردن فهرست فصل‌ها"
-                    : "بازکردن فهرست فصل‌ها"
-                }
-                title={
-                  readingOutlineOpen
-                    ? "جمع‌کردن فهرست فصل‌ها"
-                    : "بازکردن فهرست فصل‌ها"
-                }
+                aria-expanded={true}
+                aria-label="جمع‌کردن فهرست فصل‌ها"
+                title="جمع‌کردن فهرست فصل‌ها"
               >
-                {readingOutlineOpen ? (
-                  <PanelRightClose size={18} aria-hidden="true" />
-                ) : (
-                  <PanelRightOpen size={18} aria-hidden="true" />
-                )}
+                <PanelRightClose size={18} aria-hidden="true" />
               </button>
             </div>
 
-            {readingOutlineOpen && (
-              <nav
-                className="reading-outline-navigation"
-                id="reading-outline-navigation"
-                aria-label="فصل‌های متن"
-              >
-                {readingHeadings.length ? (
-                  <ol>
-                    {readingHeadings.map((heading) => (
-                      <li
-                        className={`is-level-${heading.level}`}
-                        key={`${heading.documentIndex}-${heading.text}`}
+            <nav
+              className="reading-outline-navigation"
+              id="reading-outline-navigation"
+              aria-label="فصل‌های متن"
+            >
+              {readingHeadings.length ? (
+                <ol>
+                  {readingHeadings.map((heading) => (
+                    <li
+                      className={`is-level-${heading.level}`}
+                      key={`${heading.documentIndex}-${heading.text}`}
+                    >
+                      <button
+                        type="button"
+                        dir="auto"
+                        className={
+                          activeReadingHeadingIndex === heading.documentIndex
+                            ? "is-active"
+                            : ""
+                        }
+                        onClick={() =>
+                          focusReadingHeading(heading.documentIndex)
+                        }
+                        aria-current={
+                          activeReadingHeadingIndex === heading.documentIndex
+                            ? "location"
+                            : undefined
+                        }
+                        title={heading.text}
                       >
-                        <button
-                          type="button"
-                          dir="auto"
-                          className={
-                            activeReadingHeadingIndex === heading.documentIndex
-                              ? "is-active"
-                              : ""
-                          }
-                          onClick={() =>
-                            focusReadingHeading(heading.documentIndex)
-                          }
-                          aria-current={
-                            activeReadingHeadingIndex === heading.documentIndex
-                              ? "location"
-                              : undefined
-                          }
-                          title={heading.text}
-                        >
-                          {heading.text}
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <div className="reading-outline-empty">
-                    <ListTree size={24} aria-hidden="true" />
-                    <strong>فصلی پیدا نشد</strong>
-                    <span>
-                      برای ساخت فهرست، در متن از تیترهای Markdown استفاده کنید.
-                    </span>
-                  </div>
-                )}
-              </nav>
-            )}
+                        {heading.text}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <div className="reading-outline-empty">
+                  <ListTree size={24} aria-hidden="true" />
+                  <strong>فصلی پیدا نشد</strong>
+                  <span>
+                    برای ساخت فهرست، در متن از تیترهای Markdown استفاده کنید.
+                  </span>
+                </div>
+              )}
+            </nav>
           </aside>
         )}
 
