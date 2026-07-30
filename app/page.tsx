@@ -34,10 +34,12 @@ import {
   MessageCircle,
   MessageSquareText,
   Minus,
+  Moon,
   NotebookPen,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Pin,
   Plus,
   Quote,
   RefreshCw,
@@ -46,6 +48,7 @@ import {
   Search,
   Send,
   ShieldCheck,
+  Sun,
   Trash2,
   Upload,
   X,
@@ -91,6 +94,8 @@ import {
 } from "./raavi";
 
 const STORAGE_KEY = "raavi:document:v1";
+const THEME_STORAGE_KEY = "raavi:theme:v1";
+const PINNED_LIBRARY_STORAGE_KEY = "raavi:library-pins:v1";
 const DEFAULT_FILE_NAME = "راهنمای-راوی.md";
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const MAX_LOCAL_VERSIONS = 10;
@@ -149,6 +154,7 @@ const SAMPLE_MARKDOWN = [
   "| :--- | :---: |",
   "| پیش‌نمایش زنده | ✓ |",
   "| قفل اسکرول دوطرفه | ✓ |",
+  "| تم روشن و تاریک | ✓ |",
   "| فهرست فصل‌های حالت مطالعه | ✓ |",
   "| جدول و چک‌لیست | ✓ |",
   "| ذخیره‌ی محلی | ✓ |",
@@ -175,6 +181,8 @@ type ReadingHeading = {
   text: string;
 };
 type TextDirection = "ltr" | "rtl";
+type ThemeMode = "light" | "dark";
+type ThemeTransition = "to-dark" | "to-light" | null;
 
 type LocalFileHandle = {
   kind: "file";
@@ -593,6 +601,72 @@ function buildLibraryTree(files: LibraryFile[]): LibraryFolderNode {
   return root;
 }
 
+function libraryPinKey(file: LibraryFile) {
+  return `${file.rootId}::${file.path}`;
+}
+
+function LibraryFileRow({
+  file,
+  activePath,
+  isPinned,
+  onOpenFile,
+  onTogglePin,
+  indent = 0,
+  placement = "tree",
+}: {
+  file: LibraryFile;
+  activePath: string;
+  isPinned: boolean;
+  onOpenFile: (file: LibraryFile) => void;
+  onTogglePin: (file: LibraryFile) => void;
+  indent?: number;
+  placement?: "tree" | "pinned";
+}) {
+  const pinLabel = isPinned
+    ? `برداشتن «${file.name}» از سنجاق‌شده‌ها`
+    : `سنجاق‌کردن «${file.name}»`;
+
+  return (
+    <div
+      className={`library-file-row is-${placement} ${
+        isPinned ? "is-pinned" : ""
+      }`}
+    >
+      <button
+        className={`library-file ${
+          activePath === file.path ? "is-active" : ""
+        }`}
+        type="button"
+        onClick={() => onOpenFile(file)}
+        title={file.path}
+        style={
+          {
+            "--tree-indent": `${indent}px`,
+          } as React.CSSProperties
+        }
+        aria-pressed={activePath === file.path}
+      >
+        {file.documentType === "ravi" ? (
+          <FileArchive size={15} aria-hidden="true" />
+        ) : (
+          <FileText size={15} aria-hidden="true" />
+        )}
+        <span dir="auto">{file.name}</span>
+      </button>
+      <button
+        className={`library-pin-action ${isPinned ? "is-pinned" : ""}`}
+        type="button"
+        onClick={() => onTogglePin(file)}
+        aria-label={pinLabel}
+        aria-pressed={isPinned}
+        title={isPinned ? "برداشتن سنجاق" : "سنجاق‌کردن"}
+      >
+        <Pin size={14} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 async function scanMarkdownDirectory(
   directory: LocalDirectoryHandle,
   rootId: string,
@@ -667,13 +741,17 @@ async function scanMarkdownDirectory(
 function LibraryBranch({
   node,
   activePath,
+  pinnedKeys,
   onOpenFile,
+  onTogglePin,
   depth = 0,
   isRoot = false,
 }: {
   node: LibraryFolderNode;
   activePath: string;
+  pinnedKeys: ReadonlySet<string>;
   onOpenFile: (file: LibraryFile) => void;
+  onTogglePin: (file: LibraryFile) => void;
   depth?: number;
   isRoot?: boolean;
 }) {
@@ -691,33 +769,22 @@ function LibraryBranch({
           key={folder.path}
           node={folder}
           activePath={activePath}
+          pinnedKeys={pinnedKeys}
           onOpenFile={onOpenFile}
+          onTogglePin={onTogglePin}
           depth={isRoot ? 0 : depth + 1}
         />
       ))}
       {files.map((file) => (
         <li key={file.id}>
-          <button
-            className={`library-file ${
-              activePath === file.path ? "is-active" : ""
-            }`}
-            type="button"
-            onClick={() => onOpenFile(file)}
-            title={file.path}
-            style={
-              {
-                "--tree-indent": `${(isRoot ? 0 : depth + 1) * 15}px`,
-              } as React.CSSProperties
-            }
-            aria-pressed={activePath === file.path}
-          >
-            {file.documentType === "ravi" ? (
-              <FileArchive size={15} aria-hidden="true" />
-            ) : (
-              <FileText size={15} aria-hidden="true" />
-            )}
-            <span dir="auto">{file.name}</span>
-          </button>
+          <LibraryFileRow
+            file={file}
+            activePath={activePath}
+            isPinned={pinnedKeys.has(libraryPinKey(file))}
+            onOpenFile={onOpenFile}
+            onTogglePin={onTogglePin}
+            indent={(isRoot ? 0 : depth + 1) * 15}
+          />
         </li>
       ))}
     </>
@@ -779,6 +846,9 @@ export default function Home() {
     saveNameForType(DEFAULT_FILE_NAME, "ravi"),
   );
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>("light");
+  const [themeTransition, setThemeTransition] =
+    useState<ThemeTransition>(null);
   const [commandEnvironment, setCommandEnvironment] =
     useState<CommandEnvironment>(() => detectCommandEnvironment());
   const [readingMode, setReadingMode] = useState(false);
@@ -801,6 +871,8 @@ export default function Home() {
   const [libraryFiles, setLibraryFiles] = useState<LibraryFile[]>([]);
   const [libraryFolders, setLibraryFolders] = useState<LibraryFolder[]>([]);
   const [recentFiles, setRecentFiles] = useState<DesktopRecentFile[]>([]);
+  const [pinnedLibraryKeys, setPinnedLibraryKeys] = useState<string[]>([]);
+  const [pinnedLibraryHydrated, setPinnedLibraryHydrated] = useState(false);
   const [libraryQuery, setLibraryQuery] = useState("");
   const [activeLibraryPath, setActiveLibraryPath] = useState("");
   const [openingLibraryPath, setOpeningLibraryPath] = useState("");
@@ -839,6 +911,10 @@ export default function Home() {
   const saveModalRef = useRef<HTMLDivElement>(null);
   const openedDocumentRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const themeCommitTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+  const themeFinishTimerRef =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
   const annotationHoverFrameRef = useRef<number | null>(null);
   const readingHeaderFrameRef = useRef<number | null>(null);
   const readingOutlineFrameRef = useRef<number | null>(null);
@@ -866,6 +942,64 @@ export default function Home() {
     (children: ReactNode) =>
       detectBlockTextDirection(children, documentTextDirection),
     [documentTextDirection],
+  );
+
+  const commitTheme = useCallback((nextTheme: ThemeMode) => {
+    setThemeMode(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    document.documentElement.style.colorScheme = nextTheme;
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    } catch {
+      // The theme still applies for this session when storage is unavailable.
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    if (themeTransition) return;
+
+    const nextTheme: ThemeMode =
+      themeMode === "light" ? "dark" : "light";
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      commitTheme(nextTheme);
+      return;
+    }
+
+    document.documentElement.classList.add("theme-is-changing");
+    setThemeTransition(nextTheme === "dark" ? "to-dark" : "to-light");
+    themeCommitTimerRef.current = window.setTimeout(
+      () => commitTheme(nextTheme),
+      170,
+    );
+    themeFinishTimerRef.current = window.setTimeout(
+      () => {
+        document.documentElement.classList.remove("theme-is-changing");
+        setThemeTransition(null);
+      },
+      520,
+    );
+  }, [commitTheme, themeMode, themeTransition]);
+
+  useEffect(() => {
+    const initialTheme =
+      document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    const frame = window.requestAnimationFrame(() =>
+      setThemeMode(initialTheme),
+    );
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (themeCommitTimerRef.current) {
+        window.clearTimeout(themeCommitTimerRef.current);
+      }
+      if (themeFinishTimerRef.current) {
+        window.clearTimeout(themeFinishTimerRef.current);
+      }
+      document.documentElement.classList.remove("theme-is-changing");
+    },
+    [],
   );
 
   const alignScrollPanes = useCallback((sourcePane: ScrollPane) => {
@@ -1145,6 +1279,60 @@ export default function Home() {
     () => buildLibraryTree(visibleLibraryFiles),
     [visibleLibraryFiles],
   );
+  const pinnedLibraryKeySet = useMemo(
+    () => new Set(pinnedLibraryKeys),
+    [pinnedLibraryKeys],
+  );
+  const pinnedLibraryFiles = useMemo(() => {
+    const filesByPinKey = new Map(
+      libraryFiles.map((file) => [libraryPinKey(file), file]),
+    );
+    return pinnedLibraryKeys
+      .map((key) => filesByPinKey.get(key))
+      .filter((file): file is LibraryFile => Boolean(file));
+  }, [libraryFiles, pinnedLibraryKeys]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const savedPins = window.localStorage.getItem(
+          PINNED_LIBRARY_STORAGE_KEY,
+        );
+        if (savedPins) {
+          const parsed = JSON.parse(savedPins) as unknown;
+          if (Array.isArray(parsed)) {
+            setPinnedLibraryKeys(
+              Array.from(
+                new Set(parsed.filter((key): key is string => typeof key === "string")),
+              ).slice(0, 500),
+            );
+          }
+        }
+      } catch {
+        // A fresh pin list is safer than blocking access to the library.
+      } finally {
+        setPinnedLibraryHydrated(true);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!pinnedLibraryHydrated) return;
+    const timer = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          PINNED_LIBRARY_STORAGE_KEY,
+          JSON.stringify(pinnedLibraryKeys),
+        );
+      } catch {
+        setError(
+          "سنجاق‌ها روی این دستگاه ذخیره نشدند؛ فضای ذخیره‌سازی مرورگر را بررسی کنید.",
+        );
+      }
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [pinnedLibraryHydrated, pinnedLibraryKeys]);
 
   const showNotice = useCallback((message: string) => {
     setNotice(message);
@@ -1153,6 +1341,27 @@ export default function Home() {
     }
     noticeTimerRef.current = setTimeout(() => setNotice(""), 2400);
   }, []);
+
+  const togglePinnedLibraryFile = useCallback(
+    (file: LibraryFile) => {
+      const key = libraryPinKey(file);
+      const isPinned = pinnedLibraryKeySet.has(key);
+      setPinnedLibraryKeys((current) =>
+        isPinned
+          ? current.filter((currentKey) => currentKey !== key)
+          : [key, ...current.filter((currentKey) => currentKey !== key)].slice(
+              0,
+              500,
+            ),
+      );
+      showNotice(
+        isPinned
+          ? `«${file.name}» از سنجاق‌شده‌ها برداشته شد.`
+          : `«${file.name}» به سنجاق‌شده‌ها اضافه شد.`,
+      );
+    },
+    [pinnedLibraryKeySet, showNotice],
+  );
 
   const applyOpenedDocument = useCallback(
     (document: DesktopOpenedDocument, message?: string) => {
@@ -1403,21 +1612,21 @@ export default function Home() {
     style.dataset.raaviHighlights = "true";
     style.textContent = `
       ::highlight(raavi-highlight) {
-        background: #f8e69d;
+        background: var(--highlight-bg);
       }
       ::highlight(raavi-comment) {
-        background: #dce6ff;
-        text-decoration: underline #2557e5 1.5px;
+        background: var(--comment-highlight-bg);
+        text-decoration: underline var(--proof-blue) 1.5px;
         text-underline-offset: 3px;
       }
       ::highlight(raavi-margin) {
-        background: #f3d9d1;
-        text-decoration: underline #a34f39 1.5px dashed;
+        background: var(--margin-highlight-bg);
+        text-decoration: underline var(--margin-ink) 1.5px dashed;
         text-underline-offset: 3px;
       }
       ::highlight(raavi-active) {
         background: transparent;
-        text-decoration: underline #1742bd 2.5px;
+        text-decoration: underline var(--proof-blue-dark) 2.5px;
         text-underline-offset: 4px;
       }
     `;
@@ -2593,6 +2802,7 @@ export default function Home() {
     "edit.link": () =>
       insertInline("[", "](https://example.com)", "عنوان پیوند"),
     "edit.quote": insertQuote,
+    "view.theme": toggleTheme,
     "view.reading": toggleReadingMode,
     "focus.editor": focusEditor,
     "focus.preview": focusPreview,
@@ -2626,6 +2836,8 @@ export default function Home() {
     switch (id) {
       case "help.shortcuts":
         return true;
+      case "view.theme":
+        return !themeTransition;
       case "layer.dismiss":
         if (
           topLayer !== "library" &&
@@ -2710,14 +2922,55 @@ export default function Home() {
             : undefined
         }
       >
-        <div className="brand" aria-label="راوی، ویور Markdown فارسی">
-          <span className="brand-mark" aria-hidden="true">
-            ر
-          </span>
-          <span className="brand-copy">
-            <strong>راوی</strong>
-            <small>میز Markdown فارسی</small>
-          </span>
+        {themeTransition && (
+          <div
+            className={`theme-transition-overlay ${themeTransition}`}
+            aria-hidden="true"
+          />
+        )}
+        <div className="brand-cluster">
+          <div className="brand" aria-label="راوی، ویور Markdown فارسی">
+            <span className="brand-mark" aria-hidden="true">
+              ر
+            </span>
+            <span className="brand-copy">
+              <strong>راوی</strong>
+              <small>میز Markdown فارسی</small>
+            </span>
+          </div>
+          <button
+            className={`theme-toggle is-${themeMode}`}
+            type="button"
+            onClick={toggleTheme}
+            disabled={Boolean(themeTransition)}
+            aria-label={
+              themeMode === "light"
+                ? "فعال‌کردن تم تاریک"
+                : "فعال‌کردن تم روشن"
+            }
+            aria-pressed={themeMode === "dark"}
+            aria-keyshortcuts={commandAriaKeyShortcuts(
+              "view.theme",
+              commandEnvironment,
+            )}
+            title={commandTitle(
+              "view.theme",
+              commandEnvironment,
+              themeMode === "light" ? "تم تاریک" : "تم روشن",
+            )}
+          >
+            <Sun
+              className="theme-toggle-sun"
+              size={14}
+              aria-hidden="true"
+            />
+            <Moon
+              className="theme-toggle-moon"
+              size={13}
+              aria-hidden="true"
+            />
+            <span className="theme-toggle-thumb" aria-hidden="true" />
+          </button>
         </div>
 
         {readingMode && (
@@ -3865,6 +4118,45 @@ export default function Home() {
                 hidden={libraryTab !== "library"}
               >
               <section
+                className="library-section library-pinned-section"
+                aria-labelledby="pinned-files-title"
+              >
+                <div className="library-section-title">
+                  <span>
+                    <Pin size={15} aria-hidden="true" />
+                    <strong id="pinned-files-title">سنجاق‌شده‌ها</strong>
+                  </span>
+                  <small>
+                    {pinnedLibraryFiles.length.toLocaleString("fa-IR")}
+                  </small>
+                </div>
+                {pinnedLibraryFiles.length > 0 ? (
+                  <ul className="library-pinned-list">
+                    {pinnedLibraryFiles.map((file) => (
+                      <li key={libraryPinKey(file)}>
+                        <LibraryFileRow
+                          file={file}
+                          activePath={activeLibraryPath}
+                          isPinned
+                          onOpenFile={(selectedFile) =>
+                            void openLibraryFile(selectedFile)
+                          }
+                          onTogglePin={togglePinnedLibraryFile}
+                          placement="pinned"
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="library-pinned-empty">
+                    {pinnedLibraryKeys.length > 0
+                      ? "پوشهٔ فایل‌های سنجاق‌شده را دوباره متصل کنید."
+                      : "فایل‌های مهم را با آیکن سنجاق اینجا نگه دارید."}
+                  </p>
+                )}
+              </section>
+
+              <section
                 className="library-section library-folders-section"
                 aria-labelledby="folders-title"
               >
@@ -3960,7 +4252,9 @@ export default function Home() {
                   <LibraryBranch
                     node={libraryTree}
                     activePath={activeLibraryPath}
+                    pinnedKeys={pinnedLibraryKeySet}
                     onOpenFile={(file) => void openLibraryFile(file)}
+                    onTogglePin={togglePinnedLibraryFile}
                     isRoot
                   />
                 ) : (

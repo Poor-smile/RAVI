@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { _electron as electron } from "playwright";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,6 +72,21 @@ test.describe("command resolver", () => {
 
     expect(resolveOnly("file.save", english)).toBe("file.save");
     expect(resolveOnly("file.save", persian)).toBe("file.save");
+  });
+
+  test("toggles the theme from the same physical key in Persian and English", () => {
+    expect(
+      resolveOnly(
+        "view.theme",
+        keyboardEvent("KeyT", { key: "t", altKey: true }),
+      ),
+    ).toBe("view.theme");
+    expect(
+      resolveOnly(
+        "view.theme",
+        keyboardEvent("KeyT", { key: "ف", altKey: true }),
+      ),
+    ).toBe("view.theme");
   });
 
   test("requires exact modifiers and ignores IME composition", () => {
@@ -191,6 +206,20 @@ test.describe("Electron keyboard integration", () => {
     const userDataPath = await mkdtemp(
       path.join(os.tmpdir(), "raavi-playwright-"),
     );
+    const libraryFixturePath = path.join(userDataPath, "pin-library");
+    await mkdir(libraryFixturePath);
+    await Promise.all([
+      writeFile(
+        path.join(libraryFixturePath, "pinned-reference.md"),
+        "# Pinned reference",
+        "utf8",
+      ),
+      writeFile(
+        path.join(libraryFixturePath, "ordinary-note.md"),
+        "# Ordinary note",
+        "utf8",
+      ),
+    ]);
     const app = await electron.launch({
       cwd: projectRoot,
       args: [
@@ -340,6 +369,18 @@ test.describe("Electron keyboard integration", () => {
       );
       await expect(secondChapter).toBeHidden();
 
+      const readingWorkspaceForOutline = window.locator(
+        ".workspace--reading",
+      );
+      await readingWorkspaceForOutline.evaluate(
+        (node: HTMLElement) =>
+          new Promise<void>((resolve) => {
+            node.scrollTop = Math.max(0, node.scrollTop - 80);
+            node.dispatchEvent(new Event("scroll"));
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
+      await expect(readingHeader).toHaveClass(/is-visible/);
       await headerOutlineToggle.click();
       await expect(readingOutline).toBeVisible();
       await expect(secondChapter).toBeVisible();
@@ -407,6 +448,134 @@ test.describe("Electron keyboard integration", () => {
           { code, key, ctrlKey, altKey, shiftKey },
         );
 
+      const themeToggle = topbar.locator(".theme-toggle");
+      const documentRoot = window.locator("html");
+      await expect(themeToggle).toBeVisible();
+      await expect(themeToggle).toHaveAttribute("aria-keyshortcuts", "Alt+T");
+
+      if ((await documentRoot.getAttribute("data-theme")) === "dark") {
+        await themeToggle.click();
+        await expect(documentRoot).toHaveAttribute("data-theme", "light");
+        await expect(window.locator(".theme-transition-overlay")).toHaveCount(
+          0,
+        );
+      }
+
+      const persianThemeShortcut = await dispatchShortcut({
+        code: "KeyT",
+        key: "ف",
+        altKey: true,
+      });
+      expect(persianThemeShortcut).toEqual({
+        defaultPrevented: true,
+        notCanceled: false,
+      });
+      await expect(window.locator(".theme-transition-overlay")).toBeVisible();
+      await expect(documentRoot).toHaveAttribute("data-theme", "dark");
+      await expect(themeToggle).toHaveAttribute(
+        "aria-label",
+        "فعال‌کردن تم روشن",
+      );
+      await expect(window.locator(".theme-transition-overlay")).toHaveCount(0);
+
+      const measureThemeContrast = () =>
+        window.evaluate(() => {
+          const luminance = (color: string) => {
+            const channels =
+              color.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [];
+            const linear = channels.map((channel) => {
+              const value = channel / 255;
+              return value <= 0.04045
+                ? value / 12.92
+                : ((value + 0.055) / 1.055) ** 2.4;
+            });
+            return (
+              0.2126 * linear[0] +
+              0.7152 * linear[1] +
+              0.0722 * linear[2]
+            );
+          };
+          const ratio = (foreground: string, background: string) => {
+            const foregroundLuminance = luminance(foreground);
+            const backgroundLuminance = luminance(background);
+            return (
+              (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+              (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+            );
+          };
+          const elementPairs = [
+            [".topbar", ".topbar"],
+            [".library-panel", ".library-panel"],
+            ["#markdown-editor", "#markdown-editor"],
+            [".markdown-body", ".preview-scroll"],
+            [".button--primary", ".button--primary"],
+          ];
+          const elementResults = elementPairs.map(
+            ([foregroundSelector, backgroundSelector]) => {
+              const foreground = getComputedStyle(
+                document.querySelector(foregroundSelector)!,
+              ).color;
+              const background = getComputedStyle(
+                document.querySelector(backgroundSelector)!,
+              ).backgroundColor;
+              return {
+                pair: `${foregroundSelector}/${backgroundSelector}`,
+                ratio: ratio(foreground, background),
+              };
+            },
+          );
+
+          const tokenPairs = [
+            ["--ink-950", "--paper-50"],
+            ["--ink-700", "--paper-50"],
+            ["--ink-500", "--paper-50"],
+            ["--ink-700", "--paper-100"],
+            ["--chrome-fg", "--chrome-950"],
+            ["--chrome-muted", "--chrome-950"],
+            ["--on-accent", "--proof-blue"],
+            ["--warning-text", "--warning-bg"],
+            ["--error", "--error-soft"],
+            ["--document-text", "--paper-50"],
+            ["--ink-950", "--input-bg"],
+            ["--proof-blue-dark", "--proof-blue-soft"],
+          ];
+          const rootStyle = getComputedStyle(document.documentElement);
+          const probe = document.createElement("span");
+          probe.hidden = true;
+          document.body.appendChild(probe);
+          const resolveToken = (token: string) => {
+            probe.style.color = rootStyle.getPropertyValue(token);
+            return getComputedStyle(probe).color;
+          };
+          const tokenResults = tokenPairs.map(
+            ([foregroundToken, backgroundToken]) => ({
+              pair: `${foregroundToken}/${backgroundToken}`,
+              ratio: ratio(
+                resolveToken(foregroundToken),
+                resolveToken(backgroundToken),
+              ),
+            }),
+          );
+          probe.remove();
+          return [...elementResults, ...tokenResults];
+        });
+      const darkContrast = await measureThemeContrast();
+      for (const pair of darkContrast) {
+        expect(pair.ratio, `${pair.pair} contrast`).toBeGreaterThanOrEqual(4.5);
+      }
+
+      await dispatchShortcut({ code: "KeyT", key: "t", altKey: true });
+      await expect(documentRoot).toHaveAttribute("data-theme", "light");
+      await expect(themeToggle).toHaveAttribute(
+        "aria-label",
+        "فعال‌کردن تم تاریک",
+      );
+      await expect(window.locator(".theme-transition-overlay")).toHaveCount(0);
+      const lightContrast = await measureThemeContrast();
+      for (const pair of lightContrast) {
+        expect(pair.ratio, `${pair.pair} contrast`).toBeGreaterThanOrEqual(4.5);
+      }
+
       const sidebar = window.locator("#library-panel");
       const historyTab = sidebar.getByRole("tab", {
         name: /تاریخچه/,
@@ -432,6 +601,45 @@ test.describe("Electron keyboard integration", () => {
       await expect(libraryTab).toHaveAttribute("aria-selected", "true");
       await expect(addFolderButton).toBeVisible();
 
+      const directoryInput = window.locator("input[webkitdirectory]");
+      await directoryInput.setInputFiles(libraryFixturePath);
+      await expect(sidebar.locator(".library-file")).toHaveCount(2);
+
+      const pinnedSection = sidebar.locator(".library-pinned-section");
+      const pinnedFileName = "pinned-reference.md";
+      const originalPinButton = sidebar.getByRole("button", {
+        name: `سنجاق‌کردن «${pinnedFileName}»`,
+        exact: true,
+      });
+      await originalPinButton.click();
+      await expect(
+        pinnedSection.getByText(pinnedFileName, { exact: true }),
+      ).toBeVisible();
+      await expect(
+        sidebar.getByText(pinnedFileName, { exact: true }),
+      ).toHaveCount(2);
+
+      await expect
+        .poll(() =>
+          window.evaluate(() =>
+            window.localStorage.getItem("raavi:library-pins:v1"),
+          ),
+        )
+        .toContain("pinned-reference.md");
+
+      const unpinButton = pinnedSection.getByRole("button", {
+        name: `برداشتن «${pinnedFileName}» از سنجاق‌شده‌ها`,
+        exact: true,
+      });
+      await unpinButton.click();
+      await expect(
+        pinnedSection.getByText(pinnedFileName, { exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        sidebar.getByText(pinnedFileName, { exact: true }),
+      ).toHaveCount(1);
+      await expect(originalPinButton).toHaveAttribute("aria-pressed", "false");
+
       const collapseSidebar = sidebar.getByRole("button", {
         name: "جمع‌کردن سایدبار",
         exact: true,
@@ -446,9 +654,7 @@ test.describe("Electron keyboard integration", () => {
 
       await historyTab.click();
       await editor.fill("نمونه");
-      await editor.evaluate((node: HTMLTextAreaElement) =>
-        node.setSelectionRange(0, node.value.length),
-      );
+      await editor.selectText();
       expect(
         await dispatchShortcut({
           code: "KeyB",
@@ -459,9 +665,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(editor).toHaveValue("**نمونه**");
 
       await editor.fill("sample");
-      await editor.evaluate((node: HTMLTextAreaElement) =>
-        node.setSelectionRange(0, node.value.length),
-      );
+      await editor.selectText();
       await dispatchShortcut({ code: "KeyB", key: "b", ctrlKey: true });
       await expect(editor).toHaveValue("**sample**");
 

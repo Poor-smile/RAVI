@@ -26,6 +26,7 @@ export type CommandId =
   | "edit.code"
   | "edit.link"
   | "edit.quote"
+  | "view.theme"
   | "view.reading"
   | "focus.editor"
   | "focus.preview"
@@ -165,6 +166,14 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
     allowInEditable: ["editor"],
     showInHelp: true,
     contextLabel: "فقط در ویرایشگر",
+  },
+  {
+    id: "view.theme",
+    title: "تغییر تم روشن و تاریک",
+    group: "view",
+    bindings: [{ code: "KeyT", alt: true }],
+    allowInEditable: true,
+    showInHelp: true,
   },
   {
     id: "view.reading",
