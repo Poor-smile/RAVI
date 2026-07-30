@@ -282,6 +282,50 @@ test.describe("Electron keyboard integration", () => {
       ).toBeLessThan(1);
       await scrollSyncToggle.click();
 
+      const readingModeButton = topbar.getByRole("button", {
+        name: /حالت مطالعه/,
+      });
+      await readingModeButton.click();
+
+      const readingOutline = window.getByRole("complementary", {
+        name: "فهرست فصل‌های سند",
+        exact: true,
+      });
+      await expect(readingOutline).toBeVisible();
+      await expect(
+        readingOutline.getByRole("button", {
+          name: "راهنمای راوی",
+          exact: true,
+        }),
+      ).toBeVisible();
+
+      const secondChapter = readingOutline.getByRole("button", {
+        name: "از کجا شروع کنم؟",
+        exact: true,
+      });
+      await secondChapter.click();
+      await expect(secondChapter).toHaveAttribute("aria-current", "location");
+
+      const readingOutlineToggle = readingOutline.locator(
+        ".reading-outline-toggle",
+      );
+      await expect(readingOutlineToggle).toHaveAttribute(
+        "aria-label",
+        "جمع‌کردن فهرست فصل‌ها",
+      );
+      await readingOutlineToggle.click();
+      await expect(readingOutline).toHaveClass(/is-collapsed/);
+      await expect(readingOutlineToggle).toHaveAttribute(
+        "aria-label",
+        "بازکردن فهرست فصل‌ها",
+      );
+      await expect(secondChapter).toBeHidden();
+
+      await readingOutlineToggle.click();
+      await expect(readingOutline).toHaveClass(/is-open/);
+      await expect(secondChapter).toBeVisible();
+      await topbar.getByRole("button", { name: /بازگشت به میز/ }).click();
+
       const dispatchShortcut = async ({
         code,
         key,

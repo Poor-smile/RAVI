@@ -28,6 +28,7 @@ import {
   Keyboard,
   Library,
   Link2,
+  ListTree,
   Lock,
   LockOpen,
   MessageCircle,
@@ -36,6 +37,7 @@ import {
   NotebookPen,
   PanelLeftOpen,
   PanelRightClose,
+  PanelRightOpen,
   Plus,
   Quote,
   RefreshCw,
@@ -144,6 +146,7 @@ const SAMPLE_MARKDOWN = [
   "| :--- | :---: |",
   "| پیش‌نمایش زنده | ✓ |",
   "| قفل اسکرول دوطرفه | ✓ |",
+  "| فهرست فصل‌های حالت مطالعه | ✓ |",
   "| جدول و چک‌لیست | ✓ |",
   "| ذخیره‌ی محلی | ✓ |",
   "| هایلایت، کامنت و حاشیه‌نویسی | ✓ |",
@@ -163,6 +166,11 @@ type LibraryTab = "history" | "library";
 type LibraryState = "idle" | "scanning" | "ready";
 type DocumentFileType = "markdown" | "ravi";
 type SaveFileType = DocumentFileType;
+type ReadingHeading = {
+  documentIndex: number;
+  level: number;
+  text: string;
+};
 
 type LocalFileHandle = {
   kind: "file";
@@ -314,6 +322,59 @@ type AnnotationHoverPreview = {
   y: number;
   placement: "above" | "below";
 };
+
+function plainHeadingText(value: string) {
+  return value
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/[*_~`]/g, "")
+    .trim();
+}
+
+function extractReadingHeadings(markdown: string): ReadingHeading[] {
+  const headings: ReadingHeading[] = [];
+  const lines = markdown.split(/\r?\n/u);
+  let documentIndex = 0;
+  let fenceMarker = "";
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/u);
+
+    if (fence) {
+      const marker = fence[1][0];
+      fenceMarker = fenceMarker === marker ? "" : fenceMarker || marker;
+      continue;
+    }
+
+    if (fenceMarker) continue;
+
+    const atx = line.match(/^ {0,3}(#{1,6})[ \t]+(.+?)[ \t]*$/u);
+    if (atx) {
+      const level = atx[1].length;
+      const text = plainHeadingText(
+        atx[2].replace(/[ \t]+#+[ \t]*$/u, ""),
+      );
+      if (level <= 3 && text) {
+        headings.push({ documentIndex, level, text });
+      }
+      documentIndex += 1;
+      continue;
+    }
+
+    const setext = lines[lineIndex + 1]?.match(/^ {0,3}(=+|-+)[ \t]*$/u);
+    if (line.trim() && setext) {
+      const level = setext[1][0] === "=" ? 1 : 2;
+      const text = plainHeadingText(line.trim());
+      if (text) headings.push({ documentIndex, level, text });
+      documentIndex += 1;
+      lineIndex += 1;
+    }
+  }
+
+  return headings;
+}
 
 const ANNOTATION_LABELS: Record<AnnotationKind, string> = {
   highlight: "هایلایت",
@@ -675,6 +736,9 @@ export default function Home() {
   const [commandEnvironment, setCommandEnvironment] =
     useState<CommandEnvironment>(() => detectCommandEnvironment());
   const [readingMode, setReadingMode] = useState(false);
+  const [readingOutlineOpen, setReadingOutlineOpen] = useState(true);
+  const [activeReadingHeadingIndex, setActiveReadingHeadingIndex] =
+    useState(-1);
   const [readerSize, setReaderSize] = useState(18);
   const [mobilePane, setMobilePane] = useState<MobilePane>("preview");
   const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
@@ -706,6 +770,7 @@ export default function Home() {
     useState<AnnotationHoverPreview | null>(null);
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const workspaceRef = useRef<HTMLElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
   const previewArticleRef = useRef<HTMLElement>(null);
   const librarySearchRef = useRef<HTMLInputElement>(null);
@@ -728,14 +793,22 @@ export default function Home() {
   const openedDocumentRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const annotationHoverFrameRef = useRef<number | null>(null);
+  const readingOutlineFrameRef = useRef<number | null>(null);
   const scrollSyncFrameRef = useRef<number | null>(null);
-  const scrollSyncTargetRef = useRef<ScrollPane | null>(null);
+  const scrollSyncTargetRef = useRef<{
+    pane: ScrollPane;
+    scrollTop: number;
+  } | null>(null);
   const pendingScrollSourceRef = useRef<ScrollPane | null>(null);
   const lastScrolledPaneRef = useRef<ScrollPane>("editor");
   const directoryHandlesRef = useRef(
     new Map<string, LocalDirectoryHandle>(),
   );
   const { topLayer, syncLayer } = useModalStack();
+  const readingHeadings = useMemo(
+    () => extractReadingHeadings(content),
+    [content],
+  );
 
   const alignScrollPanes = useCallback((sourcePane: ScrollPane) => {
     const source =
@@ -763,8 +836,10 @@ export default function Home() {
 
     if (Math.abs(target.scrollTop - nextScrollTop) < 1) return;
 
-    scrollSyncTargetRef.current =
-      sourcePane === "editor" ? "preview" : "editor";
+    scrollSyncTargetRef.current = {
+      pane: sourcePane === "editor" ? "preview" : "editor",
+      scrollTop: nextScrollTop,
+    };
     target.scrollTop = nextScrollTop;
   }, []);
 
@@ -773,9 +848,19 @@ export default function Home() {
       lastScrolledPaneRef.current = sourcePane;
       if (!scrollSyncEnabled) return;
 
-      if (scrollSyncTargetRef.current === sourcePane) {
+      const guardedTarget = scrollSyncTargetRef.current;
+      if (guardedTarget?.pane === sourcePane) {
+        const source =
+          sourcePane === "editor"
+            ? editorRef.current
+            : previewScrollRef.current;
         scrollSyncTargetRef.current = null;
-        return;
+        if (
+          source &&
+          Math.abs(source.scrollTop - guardedTarget.scrollTop) < 1
+        ) {
+          return;
+        }
       }
 
       pendingScrollSourceRef.current = sourcePane;
@@ -803,6 +888,23 @@ export default function Home() {
     }
   }, [alignScrollPanes, scrollSyncEnabled]);
 
+  const focusReadingHeading = useCallback((documentIndex: number) => {
+    const heading = previewArticleRef.current?.querySelectorAll<HTMLElement>(
+      "h1, h2, h3, h4, h5, h6",
+    )[documentIndex];
+    if (!heading) return;
+
+    setActiveReadingHeadingIndex(documentIndex);
+    heading.setAttribute("tabindex", "-1");
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "start",
+    });
+  }, []);
+
   useEffect(
     () => () => {
       if (scrollSyncFrameRef.current !== null) {
@@ -827,6 +929,56 @@ export default function Home() {
     readerSize,
     scrollSyncEnabled,
   ]);
+
+  useEffect(() => {
+    if (!readingMode) return;
+
+    const scrollRoot = workspaceRef.current;
+    const article = previewArticleRef.current;
+    if (!scrollRoot || !article) return;
+
+    const updateActiveHeading = () => {
+      readingOutlineFrameRef.current = null;
+      const renderedHeadings =
+        article.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6");
+      const rootRect = scrollRoot.getBoundingClientRect();
+      const threshold = rootRect.top + Math.min(150, rootRect.height * 0.2);
+      let nextIndex = readingHeadings[0]?.documentIndex ?? -1;
+
+      for (const heading of readingHeadings) {
+        const renderedHeading = renderedHeadings[heading.documentIndex];
+        if (!renderedHeading) continue;
+        if (renderedHeading.getBoundingClientRect().top <= threshold) {
+          nextIndex = heading.documentIndex;
+        } else {
+          break;
+        }
+      }
+
+      setActiveReadingHeadingIndex((current) =>
+        current === nextIndex ? current : nextIndex,
+      );
+    };
+
+    const scheduleUpdate = () => {
+      if (readingOutlineFrameRef.current !== null) return;
+      readingOutlineFrameRef.current =
+        window.requestAnimationFrame(updateActiveHeading);
+    };
+
+    scrollRoot.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    scheduleUpdate();
+
+    return () => {
+      scrollRoot.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      if (readingOutlineFrameRef.current !== null) {
+        window.cancelAnimationFrame(readingOutlineFrameRef.current);
+        readingOutlineFrameRef.current = null;
+      }
+    };
+  }, [readingHeadings, readingMode, readerSize]);
 
   const stats = useMemo(() => {
     const cleanText = content.trim();
@@ -2631,7 +2783,16 @@ export default function Home() {
         inert={saveModalOpen || shortcutHelpOpen ? true : undefined}
       >
         <main
-          className={`workspace ${readingMode ? "workspace--reading" : ""}`}
+          ref={workspaceRef}
+          className={`workspace ${
+            readingMode ? "workspace--reading" : ""
+          } ${
+            readingMode
+              ? readingOutlineOpen
+                ? "reading-outline-is-open"
+                : "reading-outline-is-collapsed"
+              : ""
+          }`}
           inert={libraryOpen && libraryIsModal ? true : undefined}
           onDragEnter={(event) => {
             event.preventDefault();
@@ -2662,6 +2823,101 @@ export default function Home() {
             <strong>فایل Markdown یا .ravi را همین‌جا رها کنید</strong>
             <span>فایل در مرورگر شما باز می‌شود</span>
           </div>
+        )}
+
+        {readingMode && (
+          <aside
+            className={`reading-outline ${
+              readingOutlineOpen ? "is-open" : "is-collapsed"
+            }`}
+            aria-label="فهرست فصل‌های سند"
+          >
+            <div className="reading-outline-header">
+              {readingOutlineOpen && (
+                <div className="reading-outline-title">
+                  <ListTree size={18} aria-hidden="true" />
+                  <span>
+                    <strong>فصل‌ها</strong>
+                    <small>
+                      {readingHeadings.length.toLocaleString("fa-IR")} بخش
+                    </small>
+                  </span>
+                </div>
+              )}
+              <button
+                className="reading-outline-toggle"
+                type="button"
+                onClick={() =>
+                  setReadingOutlineOpen((current) => !current)
+                }
+                aria-controls="reading-outline-navigation"
+                aria-expanded={readingOutlineOpen}
+                aria-label={
+                  readingOutlineOpen
+                    ? "جمع‌کردن فهرست فصل‌ها"
+                    : "بازکردن فهرست فصل‌ها"
+                }
+                title={
+                  readingOutlineOpen
+                    ? "جمع‌کردن فهرست فصل‌ها"
+                    : "بازکردن فهرست فصل‌ها"
+                }
+              >
+                {readingOutlineOpen ? (
+                  <PanelRightClose size={18} aria-hidden="true" />
+                ) : (
+                  <PanelRightOpen size={18} aria-hidden="true" />
+                )}
+              </button>
+            </div>
+
+            {readingOutlineOpen && (
+              <nav
+                className="reading-outline-navigation"
+                id="reading-outline-navigation"
+                aria-label="فصل‌های متن"
+              >
+                {readingHeadings.length ? (
+                  <ol>
+                    {readingHeadings.map((heading) => (
+                      <li
+                        className={`is-level-${heading.level}`}
+                        key={`${heading.documentIndex}-${heading.text}`}
+                      >
+                        <button
+                          type="button"
+                          className={
+                            activeReadingHeadingIndex === heading.documentIndex
+                              ? "is-active"
+                              : ""
+                          }
+                          onClick={() =>
+                            focusReadingHeading(heading.documentIndex)
+                          }
+                          aria-current={
+                            activeReadingHeadingIndex === heading.documentIndex
+                              ? "location"
+                              : undefined
+                          }
+                          title={heading.text}
+                        >
+                          {heading.text}
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className="reading-outline-empty">
+                    <ListTree size={24} aria-hidden="true" />
+                    <strong>فصلی پیدا نشد</strong>
+                    <span>
+                      برای ساخت فهرست، در متن از تیترهای Markdown استفاده کنید.
+                    </span>
+                  </div>
+                )}
+              </nav>
+            )}
+          </aside>
         )}
 
         <section

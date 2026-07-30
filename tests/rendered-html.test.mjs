@@ -100,6 +100,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /جمع‌کردن سایدبار/);
   assert.match(page, /قفل کردن اسکرول ادیتور و پیش‌نمایش/);
   assert.match(page, /باز کردن قفل اسکرول هماهنگ/);
+  assert.match(page, /فهرست فصل‌های سند/);
+  assert.match(page, /جمع‌کردن فهرست فصل‌ها/);
+  assert.match(page, /بازکردن فهرست فصل‌ها/);
   assert.match(page, /هشدار: ذخیره نشده/);
   assert.match(page, /تاریخچه‌ی نسخه‌ها/);
   assert.match(page, /بازیابی/);
