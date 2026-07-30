@@ -15,14 +15,23 @@ export type RaaviAnnotation = {
   createdAt: string;
 };
 
+export type RaaviVersion = {
+  number: number;
+  savedAt: string;
+  content: string;
+  annotations: RaaviAnnotation[];
+};
+
 export type RaaviDocument = {
   format: typeof RAVI_FORMAT;
   version: typeof RAVI_VERSION;
   document: {
     name: string;
     markdown: string;
+    revision: number;
   };
   annotations: RaaviAnnotation[];
+  versions: RaaviVersion[];
   updatedAt: string;
 };
 
@@ -78,6 +87,32 @@ function parseAnnotation(
   };
 }
 
+function parseVersion(value: unknown): RaaviVersion | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const number = Number(candidate.number);
+  if (
+    !Number.isSafeInteger(number) ||
+    number < 1 ||
+    typeof candidate.content !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    number,
+    savedAt: safeText(candidate.savedAt, 64) || new Date().toISOString(),
+    content: candidate.content,
+    annotations: Array.isArray(candidate.annotations)
+      ? candidate.annotations
+          .map(parseAnnotation)
+          .filter(
+            (annotation): annotation is RaaviAnnotation => annotation !== null,
+          )
+      : [],
+  };
+}
+
 export function parseRaaviDocument(
   rawValue: string,
   fallbackName = "نوشته-راوی.md",
@@ -115,11 +150,21 @@ export function parseRaaviDocument(
           (annotation): annotation is RaaviAnnotation => annotation !== null,
         )
     : [];
+  const revision = Number(documentValue.revision);
+  const versions = Array.isArray(candidate.versions)
+    ? candidate.versions
+        .slice(-30)
+        .map(parseVersion)
+        .filter((version): version is RaaviVersion => version !== null)
+    : [];
 
   return {
     fileName: safeFileName(documentValue.name, fallbackName),
     content: documentValue.markdown,
     annotations,
+    revision:
+      Number.isSafeInteger(revision) && revision > 0 ? revision : 1,
+    versions,
   };
 }
 
@@ -127,6 +172,8 @@ export function makeRaaviDocument(
   fileName: string,
   content: string,
   annotations: RaaviAnnotation[],
+  revision = 1,
+  versions: RaaviVersion[] = [],
 ): RaaviDocument {
   return {
     format: RAVI_FORMAT,
@@ -134,8 +181,10 @@ export function makeRaaviDocument(
     document: {
       name: safeFileName(fileName, "نوشته-راوی.md"),
       markdown: content,
+      revision,
     },
     annotations,
+    versions: versions.slice(-30),
     updatedAt: new Date().toISOString(),
   };
 }

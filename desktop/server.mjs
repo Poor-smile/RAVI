@@ -8,7 +8,7 @@ const desktopDirectory = path.dirname(fileURLToPath(import.meta.url));
 const clientDirectory = path.resolve(desktopDirectory, "..", "dist", "client");
 const MAX_LIBRARY_FILES = 20_000;
 const MAX_MARKDOWN_SIZE = 2 * 1024 * 1024;
-const MAX_RAVI_SIZE = 4 * 1024 * 1024;
+const MAX_RAVI_SIZE = 64 * 1024 * 1024;
 
 const CONTENT_TYPES = new Map([
   [".css", "text/css; charset=utf-8"],
@@ -148,6 +148,10 @@ function isRaaviFile(fileName) {
   return /\.ravi$/i.test(fileName);
 }
 
+function isLibraryDocumentFile(fileName) {
+  return isMarkdownFile(fileName) || isRaaviFile(fileName);
+}
+
 export function markdownPathFromArguments(argumentsList, workingDirectory) {
   const documentArgument = argumentsList.find(
     (argument) =>
@@ -211,6 +215,34 @@ function sanitizeRaaviAnnotations(value) {
   });
 }
 
+function sanitizeRaaviVersions(value) {
+  if (!Array.isArray(value)) return [];
+
+  return value.slice(-30).flatMap((version) => {
+    if (
+      !version ||
+      typeof version !== "object" ||
+      !Number.isSafeInteger(version.number) ||
+      version.number < 1 ||
+      typeof version.content !== "string"
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        number: version.number,
+        savedAt:
+          typeof version.savedAt === "string"
+            ? version.savedAt.slice(0, 64)
+            : new Date().toISOString(),
+        content: version.content,
+        annotations: sanitizeRaaviAnnotations(version.annotations),
+      },
+    ];
+  });
+}
+
 export async function readDocumentPath(filePath) {
   const resolvedFile = path.resolve(filePath);
   const details = await stat(resolvedFile);
@@ -220,8 +252,11 @@ export async function readDocumentPath(filePath) {
     return {
       name: path.basename(resolvedFile),
       path: resolvedFile,
+      documentType: "markdown",
       content: await readMarkdownPath(resolvedFile),
       annotations: [],
+      revision: 1,
+      versions: [],
     };
   }
 
@@ -248,8 +283,15 @@ export async function readDocumentPath(filePath) {
         ? value.document.name.slice(0, 240)
         : fallbackName,
     path: resolvedFile,
+    documentType: "ravi",
     content: value.document.markdown,
     annotations: sanitizeRaaviAnnotations(value.annotations),
+    revision:
+      Number.isSafeInteger(value.document.revision) &&
+      value.document.revision > 0
+        ? value.document.revision
+        : 1,
+    versions: sanitizeRaaviVersions(value.versions),
   };
 }
 
@@ -277,7 +319,7 @@ export async function scanMarkdownFolder(rootPath) {
         continue;
       }
 
-      if (!entry.isFile() || !isMarkdownFile(entry.name)) continue;
+      if (!entry.isFile() || !isLibraryDocumentFile(entry.name)) continue;
 
       try {
         const details = await stat(absolutePath);
@@ -292,6 +334,7 @@ export async function scanMarkdownFolder(rootPath) {
           nativePath: absolutePath,
           size: details.size,
           lastModified: details.mtimeMs,
+          documentType: isRaaviFile(entry.name) ? "ravi" : "markdown",
         });
       } catch {
         // A file can disappear while a directory is being scanned.
@@ -340,4 +383,22 @@ export async function readMarkdownFile(filePath, allowedRoots) {
   }
 
   return readMarkdownPath(resolvedFile);
+}
+
+export async function readLibraryDocument(filePath, allowedRoots) {
+  const resolvedFile = path.resolve(filePath);
+  const insideAllowedRoot = [...allowedRoots].some((rootPath) => {
+    const relativePath = path.relative(rootPath, resolvedFile);
+    return (
+      relativePath &&
+      !relativePath.startsWith("..") &&
+      !path.isAbsolute(relativePath)
+    );
+  });
+
+  if (!insideAllowedRoot) {
+    throw new Error("File access is outside the selected library.");
+  }
+
+  return readDocumentPath(resolvedFile);
 }

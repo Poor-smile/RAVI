@@ -14,13 +14,16 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  Clock3,
   Code2,
-  Download,
   Eye,
+  FileArchive,
   FileText,
   Folder,
+  FolderPlus,
   FolderOpen,
   Highlighter,
+  History,
   Italic,
   Library,
   Link2,
@@ -33,6 +36,7 @@ import {
   Quote,
   RefreshCw,
   RotateCcw,
+  Save,
   Search,
   Send,
   ShieldCheck,
@@ -54,16 +58,16 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   AnnotationKind,
-  getRaaviName,
   makeRaaviDocument,
   parseRaaviDocument,
   RaaviAnnotation,
+  RaaviVersion,
 } from "./raavi";
 
 const STORAGE_KEY = "raavi:document:v1";
-const LIBRARY_ROOT_KEY = "raavi:library-root:v1";
 const DEFAULT_FILE_NAME = "راهنمای-راوی.md";
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
+const MAX_LOCAL_VERSIONS = 10;
 
 const SAMPLE_MARKDOWN = [
   "# راهنمای راوی",
@@ -103,9 +107,11 @@ const SAMPLE_MARKDOWN = [
   "- [ ] حالا فایل خودتان را باز کنید",
 ].join("\n");
 
-type SaveState = "saved" | "saving" | "error";
+type SaveState = "saved" | "dirty" | "saving" | "error";
 type MobilePane = "editor" | "preview";
 type LibraryState = "idle" | "scanning" | "ready";
+type DocumentFileType = "markdown" | "ravi";
+type SaveFileType = DocumentFileType;
 
 type LocalFileHandle = {
   kind: "file";
@@ -132,6 +138,7 @@ type DesktopLibraryFile = {
   nativePath: string;
   size: number;
   lastModified: number;
+  documentType: DocumentFileType;
 };
 
 type DesktopLibraryScan = {
@@ -144,27 +151,69 @@ type DesktopLibraryScan = {
 type DesktopOpenedDocument = {
   name: string;
   path: string;
+  documentType: DocumentFileType;
   content: string;
   annotations?: RaaviAnnotation[];
+  revision?: number;
+  versions?: RaaviVersion[];
+  openInReadingMode?: boolean;
+};
+
+type DesktopRecentFile = {
+  path: string;
+  name: string;
+  documentType: DocumentFileType;
+  openedAt: string;
+};
+
+type DesktopLibraryState = {
+  folders: Array<{ rootName: string; rootPath: string }>;
+  recents: DesktopRecentFile[];
+};
+
+type DocumentSavePayload = {
+  content: string;
+  annotations: RaaviAnnotation[];
+  revision: number;
+  versions: RaaviVersion[];
+  raavi: ReturnType<typeof makeRaaviDocument>;
 };
 
 type RaaviDesktopAPI = {
   isDesktop: true;
+  getLibraryState: () => Promise<DesktopLibraryState>;
   chooseMarkdownFolder: () => Promise<DesktopLibraryScan | null>;
   scanMarkdownFolder: (rootPath: string) => Promise<DesktopLibraryScan>;
-  readMarkdownFile: (filePath: string) => Promise<string>;
+  readLibraryDocument: (filePath: string) => Promise<DesktopOpenedDocument>;
+  chooseDocument: () => Promise<DesktopOpenedDocument | null>;
+  openRecentDocument: (filePath: string) => Promise<DesktopOpenedDocument>;
   saveMarkdown: (
     fileName: string,
-    content: string,
-  ) => Promise<{ saved: boolean; filePath?: string }>;
-  saveRaavi: (
-    fileName: string,
-    document: ReturnType<typeof makeRaaviDocument>,
+    document: DocumentSavePayload,
   ) => Promise<{
     saved: boolean;
+    filePath?: string;
+    documentType?: DocumentFileType;
+  }>;
+  saveRaavi: (
+    fileName: string,
+    document: DocumentSavePayload,
+  ) => Promise<{
+    saved: boolean;
+    filePath?: string;
     raviPath?: string;
     markdownPath?: string;
+    documentType?: DocumentFileType;
   }>;
+  saveCurrentDocument: (
+    filePath: string,
+    document: DocumentSavePayload,
+  ) => Promise<{
+    saved: boolean;
+    filePath?: string;
+    documentType?: DocumentFileType;
+  }>;
+  rendererReady: () => void;
   onOpenMarkdownFile: (
     callback: (document: DesktopOpenedDocument) => void,
   ) => () => void;
@@ -180,9 +229,17 @@ type LibraryFile = {
   id: string;
   name: string;
   path: string;
+  rootId: string;
+  documentType: DocumentFileType;
   size: number;
   lastModified: number;
-  read: () => Promise<string>;
+  read: () => Promise<DesktopOpenedDocument>;
+};
+
+type LibraryFolder = {
+  rootId: string;
+  rootName: string;
+  rootPath: string;
 };
 
 type LibraryFolderNode = {
@@ -380,6 +437,8 @@ function buildLibraryTree(files: LibraryFile[]): LibraryFolderNode {
 
 async function scanMarkdownDirectory(
   directory: LocalDirectoryHandle,
+  rootId: string,
+  rootName: string,
   basePath = "",
   results: LibraryFile[] = [],
 ): Promise<LibraryFile[]> {
@@ -387,20 +446,60 @@ async function scanMarkdownDirectory(
     const entryPath = basePath ? `${basePath}/${entry.name}` : entry.name;
 
     if (entry.kind === "directory") {
-      await scanMarkdownDirectory(entry, entryPath, results);
+      await scanMarkdownDirectory(
+        entry,
+        rootId,
+        rootName,
+        entryPath,
+        results,
+      );
       continue;
     }
 
-    if (!/\.(md|markdown)$/i.test(entry.name)) continue;
+    if (!/\.(md|markdown|ravi)$/i.test(entry.name)) continue;
 
     const file = await entry.getFile();
+    const documentType: DocumentFileType = /\.ravi$/i.test(entry.name)
+      ? "ravi"
+      : "markdown";
     results.push({
-      id: `${entryPath}:${file.lastModified}:${file.size}`,
+      id: `${rootId}:${entryPath}:${file.lastModified}:${file.size}`,
       name: entry.name,
-      path: entryPath,
+      path: `${rootName}/${entryPath}`,
+      rootId,
+      documentType,
       size: file.size,
       lastModified: file.lastModified,
-      read: async () => (await entry.getFile()).text(),
+      read: async () => {
+        const nextFile = await entry.getFile();
+        const rawContent = await nextFile.text();
+        if (documentType === "ravi") {
+          const parsed = parseRaaviDocument(
+            rawContent,
+            entry.name.replace(/\.ravi$/i, ".md"),
+          );
+          return {
+            name: parsed.fileName,
+            path: "",
+            documentType,
+            content: parsed.content,
+            annotations: parsed.annotations,
+            revision: parsed.revision,
+            versions: parsed.versions,
+            openInReadingMode: false,
+          };
+        }
+        return {
+          name: entry.name,
+          path: "",
+          documentType,
+          content: rawContent,
+          annotations: [],
+          revision: 1,
+          versions: [],
+          openInReadingMode: false,
+        };
+      },
     });
   }
 
@@ -454,7 +553,11 @@ function LibraryBranch({
             }
             aria-pressed={activePath === file.path}
           >
-            <FileText size={15} aria-hidden="true" />
+            {file.documentType === "ravi" ? (
+              <FileArchive size={15} aria-hidden="true" />
+            ) : (
+              <FileText size={15} aria-hidden="true" />
+            )}
             <span dir="auto">{file.name}</span>
           </button>
         </li>
@@ -489,15 +592,34 @@ function LibraryBranch({
   );
 }
 
-function getDownloadName(fileName: string) {
-  const trimmed = fileName.trim() || "نوشته-راوی";
-  return /\.(md|markdown)$/i.test(trimmed) ? trimmed : `${trimmed}.md`;
+function documentSnapshot(content: string, annotations: RaaviAnnotation[]) {
+  return JSON.stringify({ content, annotations });
+}
+
+function saveNameForType(fileName: string, type: SaveFileType) {
+  const baseName =
+    fileName.trim().replace(/\.(?:md|markdown|ravi)$/i, "") || "نوشته-راوی";
+  return type === "ravi" ? `${baseName}.ravi` : `${baseName}.md`;
 }
 
 export default function Home() {
   const [content, setContent] = useState(SAMPLE_MARKDOWN);
   const [fileName, setFileName] = useState(DEFAULT_FILE_NAME);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [activeDocumentPath, setActiveDocumentPath] = useState("");
+  const [documentType, setDocumentType] =
+    useState<DocumentFileType>("markdown");
+  const [revision, setRevision] = useState(1);
+  const [versions, setVersions] = useState<RaaviVersion[]>([]);
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState(() =>
+    documentSnapshot(SAMPLE_MARKDOWN, []),
+  );
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [saveFileType, setSaveFileType] =
+    useState<SaveFileType>("ravi");
+  const [saveFileName, setSaveFileName] = useState(
+    saveNameForType(DEFAULT_FILE_NAME, "ravi"),
+  );
   const [readingMode, setReadingMode] = useState(false);
   const [readerSize, setReaderSize] = useState(18);
   const [mobilePane, setMobilePane] = useState<MobilePane>("preview");
@@ -505,17 +627,16 @@ export default function Home() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [hydrated, setHydrated] = useState(false);
-  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(true);
   const [libraryIsModal, setLibraryIsModal] = useState(false);
-  const [libraryState, setLibraryState] = useState<LibraryState>("idle");
+  const [libraryState, setLibraryState] =
+    useState<LibraryState>("scanning");
   const [libraryFiles, setLibraryFiles] = useState<LibraryFile[]>([]);
-  const [libraryRoot, setLibraryRoot] = useState("");
-  const [libraryRootPath, setLibraryRootPath] = useState("");
+  const [libraryFolders, setLibraryFolders] = useState<LibraryFolder[]>([]);
+  const [recentFiles, setRecentFiles] = useState<DesktopRecentFile[]>([]);
   const [libraryQuery, setLibraryQuery] = useState("");
   const [activeLibraryPath, setActiveLibraryPath] = useState("");
   const [openingLibraryPath, setOpeningLibraryPath] = useState("");
-  const [directoryHandle, setDirectoryHandle] =
-    useState<LocalDirectoryHandle | null>(null);
   const [annotations, setAnnotations] = useState<RaaviAnnotation[]>([]);
   const [selectionDraft, setSelectionDraft] =
     useState<SelectionDraft | null>(null);
@@ -535,9 +656,16 @@ export default function Home() {
   const libraryPanelRef = useRef<HTMLElement>(null);
   const libraryCloseRef = useRef<HTMLButtonElement>(null);
   const libraryTriggerRef = useRef<HTMLButtonElement>(null);
+  const saveModalCloseRef = useRef<HTMLButtonElement>(null);
+  const saveFileNameRef = useRef<HTMLInputElement>(null);
+  const saveModalRef = useRef<HTMLDivElement>(null);
   const libraryWasOpenRef = useRef(false);
+  const openedDocumentRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const annotationHoverFrameRef = useRef<number | null>(null);
+  const directoryHandlesRef = useRef(
+    new Map<string, LocalDirectoryHandle>(),
+  );
 
   const stats = useMemo(() => {
     const cleanText = content.trim();
@@ -561,6 +689,18 @@ export default function Home() {
       ),
     [annotations],
   );
+
+  const currentSnapshot = useMemo(
+    () => documentSnapshot(content, annotations),
+    [annotations, content],
+  );
+
+  const effectiveSaveState: SaveState =
+    saveState === "saving" || saveState === "error"
+      ? saveState
+      : currentSnapshot === lastSavedSnapshot
+        ? "saved"
+        : "dirty";
 
   const hoveredAnnotation = useMemo(
     () =>
@@ -593,28 +733,65 @@ export default function Home() {
     noticeTimerRef.current = setTimeout(() => setNotice(""), 2400);
   }, []);
 
+  const applyOpenedDocument = useCallback(
+    (document: DesktopOpenedDocument, message?: string) => {
+      openedDocumentRef.current = true;
+      const nextAnnotations = document.annotations ?? [];
+      setContent(document.content);
+      setFileName(document.name);
+      setAnnotations(nextAnnotations);
+      setActiveDocumentPath(document.path ?? "");
+      setDocumentType(document.documentType ?? "markdown");
+      setRevision(document.revision ?? 1);
+      setVersions(document.versions ?? []);
+      setLastSavedSnapshot(
+        documentSnapshot(document.content, nextAnnotations),
+      );
+      setSaveState("saved");
+      setSelectionDraft(null);
+      setComposerKind(null);
+      setComposerText("");
+      setAnnotationPanelOpen(Boolean(nextAnnotations.length));
+      setActiveLibraryPath("");
+      setMobilePane("preview");
+      setReadingMode(Boolean(document.openInReadingMode));
+      if (document.openInReadingMode) {
+        setLibraryOpen(false);
+      } else if (!window.matchMedia("(max-width: 820px)").matches) {
+        setLibraryOpen(true);
+      }
+      setError("");
+      if (document.path) {
+        setRecentFiles((current) => [
+          {
+            path: document.path,
+            name: document.name,
+            documentType: document.documentType ?? "markdown",
+            openedAt: new Date().toISOString(),
+          },
+          ...current.filter((item) => item.path !== document.path),
+        ].slice(0, 20));
+      }
+      if (message) showNotice(message);
+    },
+    [showNotice],
+  );
+
   useEffect(() => {
     const desktop = window.raaviDesktop;
     if (!desktop) return;
 
-    return desktop.onOpenMarkdownFile((document) => {
-      setContent(document.content);
-      setFileName(document.name);
-      setAnnotations(document.annotations ?? []);
-      setSelectionDraft(null);
-      setComposerKind(null);
-      setAnnotationPanelOpen(Boolean(document.annotations?.length));
-      setActiveLibraryPath("");
-      setMobilePane("preview");
-      setReadingMode(false);
-      setError("");
-      showNotice(`«${document.name}» باز شد.`);
+    const unsubscribe = desktop.onOpenMarkdownFile((document) => {
+      applyOpenedDocument(document, `«${document.name}» باز شد.`);
     });
-  }, [showNotice]);
+    desktop.rendererReady();
+    return unsubscribe;
+  }, [applyOpenedDocument]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       try {
+        if (openedDocumentRef.current) return;
         const saved = window.localStorage.getItem(STORAGE_KEY);
         if (saved) {
           const parsed = JSON.parse(saved) as {
@@ -622,6 +799,11 @@ export default function Home() {
             fileName?: string;
             readerSize?: number;
             annotations?: RaaviAnnotation[];
+            revision?: number;
+            versions?: RaaviVersion[];
+            activeDocumentPath?: string;
+            documentType?: DocumentFileType;
+            lastSavedSnapshot?: string;
           };
           if (typeof parsed.content === "string") setContent(parsed.content);
           if (typeof parsed.fileName === "string") setFileName(parsed.fileName);
@@ -631,9 +813,30 @@ export default function Home() {
           if (typeof parsed.readerSize === "number") {
             setReaderSize(Math.min(22, Math.max(16, parsed.readerSize)));
           }
+          if (
+            Number.isSafeInteger(parsed.revision) &&
+            Number(parsed.revision) > 0
+          ) {
+            setRevision(Number(parsed.revision));
+          }
+          if (Array.isArray(parsed.versions)) {
+            setVersions(parsed.versions.slice(-MAX_LOCAL_VERSIONS));
+          }
+          if (typeof parsed.activeDocumentPath === "string") {
+            setActiveDocumentPath(parsed.activeDocumentPath);
+          }
+          if (
+            parsed.documentType === "markdown" ||
+            parsed.documentType === "ravi"
+          ) {
+            setDocumentType(parsed.documentType);
+          }
+          setLastSavedSnapshot(
+            typeof parsed.lastSavedSnapshot === "string"
+              ? parsed.lastSavedSnapshot
+              : "",
+          );
         }
-        const lastLibraryRoot = window.localStorage.getItem(LIBRARY_ROOT_KEY);
-        if (lastLibraryRoot) setLibraryRoot(lastLibraryRoot);
       } catch {
         setError(
           "بازیابی آخرین نوشته ممکن نبود؛ می‌توانید یک فایل تازه باز کنید.",
@@ -646,27 +849,78 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!saveModalOpen) return;
+
+    requestAnimationFrame(() => {
+      saveFileNameRef.current?.focus();
+      saveFileNameRef.current?.select();
+    });
+
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const modal = saveModalRef.current;
+      if (!modal) return;
+      const focusable = Array.from(
+        modal.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.offsetParent !== null);
+      if (!focusable.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", trapFocus);
+    return () => document.removeEventListener("keydown", trapFocus);
+  }, [saveModalOpen]);
+
+  useEffect(() => {
     if (!hydrated) return;
 
-    const savingTimer = setTimeout(() => setSaveState("saving"), 0);
     const timer = setTimeout(() => {
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ content, fileName, readerSize, annotations }),
+          JSON.stringify({
+            content,
+            fileName,
+            readerSize,
+            annotations,
+            revision,
+            versions: versions.slice(-MAX_LOCAL_VERSIONS),
+            activeDocumentPath,
+            documentType,
+            lastSavedSnapshot,
+          }),
         );
-        setSaveState("saved");
       } catch {
-        setSaveState("error");
-        setError("ذخیره‌ی محلی انجام نشد؛ برای نگه‌داری نوشته آن را دانلود کنید.");
+        setError(
+          "پیش‌نویس محلی ذخیره نشد؛ برای جلوگیری از ازدست‌رفتن تغییرات، فایل را ذخیره کنید.",
+        );
       }
     }, 450);
 
-    return () => {
-      clearTimeout(savingTimer);
-      clearTimeout(timer);
-    };
-  }, [content, fileName, readerSize, annotations, hydrated]);
+    return () => clearTimeout(timer);
+  }, [
+    activeDocumentPath,
+    annotations,
+    content,
+    documentType,
+    fileName,
+    hydrated,
+    lastSavedSnapshot,
+    readerSize,
+    revision,
+    versions,
+  ]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -675,7 +929,17 @@ export default function Home() {
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({ content, fileName, readerSize, annotations }),
+          JSON.stringify({
+            content,
+            fileName,
+            readerSize,
+            annotations,
+            revision,
+            versions: versions.slice(-MAX_LOCAL_VERSIONS),
+            activeDocumentPath,
+            documentType,
+            lastSavedSnapshot,
+          }),
         );
       } catch {
         // The visible save state already communicates storage failures.
@@ -684,7 +948,18 @@ export default function Home() {
 
     window.addEventListener("pagehide", flushLatestDocument);
     return () => window.removeEventListener("pagehide", flushLatestDocument);
-  }, [content, fileName, readerSize, annotations, hydrated]);
+  }, [
+    activeDocumentPath,
+    annotations,
+    content,
+    documentType,
+    fileName,
+    hydrated,
+    lastSavedSnapshot,
+    readerSize,
+    revision,
+    versions,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -697,7 +972,10 @@ export default function Home() {
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 820px)");
-    const syncLibraryMode = () => setLibraryIsModal(mediaQuery.matches);
+    const syncLibraryMode = () => {
+      setLibraryIsModal(mediaQuery.matches);
+      setLibraryOpen(!mediaQuery.matches);
+    };
     syncLibraryMode();
     mediaQuery.addEventListener("change", syncLibraryMode);
     return () => mediaQuery.removeEventListener("change", syncLibraryMode);
@@ -1057,101 +1335,230 @@ export default function Home() {
     focusAnnotation(annotation);
   };
 
-  const downloadMarkdown = useCallback(async () => {
-    if (window.raaviDesktop) {
-      setError("");
-      try {
-        const result = await window.raaviDesktop.saveMarkdown(
-          getDownloadName(fileName),
-          content,
+  const buildNextSave = useCallback(() => {
+    const nextRevision = revision + 1;
+    const nextVersion: RaaviVersion = {
+      number: nextRevision,
+      savedAt: new Date().toISOString(),
+      content,
+      annotations,
+    };
+    const nextVersions = [...versions, nextVersion].slice(-30);
+    const raavi = makeRaaviDocument(
+      saveNameForType(fileName, "markdown"),
+      content,
+      annotations,
+      nextRevision,
+      nextVersions,
+    );
+    return {
+      nextRevision,
+      nextVersions,
+      payload: {
+        content,
+        annotations,
+        revision: nextRevision,
+        versions: nextVersions,
+        raavi,
+      } satisfies DocumentSavePayload,
+    };
+  }, [annotations, content, fileName, revision, versions]);
+
+  const commitSavedVersion = useCallback(
+    (
+      nextRevision: number,
+      nextVersions: RaaviVersion[],
+      nextPath: string,
+      nextType: DocumentFileType,
+      nextName?: string,
+    ) => {
+      setRevision(nextRevision);
+      setVersions(nextVersions);
+      setActiveDocumentPath(nextPath);
+      setDocumentType(nextType);
+      if (nextName) setFileName(nextName);
+      if (nextPath) {
+        setRecentFiles((current) =>
+          [
+            {
+              path: nextPath,
+              name: nextName ?? fileName,
+              documentType: nextType,
+              openedAt: new Date().toISOString(),
+            },
+            ...current.filter((item) => item.path !== nextPath),
+          ].slice(0, 20),
         );
-        if (result.saved) showNotice("فایل Markdown روی دستگاه ذخیره شد.");
-      } catch {
-        setError("ذخیره‌ی فایل ممکن نبود؛ مسیر دیگری را انتخاب کنید.");
       }
+      setLastSavedSnapshot(documentSnapshot(content, annotations));
+      setSaveState("saved");
+      setSaveModalOpen(false);
+      showNotice(
+        `نسخه‌ی ${nextRevision.toLocaleString("fa-IR")} ذخیره شد.`,
+      );
+    },
+    [annotations, content, fileName, showNotice],
+  );
+
+  const openSaveFileModal = useCallback(
+    (preferredType: SaveFileType = documentType) => {
+      setSaveFileType(preferredType);
+      setSaveFileName(saveNameForType(fileName, preferredType));
+      setSaveModalOpen(true);
+      setError("");
+    },
+    [documentType, fileName],
+  );
+
+  const saveAsFile = useCallback(async () => {
+    const trimmedName = saveFileName.trim();
+    if (!trimmedName) {
+      setError("برای فایل یک نام وارد کنید.");
       return;
     }
 
-    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = getDownloadName(fileName);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    showNotice("فایل Markdown آماده‌ی دریافت شد.");
-  }, [content, fileName, showNotice]);
+    const { nextRevision, nextVersions, payload } = buildNextSave();
+    const nextName = saveNameForType(trimmedName, saveFileType);
+    setSaveState("saving");
+    setError("");
 
-  const downloadRaavi = useCallback(async () => {
-    const documentValue = makeRaaviDocument(fileName, content, annotations);
-    const raviName = getRaaviName(fileName);
-
-    if (window.raaviDesktop) {
-      setError("");
-      try {
-        const result = await window.raaviDesktop.saveRaavi(
-          raviName,
-          documentValue,
-        );
-        if (result.saved) {
-          showNotice("فایل .ravi و نسخه‌ی Markdown کنار هم ذخیره شدند.");
+    try {
+      const desktop = window.raaviDesktop;
+      if (desktop) {
+        const result =
+          saveFileType === "ravi"
+            ? await desktop.saveRaavi(nextName, payload)
+            : await desktop.saveMarkdown(nextName, payload);
+        if (!result.saved) {
+          setSaveState(effectiveSaveState === "dirty" ? "dirty" : "saved");
+          return;
         }
-      } catch {
-        setError("ذخیره‌ی بسته‌ی راوی ممکن نبود؛ مسیر دیگری را انتخاب کنید.");
+        commitSavedVersion(
+          nextRevision,
+          nextVersions,
+          result.filePath ?? "",
+          saveFileType,
+          nextName,
+        );
+        return;
       }
-      return;
-    }
 
-    const downloads = [
-      {
-        name: raviName,
-        blob: new Blob([JSON.stringify(documentValue, null, 2)], {
-          type: "application/json;charset=utf-8",
-        }),
-      },
-      {
-        name: getDownloadName(fileName),
-        blob: new Blob([content], { type: "text/markdown;charset=utf-8" }),
-      },
-    ];
-
-    for (const download of downloads) {
-      const url = URL.createObjectURL(download.blob);
+      const blob =
+        saveFileType === "ravi"
+          ? new Blob([JSON.stringify(payload.raavi, null, 2)], {
+              type: "application/json;charset=utf-8",
+            })
+          : new Blob([content], {
+              type: "text/markdown;charset=utf-8",
+            });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = download.name;
+      link.download = nextName;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      commitSavedVersion(
+        nextRevision,
+        nextVersions,
+        "",
+        saveFileType,
+        nextName,
+      );
+    } catch {
+      setSaveState("error");
+      setError("ذخیره‌ی فایل انجام نشد؛ مسیر و مجوز نوشتن را بررسی کنید.");
     }
-    showNotice("بسته‌ی .ravi و فایل Markdown آماده‌ی دریافت شدند.");
-  }, [annotations, content, fileName, showNotice]);
+  }, [
+    buildNextSave,
+    commitSavedVersion,
+    content,
+    effectiveSaveState,
+    saveFileName,
+    saveFileType,
+  ]);
+
+  const saveCurrentFile = useCallback(async () => {
+    const desktop = window.raaviDesktop;
+    if (!desktop || !activeDocumentPath) {
+      openSaveFileModal(documentType);
+      return;
+    }
+
+    const { nextRevision, nextVersions, payload } = buildNextSave();
+    setSaveState("saving");
+    setError("");
+    try {
+      const result = await desktop.saveCurrentDocument(
+        activeDocumentPath,
+        payload,
+      );
+      if (!result.saved) {
+        setSaveState(effectiveSaveState === "dirty" ? "dirty" : "saved");
+        return;
+      }
+      commitSavedVersion(
+        nextRevision,
+        nextVersions,
+        result.filePath ?? activeDocumentPath,
+        result.documentType ?? documentType,
+      );
+    } catch {
+      setSaveState("error");
+      setError(
+        "ذخیره‌ی نسخه انجام نشد؛ اگر فایل جابه‌جا شده، از «ذخیره فایل» استفاده کنید.",
+      );
+    }
+  }, [
+    activeDocumentPath,
+    buildNextSave,
+    commitSavedVersion,
+    documentType,
+    effectiveSaveState,
+    openSaveFileModal,
+  ]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && saveModalOpen) {
+        setSaveModalOpen(false);
+        return;
+      }
       if (event.key === "Escape" && libraryOpen) {
-        setLibraryOpen(false);
+        if (libraryIsModal) setLibraryOpen(false);
         return;
       }
       if (event.key === "Escape" && readingMode) {
         setReadingMode(false);
+        if (!window.matchMedia("(max-width: 820px)").matches) {
+          setLibraryOpen(true);
+        }
         return;
       }
 
       if (!(event.ctrlKey || event.metaKey)) return;
       if (event.key.toLowerCase() === "o") {
         event.preventDefault();
-        fileInputRef.current?.click();
+        if (window.raaviDesktop) {
+          void window.raaviDesktop.chooseDocument().then((document) => {
+            if (document) {
+              applyOpenedDocument(
+                document,
+                `«${document.name}» باز شد.`,
+              );
+            }
+          });
+        } else {
+          fileInputRef.current?.click();
+        }
       }
       if (event.key.toLowerCase() === "s") {
         event.preventDefault();
         if (event.shiftKey) {
-          void downloadRaavi();
+          openSaveFileModal(documentType);
         } else {
-          void downloadMarkdown();
+          void saveCurrentFile();
         }
       }
     };
@@ -1159,11 +1566,31 @@ export default function Home() {
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
   }, [
-    downloadMarkdown,
-    downloadRaavi,
-    readingMode,
+    applyOpenedDocument,
+    documentType,
+    libraryIsModal,
     libraryOpen,
+    openSaveFileModal,
+    readingMode,
+    saveCurrentFile,
+    saveModalOpen,
   ]);
+
+  const openDocumentPicker = async () => {
+    if (window.raaviDesktop) {
+      setError("");
+      try {
+        const document = await window.raaviDesktop.chooseDocument();
+        if (document) {
+          applyOpenedDocument(document, `«${document.name}» باز شد.`);
+        }
+      } catch {
+        setError("بازکردن فایل ممکن نبود؛ دوباره تلاش کنید.");
+      }
+      return;
+    }
+    fileInputRef.current?.click();
+  };
 
   const readFile = async (file: File) => {
     setError("");
@@ -1177,8 +1604,13 @@ export default function Home() {
       return;
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      setError("حجم فایل بیشتر از ۲ مگابایت است؛ یک فایل کوچک‌تر انتخاب کنید.");
+    const maximumSize = isRaaviFile ? 64 * 1024 * 1024 : MAX_FILE_SIZE;
+    if (file.size > maximumSize) {
+      setError(
+        isRaaviFile
+          ? "حجم فایل راوی بیشتر از ۶۴ مگابایت است؛ یک فایل کوچک‌تر انتخاب کنید."
+          : "حجم فایل Markdown بیشتر از ۲ مگابایت است؛ یک فایل کوچک‌تر انتخاب کنید.",
+      );
       return;
     }
 
@@ -1189,25 +1621,34 @@ export default function Home() {
           rawContent,
           file.name.replace(/\.ravi$/i, ".md"),
         );
-        setContent(parsed.content);
-        setFileName(parsed.fileName);
-        setAnnotations(parsed.annotations);
-        setAnnotationPanelOpen(Boolean(parsed.annotations.length));
-        showNotice(
-          `بسته‌ی راوی با ${parsed.annotations.length.toLocaleString("fa-IR")} یادداشت باز شد.`,
+        applyOpenedDocument(
+          {
+            name: parsed.fileName,
+            path: "",
+            documentType: "ravi",
+            content: parsed.content,
+            annotations: parsed.annotations,
+            revision: parsed.revision,
+            versions: parsed.versions,
+            openInReadingMode: false,
+          },
+          `فایل راوی با ${parsed.annotations.length.toLocaleString("fa-IR")} یادداشت باز شد.`,
         );
       } else {
-        setContent(rawContent);
-        setFileName(file.name);
-        setAnnotations([]);
-        setAnnotationPanelOpen(false);
-        showNotice("فایل باز شد و پیش‌نمایش آماده است.");
+        applyOpenedDocument(
+          {
+            name: file.name,
+            path: "",
+            documentType: "markdown",
+            content: rawContent,
+            annotations: [],
+            revision: 1,
+            versions: [],
+            openInReadingMode: false,
+          },
+          "فایل باز شد و پیش‌نمایش آماده است.",
+        );
       }
-      setSelectionDraft(null);
-      setComposerKind(null);
-      setActiveLibraryPath("");
-      setMobilePane("preview");
-      setReadingMode(false);
     } catch {
       setError(
         isRaaviFile
@@ -1217,24 +1658,38 @@ export default function Home() {
     }
   };
 
-  const scanConnectedDirectory = async (handle: LocalDirectoryHandle) => {
+  const scanConnectedDirectory = async (
+    handle: LocalDirectoryHandle,
+    silent = false,
+  ) => {
     setLibraryState("scanning");
     setError("");
 
     try {
-      const files = await scanMarkdownDirectory(handle);
+      const rootId = `web:${handle.name}`;
+      const files = await scanMarkdownDirectory(
+        handle,
+        rootId,
+        handle.name,
+      );
       files.sort((a, b) => a.path.localeCompare(b.path, "fa"));
-      setLibraryFiles(files);
-      setLibraryRoot(handle.name);
-      setLibraryRootPath("");
+      setLibraryFiles((current) => [
+        ...current.filter((file) => file.rootId !== rootId),
+        ...files,
+      ]);
+      setLibraryFolders((current) => [
+        ...current.filter((folder) => folder.rootId !== rootId),
+        { rootId, rootName: handle.name, rootPath: "" },
+      ]);
       setLibraryQuery("");
       setLibraryState("ready");
-      window.localStorage.setItem(LIBRARY_ROOT_KEY, handle.name);
-      showNotice(
-        files.length
-          ? `${files.length.toLocaleString("fa-IR")} فایل Markdown به کتابخانه اضافه شد.`
-          : "در این پوشه فایل Markdown پیدا نشد.",
-      );
+      if (!silent) {
+        showNotice(
+          files.length
+            ? `${files.length.toLocaleString("fa-IR")} فایل md و ravi به کتابخانه اضافه شد.`
+            : "در این پوشه فایل md یا ravi پیدا نشد.",
+        );
+      }
     } catch {
       setLibraryState(libraryFiles.length ? "ready" : "idle");
       setError(
@@ -1243,54 +1698,52 @@ export default function Home() {
     }
   };
 
-  const applyDesktopLibrary = (scan: DesktopLibraryScan) => {
-    const desktop = window.raaviDesktop;
-    if (!desktop) return;
-
-    const entries = scan.files.map(
-      (file) =>
-        ({
-          id: file.id,
-          name: file.name,
-          path: file.path,
-          size: file.size,
-          lastModified: file.lastModified,
-          read: () => desktop.readMarkdownFile(file.nativePath),
-        }) satisfies LibraryFile,
-    );
-
-    setDirectoryHandle(null);
-    setLibraryFiles(entries);
-    setLibraryRoot(scan.rootName);
-    setLibraryRootPath(scan.rootPath);
-    setActiveLibraryPath("");
-    setLibraryQuery("");
-    setLibraryState("ready");
-    window.localStorage.setItem(LIBRARY_ROOT_KEY, scan.rootName);
-    showNotice(
-      scan.truncated
-        ? "۲۰٬۰۰۰ فایل اول به کتابخانه اضافه شد؛ پوشه‌ی کوچک‌تری انتخاب کنید."
-        : entries.length
-          ? `${entries.length.toLocaleString("fa-IR")} فایل Markdown به کتابخانه اضافه شد.`
-          : "در این پوشه فایل Markdown پیدا نشد.",
-    );
-  };
-
-  const scanDesktopDirectory = async (rootPath: string) => {
-    const desktop = window.raaviDesktop;
-    if (!desktop) return;
-
-    setLibraryState("scanning");
-    setError("");
-    try {
-      applyDesktopLibrary(await desktop.scanMarkdownFolder(rootPath));
-    } catch {
-      setLibraryState(libraryFiles.length ? "ready" : "idle");
-      setError(
-        "اسکن پوشه کامل نشد؛ پوشه را دوباره انتخاب کنید و مجوز دسترسی را تأیید کنید.",
+  const applyDesktopLibrary = useCallback(
+    (scan: DesktopLibraryScan, silent = false) => {
+      const desktop = window.raaviDesktop;
+      if (!desktop) return;
+      const rootId = scan.rootPath.toLocaleLowerCase("en-US");
+      const entries = scan.files.map(
+        (file) =>
+          ({
+            id: `${rootId}:${file.id}`,
+            name: file.name,
+            path: `${scan.rootName}/${file.path}`,
+            rootId,
+            documentType: file.documentType,
+            size: file.size,
+            lastModified: file.lastModified,
+            read: () => desktop.readLibraryDocument(file.nativePath),
+          }) satisfies LibraryFile,
       );
-    }
-  };
+
+      setLibraryFiles((current) => [
+        ...current.filter((file) => file.rootId !== rootId),
+        ...entries,
+      ]);
+      setLibraryFolders((current) => [
+        ...current.filter((folder) => folder.rootId !== rootId),
+        {
+          rootId,
+          rootName: scan.rootName,
+          rootPath: scan.rootPath,
+        },
+      ]);
+      setActiveLibraryPath("");
+      setLibraryQuery("");
+      setLibraryState("ready");
+      if (!silent) {
+        showNotice(
+          scan.truncated
+            ? "۲۰٬۰۰۰ فایل اول اضافه شد؛ برای سرعت بیشتر پوشه‌ی کوچک‌تری انتخاب کنید."
+            : entries.length
+              ? `${entries.length.toLocaleString("fa-IR")} فایل md و ravi به کتابخانه اضافه شد.`
+              : "در این پوشه فایل md یا ravi پیدا نشد.",
+        );
+      }
+    },
+    [showNotice],
+  );
 
   const connectLibrary = async () => {
     if (window.raaviDesktop) {
@@ -1320,7 +1773,8 @@ export default function Home() {
 
     try {
       const handle = await pickerWindow.showDirectoryPicker({ mode: "read" });
-      setDirectoryHandle(handle);
+      const rootId = `web:${handle.name}`;
+      directoryHandlesRef.current.set(rootId, handle);
       setActiveLibraryPath("");
       await scanConnectedDirectory(handle);
     } catch (pickerError) {
@@ -1346,7 +1800,7 @@ export default function Home() {
     const rootName = firstRelativePath.split("/")[0] || "پوشه‌ی انتخابی";
 
     const entries = selectedFiles
-      .filter((file) => /\.(md|markdown)$/i.test(file.name))
+      .filter((file) => /\.(md|markdown|ravi)$/i.test(file.name))
       .map((file) => {
         const rawPath =
           (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
@@ -1355,35 +1809,79 @@ export default function Home() {
         const relativePath =
           pathParts.length > 1 ? pathParts.slice(1).join("/") : file.name;
 
+        const rootId = `fallback:${rootName}`;
+        const documentType: DocumentFileType = /\.ravi$/i.test(file.name)
+          ? "ravi"
+          : "markdown";
         return {
-          id: `${relativePath}:${file.lastModified}:${file.size}`,
+          id: `${rootId}:${relativePath}:${file.lastModified}:${file.size}`,
           name: file.name,
-          path: relativePath,
+          path: `${rootName}/${relativePath}`,
+          rootId,
+          documentType,
           size: file.size,
           lastModified: file.lastModified,
-          read: () => file.text(),
+          read: async () => {
+            const rawContent = await file.text();
+            if (documentType === "ravi") {
+              const parsed = parseRaaviDocument(
+                rawContent,
+                file.name.replace(/\.ravi$/i, ".md"),
+              );
+              return {
+                name: parsed.fileName,
+                path: "",
+                documentType,
+                content: parsed.content,
+                annotations: parsed.annotations,
+                revision: parsed.revision,
+                versions: parsed.versions,
+                openInReadingMode: false,
+              };
+            }
+            return {
+              name: file.name,
+              path: "",
+              documentType,
+              content: rawContent,
+              annotations: [],
+              revision: 1,
+              versions: [],
+              openInReadingMode: false,
+            };
+          },
         } satisfies LibraryFile;
       })
       .sort((a, b) => a.path.localeCompare(b.path, "fa"));
 
-    setDirectoryHandle(null);
-    setLibraryFiles(entries);
-    setLibraryRoot(rootName);
-    setLibraryRootPath("");
+    const rootId = `fallback:${rootName}`;
+    setLibraryFiles((current) => [
+      ...current.filter((file) => file.rootId !== rootId),
+      ...entries,
+    ]);
+    setLibraryFolders((current) => [
+      ...current.filter((folder) => folder.rootId !== rootId),
+      { rootId, rootName, rootPath: "" },
+    ]);
     setActiveLibraryPath("");
     setLibraryQuery("");
     setLibraryState("ready");
-    window.localStorage.setItem(LIBRARY_ROOT_KEY, rootName);
     showNotice(
       entries.length
-        ? `${entries.length.toLocaleString("fa-IR")} فایل Markdown به کتابخانه اضافه شد.`
-        : "در این پوشه فایل Markdown پیدا نشد.",
+        ? `${entries.length.toLocaleString("fa-IR")} فایل md و ravi به کتابخانه اضافه شد.`
+        : "در این پوشه فایل md یا ravi پیدا نشد.",
     );
   };
 
   const openLibraryFile = async (file: LibraryFile) => {
-    if (file.size > MAX_FILE_SIZE) {
-      setError("حجم این فایل بیشتر از ۲ مگابایت است و در راوی باز نمی‌شود.");
+    const maximumSize =
+      file.documentType === "ravi" ? 64 * 1024 * 1024 : MAX_FILE_SIZE;
+    if (file.size > maximumSize) {
+      setError(
+        file.documentType === "ravi"
+          ? "حجم این فایل راوی بیشتر از ۶۴ مگابایت است."
+          : "حجم این فایل Markdown بیشتر از ۲ مگابایت است.",
+      );
       return;
     }
 
@@ -1391,20 +1889,15 @@ export default function Home() {
     setError("");
 
     try {
-      const nextContent = await file.read();
-      setContent(nextContent);
-      setFileName(file.name);
-      setAnnotations([]);
-      setSelectionDraft(null);
-      setComposerKind(null);
-      setAnnotationPanelOpen(false);
+      const document = await file.read();
+      applyOpenedDocument(
+        { ...document, openInReadingMode: false },
+        `«${file.name}» از کتابخانه باز شد.`,
+      );
       setActiveLibraryPath(file.path);
-      setMobilePane("preview");
-      setReadingMode(false);
       if (window.matchMedia("(max-width: 820px)").matches) {
         setLibraryOpen(false);
       }
-      showNotice(`«${file.name}» از کتابخانه باز شد.`);
     } catch {
       setError(
         "خواندن این فایل ممکن نبود؛ پوشه را دوباره متصل کنید و مجوز دسترسی را تأیید کنید.",
@@ -1413,6 +1906,106 @@ export default function Home() {
       setOpeningLibraryPath("");
     }
   };
+
+  const openRecentFile = async (recent: DesktopRecentFile) => {
+    const desktop = window.raaviDesktop;
+    if (!desktop) return;
+    setOpeningLibraryPath(recent.path);
+    setError("");
+    try {
+      const document = await desktop.openRecentDocument(recent.path);
+      applyOpenedDocument(document, `«${recent.name}» باز شد.`);
+      if (window.matchMedia("(max-width: 820px)").matches) {
+        setLibraryOpen(false);
+      }
+    } catch {
+      setRecentFiles((current) =>
+        current.filter((item) => item.path !== recent.path),
+      );
+      setError(
+        "این فایل دیگر در مسیر قبلی پیدا نشد؛ آن را دوباره از پوشه باز کنید.",
+      );
+    } finally {
+      setOpeningLibraryPath("");
+    }
+  };
+
+  const refreshLibrary = async () => {
+    setLibraryState("scanning");
+    const desktop = window.raaviDesktop;
+    const desktopFolders = desktop
+      ? libraryFolders.filter((folder) => folder.rootPath)
+      : [];
+    if (desktop) {
+      await Promise.allSettled(
+        desktopFolders.map(async (folder) => {
+          const scan = await desktop.scanMarkdownFolder(folder.rootPath);
+          applyDesktopLibrary(scan, true);
+        }),
+      );
+    }
+
+    const browserHandles = Array.from(directoryHandlesRef.current.values());
+    await Promise.allSettled(
+      browserHandles.map((handle) =>
+        scanConnectedDirectory(handle, true),
+      ),
+    );
+    setLibraryState(
+      desktopFolders.length || browserHandles.length ? "ready" : "idle",
+    );
+    showNotice("کتابخانه به‌روز شد.");
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const frame = requestAnimationFrame(() => {
+      const desktop = window.raaviDesktop;
+      if (!desktop) {
+        setLibraryState("idle");
+        return;
+      }
+
+      void desktop
+        .getLibraryState()
+        .then(async (state) => {
+          if (cancelled) return;
+          setRecentFiles(state.recents);
+          setLibraryFolders(
+            state.folders.map((folder) => ({
+              rootId: folder.rootPath.toLocaleLowerCase("en-US"),
+              rootName: folder.rootName,
+              rootPath: folder.rootPath,
+            })),
+          );
+          if (!state.folders.length) {
+            setLibraryState("idle");
+            return;
+          }
+
+          const scans = await Promise.allSettled(
+            state.folders.map((folder) =>
+              desktop.scanMarkdownFolder(folder.rootPath),
+            ),
+          );
+          if (cancelled) return;
+          for (const result of scans) {
+            if (result.status === "fulfilled") {
+              applyDesktopLibrary(result.value, true);
+            }
+          }
+          setLibraryState("ready");
+        })
+        .catch(() => {
+          if (!cancelled) setLibraryState("idle");
+        });
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelled = true;
+    };
+  }, [applyDesktopLibrary]);
 
   const handleDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
@@ -1477,15 +2070,22 @@ export default function Home() {
     if (
       content.trim() &&
       !window.confirm(
-        "نوشته‌ی فعلی با یک برگه‌ی خالی جایگزین شود؟ پیش از ادامه، در صورت نیاز آن را دریافت کنید.",
+        "نوشته‌ی فعلی با یک برگه‌ی خالی جایگزین شود؟ پیش از ادامه، در صورت نیاز آن را ذخیره کنید.",
       )
     ) {
       return;
     }
 
+    openedDocumentRef.current = false;
     setContent("");
     setFileName("نوشته-تازه.md");
     setAnnotations([]);
+    setActiveDocumentPath("");
+    setDocumentType("markdown");
+    setRevision(1);
+    setVersions([]);
+    setLastSavedSnapshot(documentSnapshot(SAMPLE_MARKDOWN, []));
+    setSaveState("saved");
     setSelectionDraft(null);
     setComposerKind(null);
     setAnnotationPanelOpen(false);
@@ -1493,6 +2093,21 @@ export default function Home() {
     setMobilePane("editor");
     requestAnimationFrame(() => editorRef.current?.focus());
     showNotice("یک برگه‌ی تازه آماده شد.");
+  };
+
+  const restoreVersion = (version: RaaviVersion) => {
+    setContent(version.content);
+    setAnnotations(version.annotations);
+    setSaveState("saved");
+    setSaveModalOpen(false);
+    setSelectionDraft(null);
+    setComposerKind(null);
+    setComposerText("");
+    setAnnotationPanelOpen(Boolean(version.annotations.length));
+    setReadingMode(false);
+    showNotice(
+      `نسخه‌ی ${version.number.toLocaleString("fa-IR")} برای بازبینی بازیابی شد؛ برای ثبت آن ذخیره کنید.`,
+    );
   };
 
   return (
@@ -1515,7 +2130,7 @@ export default function Home() {
           </span>
           <button
             ref={libraryTriggerRef}
-            className={`button button--quiet library-trigger ${
+            className={`button button--quiet library-trigger mobile-library-trigger ${
               libraryOpen ? "is-active" : ""
             }`}
             type="button"
@@ -1532,7 +2147,7 @@ export default function Home() {
           <button
             className="button button--primary"
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => void openDocumentPicker()}
           >
             <Upload size={18} aria-hidden="true" />
             <span>باز کردن فایل</span>
@@ -1540,20 +2155,21 @@ export default function Home() {
           <button
             className="button button--ink"
             type="button"
-            onClick={downloadMarkdown}
-            title="ذخیره‌ی Markdown — Ctrl+S"
+            onClick={() => void saveCurrentFile()}
+            disabled={saveState === "saving"}
+            title="ذخیره‌ی نسخه‌ی جدید — Ctrl+S"
           >
-            <Download size={18} aria-hidden="true" />
-            <span>دریافت</span>
+            <Save size={18} aria-hidden="true" />
+            <span>ذخیره</span>
           </button>
           <button
             className="button button--ravi"
             type="button"
-            onClick={downloadRaavi}
-            title="ذخیره‌ی بسته‌ی راوی — Ctrl+Shift+S"
+            onClick={() => openSaveFileModal(documentType)}
+            title="ذخیره با نام و نوع فایل — Ctrl+Shift+S"
           >
-            <MessageSquareText size={18} aria-hidden="true" />
-            <span>اشتراک .ravi</span>
+            <FileArchive size={18} aria-hidden="true" />
+            <span>ذخیره فایل</span>
           </button>
           <button
             className={`button button--quiet ${readingMode ? "is-active" : ""}`}
@@ -1561,7 +2177,7 @@ export default function Home() {
             onClick={() =>
               setReadingMode((current) => {
                 const nextMode = !current;
-                if (nextMode) setLibraryOpen(false);
+                setLibraryOpen(nextMode ? false : true);
                 return nextMode;
               })
             }
@@ -1583,16 +2199,30 @@ export default function Home() {
           <span>{fileName}</span>
         </div>
 
-        <div className="save-indicator" aria-live="polite">
+        <button
+          className={`save-indicator is-${effectiveSaveState}`}
+          type="button"
+          onClick={() => void saveCurrentFile()}
+          disabled={effectiveSaveState === "saving"}
+          aria-live="polite"
+          title="برای ذخیره‌ی نسخه‌ی جدید کلیک کنید"
+        >
           <span
-            className={`status-dot is-${saveState}`}
+            className={`status-dot is-${effectiveSaveState}`}
           />
-          {saveState === "saving"
-            ? "در حال نگه‌داری…"
-            : saveState === "error"
-              ? "ذخیره نشد"
-              : "روی دستگاه ذخیره شد"}
-        </div>
+          {effectiveSaveState === "saving"
+            ? "در حال ذخیره…"
+            : effectiveSaveState === "error"
+              ? "ذخیره ناموفق"
+              : effectiveSaveState === "dirty"
+                ? "هشدار: ذخیره نشده"
+                : "ذخیره شده"}
+        </button>
+
+        <span className="revision-badge" title="نسخه‌ی فعلی سند">
+          <History size={14} aria-hidden="true" />
+          نسخه {revision.toLocaleString("fa-IR")}
+        </span>
 
         <div className="document-stats" aria-label="آمار نوشته">
           <span>{stats.words.toLocaleString("fa-IR")} واژه</span>
@@ -1741,13 +2371,17 @@ export default function Home() {
             id="markdown-editor"
             ref={editorRef}
             value={content}
-            onChange={(event) => setContent(event.target.value)}
+            onChange={(event) => {
+              setContent(event.target.value);
+              if (saveState === "error") setSaveState("saved");
+            }}
             spellCheck
             dir="auto"
             aria-describedby="editor-hint"
           />
           <div className="pane-footer" id="editor-hint">
-            میان‌برها: Ctrl+O برای باز کردن و Ctrl+S برای دریافت فایل
+            میان‌برها: Ctrl+O برای بازکردن، Ctrl+S برای ذخیره و Ctrl+Shift+S
+            برای ذخیره با نام
           </div>
         </section>
 
@@ -2102,6 +2736,8 @@ export default function Home() {
                         );
                       }
 
+                      // Markdown can reference arbitrary local paths, so Next Image cannot pre-resolve them.
+                      // eslint-disable-next-line @next/next/no-img-element
                       return <img src={src} alt={alt ?? ""} loading="lazy" />;
                     },
                   }}
@@ -2119,7 +2755,7 @@ export default function Home() {
                 <button
                   className="button button--primary"
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => void openDocumentPicker()}
                 >
                   <Upload size={17} aria-hidden="true" />
                   باز کردن فایل
@@ -2155,21 +2791,45 @@ export default function Home() {
                 <span className="library-kicker">قفسه‌ی محلی</span>
                 <strong id="library-title">کتابخانه</strong>
               </div>
-              <button
-                ref={libraryCloseRef}
-                type="button"
-                onClick={() => setLibraryOpen(false)}
-                aria-label="بستن کتابخانه"
-              >
-                <X size={18} aria-hidden="true" />
-              </button>
+              <div className="library-header-actions">
+                <button
+                  type="button"
+                  onClick={() => void connectLibrary()}
+                  aria-label="افزودن پوشه به کتابخانه"
+                  title="افزودن پوشه"
+                >
+                  <FolderPlus size={18} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void refreshLibrary()}
+                  disabled={libraryState === "scanning"}
+                  aria-label="به‌روزرسانی کتابخانه"
+                  title="به‌روزرسانی"
+                >
+                  <RefreshCw
+                    className={libraryState === "scanning" ? "is-spinning" : ""}
+                    size={18}
+                    aria-hidden="true"
+                  />
+                </button>
+                <button
+                  ref={libraryCloseRef}
+                  className="library-close"
+                  type="button"
+                  onClick={() => setLibraryOpen(false)}
+                  aria-label="بستن کتابخانه"
+                >
+                  <X size={18} aria-hidden="true" />
+                </button>
+              </div>
             </div>
 
             <input
               ref={directoryInputRef}
               className="visually-hidden"
               type="file"
-              accept=".md,.markdown,text/markdown"
+              accept=".md,.markdown,.ravi,text/markdown,application/json"
               multiple
               {...({
                 webkitdirectory: "",
@@ -2182,143 +2842,152 @@ export default function Home() {
               tabIndex={-1}
             />
 
-            {libraryState === "idle" ? (
-              <div className="library-onboarding">
-                <span className="library-seal" aria-hidden="true">
-                  <FolderOpen size={32} />
-                </span>
-                <strong>
-                  {libraryRoot
-                    ? `اتصال دوباره به «${libraryRoot}»`
-                    : "پوشه‌ی نوشته‌ها را انتخاب کنید"}
-                </strong>
-                <p>
-                  راوی همه‌ی زیرپوشه‌ها را می‌گردد و فقط فایل‌های md و markdown
-                  را به این قفسه می‌آورد.
-                </p>
+            <div className="library-content">
+              {recentFiles.length > 0 && (
+                <section className="library-section" aria-labelledby="recent-title">
+                  <div className="library-section-title">
+                    <span>
+                      <Clock3 size={15} aria-hidden="true" />
+                      <strong id="recent-title">فایل‌های اخیر</strong>
+                    </span>
+                    <small>{recentFiles.length.toLocaleString("fa-IR")}</small>
+                  </div>
+                  <div className="recent-list">
+                    {recentFiles.slice(0, 6).map((recent) => (
+                      <button
+                        key={recent.path}
+                        className="recent-file"
+                        type="button"
+                        onClick={() => void openRecentFile(recent)}
+                        title={recent.path}
+                      >
+                        {recent.documentType === "ravi" ? (
+                          <FileArchive size={15} aria-hidden="true" />
+                        ) : (
+                          <FileText size={15} aria-hidden="true" />
+                        )}
+                        <span>
+                          <strong dir="auto">{recent.name}</strong>
+                          <small dir="auto">{recent.path}</small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <section className="library-section library-folders-section" aria-labelledby="folders-title">
+                <div className="library-section-title">
+                  <span>
+                    <FolderOpen size={15} aria-hidden="true" />
+                    <strong id="folders-title">پوشه‌ها</strong>
+                  </span>
+                  <small>{libraryFolders.length.toLocaleString("fa-IR")}</small>
+                </div>
+
+                {libraryFolders.length > 0 && (
+                  <div className="library-folder-list">
+                    {libraryFolders.map((folder) => (
+                      <div key={folder.rootId} className="library-folder-chip" title={folder.rootPath}>
+                        <Folder size={14} aria-hidden="true" />
+                        <span dir="auto">{folder.rootName}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <button
-                  className="button button--primary"
+                  className="library-add-folder"
                   type="button"
                   onClick={() => void connectLibrary()}
                 >
-                  <FolderOpen size={17} aria-hidden="true" />
-                  انتخاب پوشه
+                  <FolderPlus size={16} aria-hidden="true" />
+                  افزودن پوشه
                 </button>
-              </div>
-            ) : libraryState === "scanning" ? (
-              <div className="library-scanning" role="status">
-                <RefreshCw
-                  className="is-spinning"
-                  size={28}
-                  aria-hidden="true"
+              </section>
+
+              <label className="library-search">
+                <Search size={16} aria-hidden="true" />
+                <span className="visually-hidden">جست‌وجو در کتابخانه</span>
+                <input
+                  type="search"
+                  value={libraryQuery}
+                  onChange={(event) => setLibraryQuery(event.target.value)}
+                  placeholder="جست‌وجوی نام یا مسیر…"
+                  dir="auto"
                 />
-                <strong>در حال ساخت کتابخانه…</strong>
-                <span>پوشه‌ها و فایل‌های Markdown بررسی می‌شوند.</span>
-              </div>
-            ) : (
-              <>
-                <div className="library-rootbar">
-                  <div>
-                    <FolderOpen size={17} aria-hidden="true" />
-                    <span>
-                      <small>پوشه‌ی ریشه</small>
-                      <strong dir="auto">{libraryRoot}</strong>
-                    </span>
-                  </div>
+                {libraryQuery && (
                   <button
                     type="button"
-                    onClick={() =>
-                      directoryHandle
-                        ? void scanConnectedDirectory(directoryHandle)
-                        : libraryRootPath && window.raaviDesktop
-                          ? void scanDesktopDirectory(libraryRootPath)
-                        : void connectLibrary()
-                    }
-                    aria-label="اسکن دوباره‌ی پوشه"
-                    title="اسکن دوباره"
+                    onClick={() => setLibraryQuery("")}
+                    aria-label="پاک‌کردن جست‌وجو"
                   >
-                    <RefreshCw size={16} aria-hidden="true" />
+                    <X size={15} aria-hidden="true" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void connectLibrary()}
-                    aria-label="انتخاب پوشه‌ی دیگر"
-                    title="تغییر پوشه"
-                  >
-                    <FolderOpen size={16} aria-hidden="true" />
-                  </button>
-                </div>
+                )}
+              </label>
 
-                <label className="library-search">
-                  <Search size={16} aria-hidden="true" />
-                  <span className="visually-hidden">جست‌وجو در کتابخانه</span>
-                  <input
-                    type="search"
-                    value={libraryQuery}
-                    onChange={(event) => setLibraryQuery(event.target.value)}
-                    placeholder="جست‌وجوی نام یا مسیر…"
-                    dir="auto"
-                  />
-                  {libraryQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setLibraryQuery("")}
-                      aria-label="پاک‌کردن جست‌وجو"
-                    >
-                      <X size={15} aria-hidden="true" />
-                    </button>
-                  )}
-                </label>
-
-                <div className="library-summary">
-                  <span>
-                    {visibleLibraryFiles.length.toLocaleString("fa-IR")} فایل
+              <div className="library-summary">
+                <span>
+                  {visibleLibraryFiles.length.toLocaleString("fa-IR")} فایل md و ravi
+                </span>
+                {libraryState === "scanning" && (
+                  <span className="library-loading">
+                    <RefreshCw className="is-spinning" size={13} aria-hidden="true" />
+                    در حال اسکن
                   </span>
-                  {libraryQuery && (
+                )}
+              </div>
+
+              <div className="library-tree">
+                {visibleLibraryFiles.length ? (
+                  <LibraryBranch
+                    node={libraryTree}
+                    activePath={activeLibraryPath}
+                    onOpenFile={(file) => void openLibraryFile(file)}
+                    isRoot
+                  />
+                ) : (
+                  <div className="library-empty">
+                    <FolderOpen size={28} aria-hidden="true" />
+                    <strong>
+                      {libraryQuery
+                        ? "فایلی با این عبارت پیدا نشد"
+                        : libraryState === "scanning"
+                          ? "در حال اسکن پوشه‌ها…"
+                          : "هنوز پوشه‌ای در کتابخانه نیست"}
+                    </strong>
                     <span>
-                      از {libraryFiles.length.toLocaleString("fa-IR")}
+                      {libraryQuery
+                        ? "عبارت جست‌وجو را تغییر دهید."
+                        : "یک پوشه اضافه کنید تا فایل‌های md و ravi همیشه در دسترس باشند."}
                     </span>
-                  )}
-                </div>
+                    {!libraryQuery && libraryState !== "scanning" && (
+                      <button
+                        className="button button--primary"
+                        type="button"
+                        onClick={() => void connectLibrary()}
+                      >
+                        <FolderPlus size={16} aria-hidden="true" />
+                        افزودن پوشه
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
 
-                <div className="library-tree">
-                  {visibleLibraryFiles.length ? (
-                    <LibraryBranch
-                      node={libraryTree}
-                      activePath={activeLibraryPath}
-                      onOpenFile={(file) => void openLibraryFile(file)}
-                      isRoot
-                    />
-                  ) : (
-                    <div className="library-empty">
-                      <FileText size={28} aria-hidden="true" />
-                      <strong>
-                        {libraryQuery
-                          ? "فایلی با این عبارت پیدا نشد"
-                          : "فایل Markdown پیدا نشد"}
-                      </strong>
-                      <span>
-                        {libraryQuery
-                          ? "عبارت جست‌وجو را تغییر دهید."
-                          : "یک پوشه‌ی دیگر انتخاب کنید یا فایل md بسازید."}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="library-footer">
-                  {openingLibraryPath ? (
-                    <span>در حال باز کردن فایل…</span>
-                  ) : activeLibraryPath ? (
-                    <span dir="auto" title={activeLibraryPath}>
-                      {activeLibraryPath}
-                    </span>
-                  ) : (
-                    <span>برای باز کردن، روی نام فایل کلیک کنید.</span>
-                  )}
-                </div>
-              </>
-            )}
+            <div className="library-footer">
+              {openingLibraryPath ? (
+                <span>در حال باز کردن فایل…</span>
+              ) : activeLibraryPath ? (
+                <span dir="auto" title={activeLibraryPath}>
+                  {activeLibraryPath}
+                </span>
+              ) : (
+                <span>برای بازکردن، روی نام فایل کلیک کنید.</span>
+              )}
+            </div>
 
             <div className="library-privacy">
               <ShieldCheck size={17} aria-hidden="true" />
@@ -2330,6 +2999,173 @@ export default function Home() {
           </aside>
         )}
       </div>
+
+      {saveModalOpen && (
+        <div
+          className="save-modal-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSaveModalOpen(false);
+          }}
+        >
+          <div
+            ref={saveModalRef}
+            className="save-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="save-modal-title"
+            aria-describedby="save-modal-description"
+          >
+            <div className="save-modal-header">
+              <span className="save-modal-mark" aria-hidden="true">
+                <Save size={22} />
+              </span>
+              <div>
+                <span>ثبت یک نسخه‌ی تازه</span>
+                <strong id="save-modal-title">ذخیره فایل</strong>
+              </div>
+              <button
+                ref={saveModalCloseRef}
+                type="button"
+                onClick={() => setSaveModalOpen(false)}
+                aria-label="بستن پنجره‌ی ذخیره"
+              >
+                <X size={19} aria-hidden="true" />
+              </button>
+            </div>
+
+            <form
+              className="save-modal-body"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveAsFile();
+              }}
+            >
+              <p id="save-modal-description">
+                نام و نوع فایل را انتخاب کنید. با هر ذخیره، نسخه‌ی سند یک شماره
+                جلو می‌رود.
+              </p>
+
+              <label className="save-name-field">
+                <span>نام فایل</span>
+                <input
+                  ref={saveFileNameRef}
+                  type="text"
+                  value={saveFileName}
+                  onChange={(event) => setSaveFileName(event.target.value)}
+                  dir="auto"
+                  required
+                />
+              </label>
+
+              <fieldset className="save-type-options">
+                <legend>نوع فایل</legend>
+                <label className={saveFileType === "markdown" ? "is-selected" : ""}>
+                  <input
+                    type="radio"
+                    name="save-file-type"
+                    value="markdown"
+                    checked={saveFileType === "markdown"}
+                    onChange={() => {
+                      setSaveFileType("markdown");
+                      setSaveFileName((current) =>
+                        saveNameForType(current, "markdown"),
+                      );
+                    }}
+                  />
+                  <FileText size={21} aria-hidden="true" />
+                  <span>
+                    <strong>Markdown (.md)</strong>
+                    <small>
+                      فقط متن ذخیره می‌شود؛ هایلایت، کامنت و تاریخچه همراه فایل
+                      نیست.
+                    </small>
+                  </span>
+                </label>
+                <label className={saveFileType === "ravi" ? "is-selected" : ""}>
+                  <input
+                    type="radio"
+                    name="save-file-type"
+                    value="ravi"
+                    checked={saveFileType === "ravi"}
+                    onChange={() => {
+                      setSaveFileType("ravi");
+                      setSaveFileName((current) =>
+                        saveNameForType(current, "ravi"),
+                      );
+                    }}
+                  />
+                  <FileArchive size={21} aria-hidden="true" />
+                  <span>
+                    <strong>سند راوی (.ravi)</strong>
+                    <small>
+                      متن، هایلایت، کامنت، حاشیه‌ها و تاریخچه‌ی نسخه‌ها را یکجا
+                      نگه می‌دارد.
+                    </small>
+                  </span>
+                </label>
+              </fieldset>
+
+              <details className="version-history">
+                <summary>
+                  <span>
+                    <History size={16} aria-hidden="true" />
+                    تاریخچه‌ی نسخه‌ها
+                  </span>
+                  <small>
+                    نسخه‌ی بعدی {(revision + 1).toLocaleString("fa-IR")}
+                  </small>
+                </summary>
+                {versions.length > 0 ? (
+                  <ol>
+                    {[...versions].reverse().map((version) => (
+                      <li key={`${version.number}-${version.savedAt}`}>
+                        <span>
+                          <strong>
+                            نسخه {version.number.toLocaleString("fa-IR")}
+                          </strong>
+                          <time dateTime={version.savedAt}>
+                            {new Date(version.savedAt).toLocaleString("fa-IR", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })}
+                          </time>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => restoreVersion(version)}
+                        >
+                          بازیابی
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p>با اولین ذخیره، تاریخچه‌ی این سند ساخته می‌شود.</p>
+                )}
+              </details>
+
+              <div className="save-modal-actions">
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  onClick={() => setSaveModalOpen(false)}
+                >
+                  انصراف
+                </button>
+                <button
+                  className="button button--primary"
+                  type="submit"
+                  disabled={saveState === "saving"}
+                >
+                  <Save size={17} aria-hidden="true" />
+                  {saveState === "saving" ? "در حال ذخیره…" : "ذخیره فایل"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {hoverPreview && hoveredAnnotation && (
         <div

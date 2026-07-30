@@ -7,6 +7,7 @@ import {
   createRaaviServer,
   markdownPathFromArguments,
   readDocumentPath,
+  readLibraryDocument,
   readMarkdownFile,
   scanMarkdownFolder,
 } from "../desktop/server.mjs";
@@ -38,6 +39,7 @@ test("desktop reads a shared Raavi document with annotations", async () => {
     document: {
       name: "review.md",
       markdown: "# متن نمونه",
+      revision: 3,
     },
     annotations: [
       {
@@ -52,6 +54,14 @@ test("desktop reads a shared Raavi document with annotations", async () => {
         createdAt: "2026-07-30T12:00:00.000Z",
       },
     ],
+    versions: [
+      {
+        number: 3,
+        savedAt: "2026-07-30T12:00:00.000Z",
+        content: "# متن نمونه",
+        annotations: [],
+      },
+    ],
   };
 
   try {
@@ -62,6 +72,9 @@ test("desktop reads a shared Raavi document with annotations", async () => {
     assert.equal(document.annotations.length, 1);
     assert.equal(document.annotations[0].kind, "comment");
     assert.equal(document.annotations[0].body, "این بخش بازبینی شود.");
+    assert.equal(document.revision, 3);
+    assert.equal(document.versions.length, 1);
+    assert.equal(document.versions[0].number, 3);
   } finally {
     await rm(rootPath, { recursive: true, force: true });
   }
@@ -93,20 +106,44 @@ test("desktop library scans recursively and limits reads to selected roots", asy
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "raavi-library-"));
   const nestedPath = path.join(rootPath, "یادداشت‌ها");
   const markdownPath = path.join(nestedPath, "نمونه.md");
+  const raviPath = path.join(nestedPath, "بازبینی.ravi");
   const ignoredPath = path.join(rootPath, "ignore.txt");
 
   try {
     await mkdir(nestedPath);
     await writeFile(markdownPath, "# نمونه", "utf8");
+    await writeFile(
+      raviPath,
+      JSON.stringify({
+        format: "ravi",
+        version: 1,
+        document: { name: "بازبینی.md", markdown: "# بازبینی", revision: 2 },
+        annotations: [],
+        versions: [],
+      }),
+      "utf8",
+    );
     await writeFile(ignoredPath, "not markdown", "utf8");
 
     const scan = await scanMarkdownFolder(rootPath);
-    assert.equal(scan.files.length, 1);
-    assert.equal(scan.files[0].path, "یادداشت‌ها/نمونه.md");
+    assert.equal(scan.files.length, 2);
+    assert.deepEqual(
+      scan.files.map((file) => file.documentType).sort(),
+      ["markdown", "ravi"],
+    );
+    assert.ok(
+      scan.files.some((file) => file.path === "یادداشت‌ها/نمونه.md"),
+    );
     assert.equal(
       await readMarkdownFile(markdownPath, new Set([path.resolve(rootPath)])),
       "# نمونه",
     );
+    const raviDocument = await readLibraryDocument(
+      raviPath,
+      new Set([path.resolve(rootPath)]),
+    );
+    assert.equal(raviDocument.content, "# بازبینی");
+    assert.equal(raviDocument.documentType, "ravi");
     await assert.rejects(() =>
       readMarkdownFile(ignoredPath, new Set([path.resolve(rootPath)])),
     );

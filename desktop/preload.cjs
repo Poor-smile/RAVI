@@ -5,15 +5,22 @@ contextBridge.exposeInMainWorld(
   "raaviDesktop",
   Object.freeze({
     isDesktop: true,
+    getLibraryState: () => ipcRenderer.invoke("library:get-state"),
     chooseMarkdownFolder: () => ipcRenderer.invoke("library:choose-folder"),
     scanMarkdownFolder: (rootPath) =>
       ipcRenderer.invoke("library:scan-folder", rootPath),
-    readMarkdownFile: (filePath) =>
+    readLibraryDocument: (filePath) =>
       ipcRenderer.invoke("library:read-file", filePath),
-    saveMarkdown: (fileName, content) =>
-      ipcRenderer.invoke("document:save-markdown", { fileName, content }),
+    chooseDocument: () => ipcRenderer.invoke("document:choose"),
+    openRecentDocument: (filePath) =>
+      ipcRenderer.invoke("document:open-recent", filePath),
+    saveMarkdown: (fileName, document) =>
+      ipcRenderer.invoke("document:save-markdown", { fileName, document }),
     saveRaavi: (fileName, document) =>
       ipcRenderer.invoke("document:save-ravi", { fileName, document }),
+    saveCurrentDocument: (filePath, document) =>
+      ipcRenderer.invoke("document:save-current", { filePath, document }),
+    rendererReady: () => ipcRenderer.send("renderer:ready"),
     onOpenMarkdownFile: (callback) => {
       const listener = (_event, document) => callback(document);
       ipcRenderer.on("document:open-path", listener);
