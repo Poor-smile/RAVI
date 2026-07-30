@@ -28,6 +28,8 @@ import {
   Keyboard,
   Library,
   Link2,
+  Lock,
+  LockOpen,
   MessageCircle,
   MessageSquareText,
   Minus,
@@ -141,6 +143,7 @@ const SAMPLE_MARKDOWN = [
   "| قابلیت | وضعیت |",
   "| :--- | :---: |",
   "| پیش‌نمایش زنده | ✓ |",
+  "| قفل اسکرول دوطرفه | ✓ |",
   "| جدول و چک‌لیست | ✓ |",
   "| ذخیره‌ی محلی | ✓ |",
   "| هایلایت، کامنت و حاشیه‌نویسی | ✓ |",
@@ -155,6 +158,7 @@ const SAMPLE_MARKDOWN = [
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
 type MobilePane = "editor" | "preview";
+type ScrollPane = "editor" | "preview";
 type LibraryTab = "history" | "library";
 type LibraryState = "idle" | "scanning" | "ready";
 type DocumentFileType = "markdown" | "ravi";
@@ -673,6 +677,7 @@ export default function Home() {
   const [readingMode, setReadingMode] = useState(false);
   const [readerSize, setReaderSize] = useState(18);
   const [mobilePane, setMobilePane] = useState<MobilePane>("preview");
+  const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -701,6 +706,7 @@ export default function Home() {
     useState<AnnotationHoverPreview | null>(null);
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const previewScrollRef = useRef<HTMLDivElement>(null);
   const previewArticleRef = useRef<HTMLElement>(null);
   const librarySearchRef = useRef<HTMLInputElement>(null);
   const annotationPanelRef = useRef<HTMLElement>(null);
@@ -722,10 +728,105 @@ export default function Home() {
   const openedDocumentRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const annotationHoverFrameRef = useRef<number | null>(null);
+  const scrollSyncFrameRef = useRef<number | null>(null);
+  const scrollSyncTargetRef = useRef<ScrollPane | null>(null);
+  const pendingScrollSourceRef = useRef<ScrollPane | null>(null);
+  const lastScrolledPaneRef = useRef<ScrollPane>("editor");
   const directoryHandlesRef = useRef(
     new Map<string, LocalDirectoryHandle>(),
   );
   const { topLayer, syncLayer } = useModalStack();
+
+  const alignScrollPanes = useCallback((sourcePane: ScrollPane) => {
+    const source =
+      sourcePane === "editor"
+        ? editorRef.current
+        : previewScrollRef.current;
+    const target =
+      sourcePane === "editor"
+        ? previewScrollRef.current
+        : editorRef.current;
+
+    if (
+      !source ||
+      !target ||
+      source.clientHeight <= 0 ||
+      target.clientHeight <= 0
+    ) {
+      return;
+    }
+
+    const sourceRange = source.scrollHeight - source.clientHeight;
+    const targetRange = target.scrollHeight - target.clientHeight;
+    const progress = sourceRange > 0 ? source.scrollTop / sourceRange : 0;
+    const nextScrollTop = progress * Math.max(0, targetRange);
+
+    if (Math.abs(target.scrollTop - nextScrollTop) < 1) return;
+
+    scrollSyncTargetRef.current =
+      sourcePane === "editor" ? "preview" : "editor";
+    target.scrollTop = nextScrollTop;
+  }, []);
+
+  const handleSyncedScroll = useCallback(
+    (sourcePane: ScrollPane) => {
+      lastScrolledPaneRef.current = sourcePane;
+      if (!scrollSyncEnabled) return;
+
+      if (scrollSyncTargetRef.current === sourcePane) {
+        scrollSyncTargetRef.current = null;
+        return;
+      }
+
+      pendingScrollSourceRef.current = sourcePane;
+      if (scrollSyncFrameRef.current !== null) return;
+
+      scrollSyncFrameRef.current = window.requestAnimationFrame(() => {
+        const pendingSource = pendingScrollSourceRef.current;
+        scrollSyncFrameRef.current = null;
+        pendingScrollSourceRef.current = null;
+        if (pendingSource) alignScrollPanes(pendingSource);
+      });
+    },
+    [alignScrollPanes, scrollSyncEnabled],
+  );
+
+  const toggleScrollSync = useCallback(() => {
+    const nextEnabled = !scrollSyncEnabled;
+    setScrollSyncEnabled(nextEnabled);
+    scrollSyncTargetRef.current = null;
+
+    if (nextEnabled) {
+      window.requestAnimationFrame(() => {
+        alignScrollPanes(lastScrolledPaneRef.current);
+      });
+    }
+  }, [alignScrollPanes, scrollSyncEnabled]);
+
+  useEffect(
+    () => () => {
+      if (scrollSyncFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollSyncFrameRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!scrollSyncEnabled) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      alignScrollPanes(lastScrolledPaneRef.current);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    alignScrollPanes,
+    annotationPanelOpen,
+    content,
+    readerSize,
+    scrollSyncEnabled,
+  ]);
 
   const stats = useMemo(() => {
     const cleanText = content.trim();
@@ -2669,6 +2770,7 @@ export default function Home() {
               setContent(event.target.value);
               if (saveState === "error") setSaveState("saved");
             }}
+            onScroll={() => handleSyncedScroll("editor")}
             data-editable-kind="editor"
             spellCheck
             dir="auto"
@@ -2687,12 +2789,43 @@ export default function Home() {
           </div>
         </section>
 
-        <div className="registration-spine" aria-hidden="true">
-          <span className="registration-dot" />
-          <span className="spine-line" />
-          <span className="spine-label">پیش‌نمای زنده</span>
-          <span className="spine-line" />
-          <span className="registration-dot registration-dot--bottom" />
+        <div
+          className={`registration-spine ${
+            scrollSyncEnabled ? "is-scroll-synced" : ""
+          }`}
+        >
+          <span className="registration-dot" aria-hidden="true" />
+          <span className="spine-line" aria-hidden="true" />
+          <button
+            className="scroll-sync-toggle"
+            type="button"
+            onClick={toggleScrollSync}
+            aria-label={
+              scrollSyncEnabled
+                ? "باز کردن قفل اسکرول هماهنگ"
+                : "قفل کردن اسکرول ادیتور و پیش‌نمایش"
+            }
+            aria-pressed={scrollSyncEnabled}
+            title={
+              scrollSyncEnabled
+                ? "اسکرول هماهنگ فعال است؛ برای آزاد کردن کلیک کنید"
+                : "قفل اسکرول ادیتور و پیش‌نمایش"
+            }
+          >
+            {scrollSyncEnabled ? (
+              <Lock size={14} aria-hidden="true" />
+            ) : (
+              <LockOpen size={14} aria-hidden="true" />
+            )}
+          </button>
+          <span className="spine-label" aria-hidden="true">
+            {scrollSyncEnabled ? "اسکرول هماهنگ" : "اسکرول آزاد"}
+          </span>
+          <span className="spine-line" aria-hidden="true" />
+          <span
+            className="registration-dot registration-dot--bottom"
+            aria-hidden="true"
+          />
         </div>
 
         <section
@@ -3048,7 +3181,9 @@ export default function Home() {
             )}
 
             <div
+              ref={previewScrollRef}
               className="preview-scroll"
+              onScroll={() => handleSyncedScroll("preview")}
               style={
                 { "--reader-size": `${readerSize}px` } as React.CSSProperties
               }

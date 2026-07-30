@@ -212,6 +212,76 @@ test.describe("Electron keyboard integration", () => {
         topbar.getByRole("button", { name: "میان‌برها", exact: true }),
       ).toHaveCount(0);
 
+      const previewScroll = window.locator(".preview-scroll");
+      const scrollSyncToggle = window.locator(".scroll-sync-toggle");
+      await expect(scrollSyncToggle).toHaveAttribute(
+        "aria-label",
+        "باز کردن قفل اسکرول هماهنگ",
+      );
+      await expect(scrollSyncToggle).toHaveAttribute("aria-pressed", "true");
+
+      const editorScrollRange = await editor.evaluate(
+        (node: HTMLTextAreaElement) => node.scrollHeight - node.clientHeight,
+      );
+      const previewScrollRange = await previewScroll.evaluate(
+        (node: HTMLDivElement) => node.scrollHeight - node.clientHeight,
+      );
+      expect(editorScrollRange).toBeGreaterThan(0);
+      expect(previewScrollRange).toBeGreaterThan(0);
+
+      await editor.evaluate((node: HTMLTextAreaElement) => {
+        node.scrollTop = (node.scrollHeight - node.clientHeight) * 0.7;
+        node.dispatchEvent(new Event("scroll"));
+      });
+      await expect
+        .poll(() =>
+          previewScroll.evaluate((node: HTMLDivElement) => {
+            const range = node.scrollHeight - node.clientHeight;
+            return range > 0 ? node.scrollTop / range : 0;
+          }),
+        )
+        .toBeCloseTo(0.7, 1);
+
+      await previewScroll.evaluate((node: HTMLDivElement) => {
+        node.scrollTop = (node.scrollHeight - node.clientHeight) * 0.25;
+        node.dispatchEvent(new Event("scroll"));
+      });
+      await expect
+        .poll(() =>
+          editor.evaluate((node: HTMLTextAreaElement) => {
+            const range = node.scrollHeight - node.clientHeight;
+            return range > 0 ? node.scrollTop / range : 0;
+          }),
+        )
+        .toBeCloseTo(0.25, 1);
+
+      await scrollSyncToggle.click();
+      await expect(scrollSyncToggle).toHaveAttribute("aria-pressed", "false");
+      await expect(scrollSyncToggle).toHaveAttribute(
+        "aria-label",
+        "قفل کردن اسکرول ادیتور و پیش‌نمایش",
+      );
+      const editorScrollBeforeUnlockedPreview = await editor.evaluate(
+        (node: HTMLTextAreaElement) => node.scrollTop,
+      );
+      await previewScroll.evaluate(
+        (node: HTMLDivElement) =>
+          new Promise<void>((resolve) => {
+            node.scrollTop = (node.scrollHeight - node.clientHeight) * 0.8;
+            node.dispatchEvent(new Event("scroll"));
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
+      const editorScrollAfterUnlockedPreview = await editor.evaluate(
+        (node: HTMLTextAreaElement) => node.scrollTop,
+      );
+      expect(
+        Math.abs(
+          editorScrollAfterUnlockedPreview - editorScrollBeforeUnlockedPreview,
+        ),
+      ).toBeLessThan(1);
+      await scrollSyncToggle.click();
+
       const dispatchShortcut = async ({
         code,
         key,
