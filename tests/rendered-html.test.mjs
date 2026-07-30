@@ -212,3 +212,38 @@ test("ships the viewer implementation instead of starter assets", async () => {
     /SkeletonPreview|react-loading-skeleton|codex-preview/,
   );
 });
+
+test("ships the secure Mermaid Studio and standard-fence workflow", async () => {
+  const [page, studio, renderer, blocks, css, packageJson, registry] =
+    await Promise.all([
+      readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+      readFile(
+        new URL("../app/components/mermaid-studio.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../app/mermaid/renderer.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/mermaid/blocks.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+      readFile(new URL("../package.json", import.meta.url), "utf8"),
+      readFile(
+        new URL("../app/keyboard/command-registry.ts", import.meta.url),
+        "utf8",
+      ),
+    ]);
+
+  assert.match(page, /MermaidDiagram/);
+  assert.match(page, /MermaidStudio/);
+  assert.match(studio, /استودیوی نمودار/);
+  assert.match(studio, /پیش‌نمایش زنده/);
+  assert.match(studio, /Ctrl\+Enter/);
+  assert.match(renderer, /securityLevel: "strict"/);
+  assert.match(renderer, /DOMParser/);
+  assert.match(renderer, /renderTimeoutMs/);
+  assert.match(blocks, /replaceMermaidBlock/);
+  assert.match(blocks, /makeMermaidFence/);
+  assert.match(css, /\.mermaid-studio/);
+  assert.match(css, /\.mermaid-diagram/);
+  assert.match(packageJson, /"mermaid": "11\.16\.0"/);
+  assert.match(registry, /id: "diagram\.mermaid"/);
+  assert.match(registry, /code: "KeyM", alt: true/);
+});

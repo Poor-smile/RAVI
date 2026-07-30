@@ -26,6 +26,7 @@ export type CommandId =
   | "edit.code"
   | "edit.link"
   | "edit.quote"
+  | "diagram.mermaid"
   | "view.theme"
   | "view.reading"
   | "focus.editor"
@@ -166,6 +167,15 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
     allowInEditable: ["editor"],
     showInHelp: true,
     contextLabel: "فقط در ویرایشگر",
+  },
+  {
+    id: "diagram.mermaid",
+    title: "ساخت نمودار Mermaid",
+    group: "edit",
+    bindings: [{ code: "KeyM", alt: true }],
+    allowInEditable: ["editor"],
+    showInHelp: true,
+    contextLabel: "در ویرایشگر؛ مستقل از زبان صفحه‌کلید",
   },
   {
     id: "view.theme",

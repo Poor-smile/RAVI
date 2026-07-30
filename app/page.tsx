@@ -36,6 +36,7 @@ import {
   MessageSquareText,
   Minus,
   Moon,
+  Network,
   NotebookPen,
   PanelLeftClose,
   PanelLeftOpen,
@@ -82,6 +83,12 @@ import {
   NewDocumentSpec,
   titleFromDocumentName,
 } from "./components/new-document-dialog";
+import { MermaidDiagram } from "./components/mermaid-diagram";
+import {
+  MermaidApplyResult,
+  MermaidStudio,
+  MermaidStudioSession,
+} from "./components/mermaid-studio";
 import {
   commandAriaKeyShortcuts,
   commandTitle,
@@ -93,6 +100,14 @@ import {
   CommandEnvironment,
   CommandId,
 } from "./keyboard/command-registry";
+import {
+  findMermaidBlocks,
+  insertMermaidBlock,
+  mermaidBlockAtOffset,
+  MermaidBlock,
+  replaceMermaidBlock,
+} from "./mermaid/blocks";
+import { DEFAULT_MERMAID_CODE } from "./mermaid/samples";
 import {
   AnnotationKind,
   makeRaaviDocument,
@@ -862,6 +877,8 @@ export default function Home() {
   const [newDocumentCreating, setNewDocumentCreating] = useState(false);
   const [newDocumentError, setNewDocumentError] = useState("");
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
+  const [mermaidStudioSession, setMermaidStudioSession] =
+    useState<MermaidStudioSession | null>(null);
   const [saveFileType, setSaveFileType] =
     useState<SaveFileType>("ravi");
   const [saveFileName, setSaveFileName] = useState(
@@ -945,14 +962,13 @@ export default function Home() {
   const saveModalCloseRef = useRef<HTMLButtonElement>(null);
   const newDocumentButtonRef = useRef<HTMLButtonElement>(null);
   const brandButtonRef = useRef<HTMLButtonElement>(null);
+  const mermaidReturnFocusRef = useRef<HTMLElement | null>(null);
   const saveFileNameRef = useRef<HTMLInputElement>(null);
   const saveModalRef = useRef<HTMLDivElement>(null);
   const openedDocumentRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const themeCommitTimerRef =
-    useRef<ReturnType<typeof setTimeout> | null>(null);
-  const themeFinishTimerRef =
-    useRef<ReturnType<typeof setTimeout> | null>(null);
+  const themeCommitTimerRef = useRef<number | null>(null);
+  const themeFinishTimerRef = useRef<number | null>(null);
   const annotationHoverFrameRef = useRef<number | null>(null);
   const readingHeaderFrameRef = useRef<number | null>(null);
   const readingOutlineFrameRef = useRef<number | null>(null);
@@ -974,6 +990,7 @@ export default function Home() {
     () => extractReadingHeadings(content),
     [content],
   );
+  const mermaidBlocks = useMemo(() => findMermaidBlocks(content), [content]);
   const documentTextDirection = useMemo(
     () => detectDocumentTextDirection(content),
     [content],
@@ -1977,6 +1994,10 @@ export default function Home() {
   useEffect(() => {
     syncLayer("about", aboutModalOpen);
   }, [aboutModalOpen, syncLayer]);
+
+  useEffect(() => {
+    syncLayer("mermaid", Boolean(mermaidStudioSession));
+  }, [mermaidStudioSession, syncLayer]);
 
   useEffect(() => {
     syncLayer("save", saveModalOpen);
@@ -3188,6 +3209,103 @@ export default function Home() {
     });
   };
 
+  const restoreMermaidWorkspace = useCallback(
+    (session: MermaidStudioSession, focus: "editor" | "preview") => {
+      requestAnimationFrame(() => {
+        if (editorRef.current) {
+          editorRef.current.scrollTop = session.editorScrollTop;
+        }
+        if (previewScrollRef.current) {
+          previewScrollRef.current.scrollTop = session.previewScrollTop;
+        }
+        if (focus === "editor") editorRef.current?.focus();
+        else previewArticleRef.current?.focus();
+      });
+    },
+    [],
+  );
+
+  const openMermaidStudio = useCallback(
+    (block?: MermaidBlock) => {
+      const editor = editorRef.current;
+      const mode = block ? "edit" : "create";
+      const insertionOffset = editor?.selectionStart ?? content.length;
+      mermaidReturnFocusRef.current =
+        mode === "edit"
+          ? previewArticleRef.current
+          : editor ?? previewArticleRef.current;
+      setEditorSelectionMenuPosition(null);
+      setSelectionDraft(null);
+      setComposerKind(null);
+      setMermaidStudioSession({
+        id:
+          globalThis.crypto?.randomUUID?.() ??
+          `mermaid-session-${Date.now()}`,
+        mode,
+        initialCode: block?.code ?? DEFAULT_MERMAID_CODE,
+        insertionOffset,
+        originalDocument: content,
+        block,
+        editorScrollTop: editor?.scrollTop ?? 0,
+        previewScrollTop: previewScrollRef.current?.scrollTop ?? 0,
+      });
+    },
+    [content],
+  );
+
+  const closeMermaidStudio = useCallback(
+    (session: MermaidStudioSession) => {
+      setMermaidStudioSession(null);
+      restoreMermaidWorkspace(
+        session,
+        session.mode === "create" ? "editor" : "preview",
+      );
+    },
+    [restoreMermaidWorkspace],
+  );
+
+  const applyMermaidStudio = useCallback(
+    (
+      code: string,
+      session: MermaidStudioSession,
+    ): MermaidApplyResult => {
+      if (session.mode === "edit" && session.block) {
+        const result = replaceMermaidBlock(
+          content,
+          session.originalDocument,
+          session.block,
+          code,
+        );
+        if (!result.ok) return { ok: false, message: result.message };
+        setContent(result.content);
+        setMermaidStudioSession(null);
+        restoreMermaidWorkspace(session, "preview");
+        showNotice("نمودار در همان بلوک به‌روزرسانی شد.");
+        return { ok: true };
+      }
+
+      const result = insertMermaidBlock(content, session.insertionOffset, code);
+      setContent(result.content);
+      setMermaidStudioSession(null);
+      requestAnimationFrame(() => {
+        if (editorRef.current) {
+          editorRef.current.scrollTop = session.editorScrollTop;
+          editorRef.current.focus();
+          editorRef.current.setSelectionRange(
+            result.block.codeStartOffset,
+            result.block.codeEndOffset,
+          );
+        }
+        if (previewScrollRef.current) {
+          previewScrollRef.current.scrollTop = session.previewScrollTop;
+        }
+      });
+      showNotice("نمودار در محل نشانگر به سند اضافه شد.");
+      return { ok: true };
+    },
+    [content, restoreMermaidWorkspace, showNotice],
+  );
+
   const restoreVersion = (version: RaaviVersion) => {
     setContent(version.content);
     setAnnotations(version.annotations);
@@ -3374,6 +3492,7 @@ export default function Home() {
     "edit.link": () =>
       insertInline("[", "](https://example.com)", "عنوان پیوند"),
     "edit.quote": insertQuote,
+    "diagram.mermaid": () => openMermaidStudio(),
     "view.theme": toggleTheme,
     "view.reading": toggleReadingMode,
     "focus.editor": focusEditor,
@@ -3430,6 +3549,7 @@ export default function Home() {
       case "edit.code":
       case "edit.link":
       case "edit.quote":
+      case "diagram.mermaid":
         return !modalIsOpen && !composerKind && editorFocused;
       case "view.reading":
       case "focus.editor":
@@ -3506,6 +3626,7 @@ export default function Home() {
             : ""
         }`}
         inert={
+          Boolean(mermaidStudioSession) ||
           aboutModalOpen ||
           newDocumentModalOpen ||
           saveModalOpen ||
@@ -3715,6 +3836,7 @@ export default function Home() {
         className="proofbar"
         aria-label="وضعیت سند"
         inert={
+          Boolean(mermaidStudioSession) ||
           aboutModalOpen ||
           newDocumentModalOpen ||
           saveModalOpen ||
@@ -3792,6 +3914,7 @@ export default function Home() {
           className="error-banner"
           role="alert"
           inert={
+            Boolean(mermaidStudioSession) ||
             aboutModalOpen ||
             newDocumentModalOpen ||
             saveModalOpen ||
@@ -3813,6 +3936,7 @@ export default function Home() {
           libraryOpen ? "library-is-open" : ""
         }`}
         inert={
+          Boolean(mermaidStudioSession) ||
           aboutModalOpen ||
           newDocumentModalOpen ||
           saveModalOpen ||
@@ -4034,6 +4158,24 @@ export default function Home() {
                 title={commandTitle("edit.link", commandEnvironment)}
               >
                 <Link2 size={16} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => openMermaidStudio()}
+                aria-label="ساخت نمودار Mermaid"
+                aria-haspopup="dialog"
+                aria-expanded={Boolean(mermaidStudioSession)}
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "diagram.mermaid",
+                  commandEnvironment,
+                )}
+                title={commandTitle(
+                  "diagram.mermaid",
+                  commandEnvironment,
+                  "ساخت یا درج نمودار Mermaid",
+                )}
+              >
+                <Network size={16} aria-hidden="true" />
               </button>
               <span className="tool-divider" aria-hidden="true" />
               <button
@@ -4692,6 +4834,22 @@ export default function Home() {
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    pre: ({ children, node }) => {
+                      const block = mermaidBlockAtOffset(
+                        mermaidBlocks,
+                        node?.position?.start.offset,
+                      );
+                      if (block) {
+                        return (
+                          <MermaidDiagram
+                            block={block}
+                            theme={themeMode}
+                            onEdit={openMermaidStudio}
+                          />
+                        );
+                      }
+                      return <pre>{children}</pre>;
+                    },
                     p: ({ children }) => (
                       <p dir={blockTextDirection(children)}>{children}</p>
                     ),
@@ -5146,6 +5304,21 @@ export default function Home() {
           </aside>
         )}
       </div>
+
+      {mermaidStudioSession && (
+        <MermaidStudio
+          key={mermaidStudioSession.id}
+          open
+          isTopLayer={topLayer === "mermaid"}
+          session={mermaidStudioSession}
+          fileName={fileName}
+          theme={themeMode}
+          onToggleTheme={toggleTheme}
+          onApply={applyMermaidStudio}
+          onClose={closeMermaidStudio}
+          returnFocusRef={mermaidReturnFocusRef}
+        />
+      )}
 
       <NewDocumentDialog
         open={newDocumentModalOpen}

@@ -89,6 +89,25 @@ test.describe("command resolver", () => {
     ).toBe("view.theme");
   });
 
+  test("opens Mermaid Studio from Persian and English keyboard layouts", () => {
+    expect(
+      resolveOnly(
+        "diagram.mermaid",
+        keyboardEvent("KeyM", { key: "m", altKey: true }),
+        windowsWeb,
+        "editor",
+      ),
+    ).toBe("diagram.mermaid");
+    expect(
+      resolveOnly(
+        "diagram.mermaid",
+        keyboardEvent("KeyM", { key: "ئ", altKey: true }),
+        windowsWeb,
+        "editor",
+      ),
+    ).toBe("diagram.mermaid");
+  });
+
   test("requires exact modifiers and ignores IME composition", () => {
     expect(
       resolveOnly(
@@ -268,7 +287,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(aboutDialog).toBeVisible();
       await expect(aboutTitle).toBeFocused();
       await expect(
-        aboutDialog.getByText("0.17.0", { exact: true }),
+        aboutDialog.getByText("0.18.0", { exact: true }),
       ).toBeVisible();
       await expect(
         aboutDialog.getByRole("heading", {
@@ -284,7 +303,7 @@ test.describe("Electron keyboard integration", () => {
       ).toBeVisible();
       await expect(
         aboutDialog.getByText(
-          "افزودن جریان کامل ساخت فایل جدید",
+          "پشتیبانی امن و lazy از بلوک‌های استاندارد Mermaid",
           { exact: true },
         ),
       ).toBeVisible();

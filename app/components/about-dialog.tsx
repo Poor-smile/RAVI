@@ -6,6 +6,7 @@ import {
   History,
   Library,
   MessageSquareText,
+  Network,
   PanelLeftOpen,
   ShieldCheck,
   X,
@@ -14,6 +15,12 @@ import { RefObject, useRef } from "react";
 import { AccessibleModal } from "./accessible-modal";
 
 const UNIQUE_FEATURES = [
+  {
+    icon: Network,
+    title: "نمودار، بخشی از خود سند",
+    description:
+      "بلوک استاندارد Mermaid در Markdown و ravi دست‌نخورده می‌ماند، امن رندر می‌شود و با دوبارکلیک در استودیوی زندهٔ فارسی باز می‌گردد.",
+  },
   {
     icon: BookOpen,
     title: "دو‌جهته، نه صرفاً معکوس",
@@ -47,6 +54,17 @@ const UNIQUE_FEATURES = [
 ] as const;
 
 const RELEASES = [
+  {
+    version: "0.18.0",
+    dateTime: "2026-07-31",
+    dateLabel: "۹ مرداد ۱۴۰۵",
+    changes: [
+      "پشتیبانی امن و lazy از بلوک‌های استاندارد Mermaid",
+      "افزودن استودیوی تمام‌صفحه با کد، پیش‌نمایش زنده، نمونه‌ها و کنترل نما",
+      "ویرایش دقیق همان بلوک با تشخیص تعارض و بازیابی پیش‌نویس",
+      "افزودن Alt+M مستقل از زبان صفحه‌کلید و سازگاری تم، چاپ، md و ravi",
+    ],
+  },
   {
     version: "0.17.0",
     dateTime: "2026-07-31",

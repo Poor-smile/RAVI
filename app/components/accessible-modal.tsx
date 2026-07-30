@@ -14,6 +14,7 @@ import {
 export type ModalLayerId =
   | "about"
   | "library"
+  | "mermaid"
   | "new"
   | "save"
   | "shortcuts";
