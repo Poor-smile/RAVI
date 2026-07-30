@@ -84,6 +84,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /capturePreviewSelection/);
   assert.match(page, /selection-mini-menu/);
   assert.match(page, /ابزار متن انتخاب‌شده/);
+  assert.match(page, /captureEditorSelection/);
+  assert.match(page, /editor-selection-mini-menu/);
+  assert.match(page, /قالب‌بندی متن انتخاب‌شده/);
   assert.match(page, /addAnnotation/);
   assert.match(page, /findAnnotationAtPoint/);
   assert.match(page, /onPointerMove=\{handleAnnotationPointerMove\}/);
@@ -151,6 +154,8 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(css, /@keyframes themeNightfall/);
   assert.match(css, /\.annotation-hover-preview/);
   assert.match(css, /\.selection-mini-menu/);
+  assert.match(css, /\.editor-selection-mini-menu/);
+  assert.match(css, /\.editor-mini-action/);
   assert.match(css, /@keyframes selectionMiniMenuAboveIn/);
   assert.match(css, /\.markdown-body\.has-annotation-hover/);
   assert.match(css, /\.save-modal/);

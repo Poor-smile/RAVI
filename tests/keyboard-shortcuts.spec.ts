@@ -233,6 +233,19 @@ test.describe("Electron keyboard integration", () => {
       const window = await app.firstWindow();
       const editor = window.locator("#markdown-editor");
       await expect(editor).toBeVisible();
+      const selectAllEditorText = async () => {
+        await editor.focus();
+        await editor.press("Control+A");
+        const valueLength = (await editor.inputValue()).length;
+        await expect
+          .poll(() =>
+            editor.evaluate((node: HTMLTextAreaElement) => [
+              node.selectionStart,
+              node.selectionEnd,
+            ]),
+          )
+          .toEqual([0, valueLength]);
+      };
       const topbar = window.locator(".topbar");
       await expect(
         topbar.getByRole("button", { name: "ذخیره فایل", exact: true }),
@@ -654,7 +667,7 @@ test.describe("Electron keyboard integration", () => {
 
       await historyTab.click();
       await editor.fill("نمونه");
-      await editor.selectText();
+      await selectAllEditorText();
       expect(
         await dispatchShortcut({
           code: "KeyB",
@@ -665,9 +678,52 @@ test.describe("Electron keyboard integration", () => {
       await expect(editor).toHaveValue("**نمونه**");
 
       await editor.fill("sample");
-      await editor.selectText();
+      await selectAllEditorText();
       await dispatchShortcut({ code: "KeyB", key: "b", ctrlKey: true });
       await expect(editor).toHaveValue("**sample**");
+
+      await editor.fill("mini menu");
+      await selectAllEditorText();
+      const editorBox = await editor.boundingBox();
+      expect(editorBox).not.toBeNull();
+      const editorSelectionPointer = {
+        clientX: editorBox!.x + editorBox!.width * 0.58,
+        clientY: editorBox!.y + 70,
+      };
+      await editor.dispatchEvent("mouseup", editorSelectionPointer);
+
+      const editorSelectionMenu = window.getByRole("toolbar", {
+        name: "قالب‌بندی متن انتخاب‌شده",
+      });
+      await expect(editorSelectionMenu).toBeVisible();
+      for (const actionName of [
+        "پررنگ",
+        "مورب",
+        "کد درون‌خطی",
+        "نقل‌قول",
+        "افزودن پیوند",
+      ]) {
+        await expect(
+          editorSelectionMenu.getByRole("button", {
+            name: actionName,
+            exact: true,
+          }),
+        ).toBeVisible();
+      }
+      const editorSelectionMenuBox = await editorSelectionMenu.boundingBox();
+      expect(editorSelectionMenuBox).not.toBeNull();
+      expect(
+        Math.abs(
+          editorSelectionMenuBox!.x +
+            editorSelectionMenuBox!.width / 2 -
+            editorSelectionPointer.clientX,
+        ),
+      ).toBeLessThan(110);
+      await editorSelectionMenu
+        .getByRole("button", { name: "پررنگ", exact: true })
+        .click();
+      await expect(editor).toHaveValue("**mini menu**");
+      await expect(editorSelectionMenu).toBeHidden();
 
       await dispatchShortcut({ code: "Digit3", key: "۳", altKey: true });
       const librarySearch = window.locator(

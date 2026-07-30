@@ -431,6 +431,7 @@ html.theme-is-changing .save-type-options label {
 .reader-controls button:focus-visible,
 .annotation-toggle:focus-visible,
 .annotation-action:focus-visible,
+.editor-mini-action:focus-visible,
 .annotation-panel button:focus-visible,
 .annotation-panel textarea:focus-visible,
 .annotation-composer-field textarea:focus-visible,
@@ -1451,6 +1452,7 @@ html.theme-is-changing .save-type-options label {
 }
 
 .editor-pane {
+  position: relative;
   grid-area: editor;
   border-inline-start: 0;
   background: var(--paper-100);
@@ -1795,6 +1797,34 @@ html.theme-is-changing .save-type-options label {
   flex: none;
   gap: 4px;
   font-size: 8px;
+}
+
+.editor-selection-mini-menu {
+  padding: 3px;
+  gap: 1px;
+}
+
+.editor-mini-action {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink-700);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.editor-mini-action:hover {
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+}
+
+.editor-mini-action:active {
+  color: var(--on-accent);
+  background: var(--proof-blue);
 }
 
 .annotation-panel {

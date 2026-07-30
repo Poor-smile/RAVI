@@ -883,6 +883,8 @@ export default function Home() {
   const [activeLibraryPath, setActiveLibraryPath] = useState("");
   const [openingLibraryPath, setOpeningLibraryPath] = useState("");
   const [annotations, setAnnotations] = useState<RaaviAnnotation[]>([]);
+  const [editorSelectionMenuPosition, setEditorSelectionMenuPosition] =
+    useState<SelectionMenuPosition | null>(null);
   const [selectionDraft, setSelectionDraft] =
     useState<SelectionDraft | null>(null);
   const [selectionMenuPosition, setSelectionMenuPosition] =
@@ -897,6 +899,8 @@ export default function Home() {
     useState<AnnotationHoverPreview | null>(null);
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const editorPaneRef = useRef<HTMLElement>(null);
+  const editorSelectionMenuRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
   const previewArticleRef = useRef<HTMLElement>(null);
@@ -1387,6 +1391,7 @@ export default function Home() {
         documentSnapshot(document.content, nextAnnotations),
       );
       setSaveState("saved");
+      setEditorSelectionMenuPosition(null);
       setSelectionDraft(null);
       setComposerKind(null);
       setComposerText("");
@@ -1607,6 +1612,36 @@ export default function Home() {
       window.removeEventListener("resize", dismissSelectionMenuOnResize);
     };
   }, [composerKind, selectionDraft]);
+
+  useEffect(() => {
+    if (!editorSelectionMenuPosition) return;
+
+    const dismissEditorSelectionMenu = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (
+        editorSelectionMenuRef.current?.contains(target) ||
+        editorRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setEditorSelectionMenuPosition(null);
+    };
+    const dismissEditorSelectionMenuOnResize = () => {
+      setEditorSelectionMenuPosition(null);
+    };
+
+    document.addEventListener("pointerdown", dismissEditorSelectionMenu, true);
+    window.addEventListener("resize", dismissEditorSelectionMenuOnResize);
+    return () => {
+      document.removeEventListener(
+        "pointerdown",
+        dismissEditorSelectionMenu,
+        true,
+      );
+      window.removeEventListener("resize", dismissEditorSelectionMenuOnResize);
+    };
+  }, [editorSelectionMenuPosition]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 820px)");
@@ -2647,6 +2682,44 @@ export default function Home() {
     }
   };
 
+  const captureEditorSelection = (
+    pointer?: { clientX: number; clientY: number },
+  ) => {
+    requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      const editorPane = editorPaneRef.current;
+      if (!editor || !editorPane) return;
+      if (editor.selectionStart === editor.selectionEnd) {
+        setEditorSelectionMenuPosition(null);
+        return;
+      }
+
+      const editorRect = editor.getBoundingClientRect();
+      const paneRect = editorPane.getBoundingClientRect();
+      const anchorClientX =
+        pointer?.clientX ?? editorRect.left + editorRect.width / 2;
+      const anchorClientY = pointer?.clientY ?? editorRect.top + 54;
+      const placement =
+        anchorClientY - editorRect.top >= 58 ? "above" : "below";
+      const menuHalfWidth = Math.min(
+        96,
+        Math.max(82, paneRect.width / 2 - 12),
+      );
+      const minimumX = menuHalfWidth;
+      const maximumX = paneRect.width - menuHalfWidth;
+      const rawX = anchorClientX - paneRect.left;
+
+      setEditorSelectionMenuPosition({
+        x: Math.min(Math.max(rawX, minimumX), Math.max(minimumX, maximumX)),
+        y:
+          anchorClientY -
+          paneRect.top +
+          (placement === "above" ? -10 : 10),
+        placement,
+      });
+    });
+  };
+
   const insertInline = (
     before: string,
     after: string,
@@ -2655,6 +2728,7 @@ export default function Home() {
     const editor = editorRef.current;
     if (!editor) return;
 
+    setEditorSelectionMenuPosition(null);
     const start = editor.selectionStart;
     const end = editor.selectionEnd;
     const selected = content.slice(start, end) || placeholder;
@@ -2675,6 +2749,7 @@ export default function Home() {
     const editor = editorRef.current;
     if (!editor) return;
 
+    setEditorSelectionMenuPosition(null);
     const start = editor.selectionStart;
     const end = editor.selectionEnd;
     const selected = content.slice(start, end) || "متن نقل‌قول";
@@ -2712,6 +2787,7 @@ export default function Home() {
     setVersions([]);
     setLastSavedSnapshot(documentSnapshot(SAMPLE_MARKDOWN, []));
     setSaveState("saved");
+    setEditorSelectionMenuPosition(null);
     setSelectionDraft(null);
     setComposerKind(null);
     setAnnotationPanelOpen(false);
@@ -2726,6 +2802,7 @@ export default function Home() {
     setAnnotations(version.annotations);
     setSaveState("saved");
     setSaveModalOpen(false);
+    setEditorSelectionMenuPosition(null);
     setSelectionDraft(null);
     setComposerKind(null);
     setComposerText("");
@@ -2759,6 +2836,7 @@ export default function Home() {
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
+    setEditorSelectionMenuPosition(null);
     setReadingMode(true);
     setReadingHeaderVisible(true);
     setLibraryOpen(false);
@@ -2774,12 +2852,14 @@ export default function Home() {
   };
 
   const focusPreview = () => {
+    setEditorSelectionMenuPosition(null);
     setMobilePane("preview");
     requestAnimationFrame(() => previewArticleRef.current?.focus());
   };
 
   const focusLibrarySearch = () => {
     if (readingMode) setReadingMode(false);
+    setEditorSelectionMenuPosition(null);
     setLibraryTab("library");
     setLibraryOpen(true);
     requestAnimationFrame(() =>
@@ -2841,6 +2921,11 @@ export default function Home() {
       cancelAnnotationComposer();
       return;
     }
+    if (editorSelectionMenuPosition) {
+      setEditorSelectionMenuPosition(null);
+      requestAnimationFrame(() => editorRef.current?.focus());
+      return;
+    }
     if (selectionDraft) {
       setSelectionDraft(null);
       clearNativeSelection();
@@ -2863,6 +2948,7 @@ export default function Home() {
     hoverPreview ||
       topLayer ||
       composerKind ||
+      editorSelectionMenuPosition ||
       selectionDraft ||
       activeAnnotationId ||
       annotationPanelOpen ||
@@ -3397,6 +3483,7 @@ export default function Home() {
         )}
 
         <section
+          ref={editorPaneRef}
           className={`work-pane editor-pane ${
             mobilePane !== "editor" ? "is-hidden-mobile" : ""
           }`}
@@ -3499,15 +3586,120 @@ export default function Home() {
             ref={editorRef}
             value={content}
             onChange={(event) => {
+              setEditorSelectionMenuPosition(null);
               setContent(event.target.value);
               if (saveState === "error") setSaveState("saved");
             }}
-            onScroll={() => handleSyncedScroll("editor")}
+            onScroll={() => {
+              setEditorSelectionMenuPosition(null);
+              handleSyncedScroll("editor");
+            }}
+            onMouseUp={(event) =>
+              captureEditorSelection({
+                clientX: event.clientX,
+                clientY: event.clientY,
+              })
+            }
+            onPointerUp={(event) => {
+              if (event.pointerType !== "mouse") {
+                captureEditorSelection({
+                  clientX: event.clientX,
+                  clientY: event.clientY,
+                });
+              }
+            }}
+            onKeyUp={() => captureEditorSelection()}
             data-editable-kind="editor"
             spellCheck
             dir="auto"
             aria-describedby="editor-hint"
           />
+          {editorSelectionMenuPosition && (
+            <div
+              ref={editorSelectionMenuRef}
+              className={`selection-mini-menu editor-selection-mini-menu is-${editorSelectionMenuPosition.placement}`}
+              role="toolbar"
+              aria-label="قالب‌بندی متن انتخاب‌شده"
+              aria-orientation="horizontal"
+              style={
+                {
+                  left: editorSelectionMenuPosition.x,
+                  top: editorSelectionMenuPosition.y,
+                } as React.CSSProperties
+              }
+              onPointerDown={(event) => {
+                if (event.pointerType === "mouse") event.preventDefault();
+              }}
+            >
+              <button
+                className="editor-mini-action"
+                type="button"
+                onClick={() => insertInline("**", "**", "متن پررنگ")}
+                aria-label="پررنگ"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.bold",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.bold", commandEnvironment)}
+              >
+                <Bold size={15} aria-hidden="true" />
+              </button>
+              <button
+                className="editor-mini-action"
+                type="button"
+                onClick={() => insertInline("_", "_", "متن مورب")}
+                aria-label="مورب"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.italic",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.italic", commandEnvironment)}
+              >
+                <Italic size={15} aria-hidden="true" />
+              </button>
+              <button
+                className="editor-mini-action"
+                type="button"
+                onClick={() => insertInline("`", "`", "code")}
+                aria-label="کد درون‌خطی"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.code",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.code", commandEnvironment)}
+              >
+                <Code2 size={15} aria-hidden="true" />
+              </button>
+              <button
+                className="editor-mini-action"
+                type="button"
+                onClick={insertQuote}
+                aria-label="نقل‌قول"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.quote",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.quote", commandEnvironment)}
+              >
+                <Quote size={15} aria-hidden="true" />
+              </button>
+              <button
+                className="editor-mini-action"
+                type="button"
+                onClick={() =>
+                  insertInline("[", "](https://example.com)", "عنوان پیوند")
+                }
+                aria-label="افزودن پیوند"
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.link",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.link", commandEnvironment)}
+              >
+                <Link2 size={15} aria-hidden="true" />
+              </button>
+            </div>
+          )}
           <div className="pane-footer" id="editor-hint">
             <span>Markdown با ذخیرهٔ نسخه‌ای</span>
             <button
