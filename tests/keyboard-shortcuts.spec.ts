@@ -204,6 +204,13 @@ test.describe("Electron keyboard integration", () => {
       const window = await app.firstWindow();
       const editor = window.locator("#markdown-editor");
       await expect(editor).toBeVisible();
+      const topbar = window.locator(".topbar");
+      await expect(
+        topbar.getByRole("button", { name: "ذخیره فایل", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        topbar.getByRole("button", { name: "میان‌برها", exact: true }),
+      ).toHaveCount(0);
 
       const dispatchShortcut = async ({
         code,
@@ -268,8 +275,13 @@ test.describe("Electron keyboard integration", () => {
       });
       expect(browserOwned.defaultPrevented).toBe(false);
 
-      const saveAsTrigger = window.locator(".topbar .button--ravi");
-      await saveAsTrigger.click();
+      await editor.focus();
+      await dispatchShortcut({
+        code: "KeyS",
+        key: "س",
+        ctrlKey: true,
+        shiftKey: true,
+      });
       const saveName = window.locator('[data-editable-kind="saveName"]').first();
       await expect(saveName).toBeFocused();
 
@@ -285,7 +297,7 @@ test.describe("Electron keyboard integration", () => {
 
       await dispatchShortcut({ code: "Escape", key: "Escape" });
       await expect(window.locator(".save-modal")).toBeHidden();
-      await expect(saveAsTrigger).toBeFocused();
+      await expect(editor).toBeFocused();
 
       await editor.focus();
       await dispatchShortcut({ code: "F1", key: "F1" });

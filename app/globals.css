@@ -230,10 +230,6 @@ button {
   outline-offset: 2px;
 }
 
-.shortcut-trigger {
-  color: var(--paper-200);
-}
-
 .button--primary {
   color: white;
   background: var(--proof-blue);
@@ -250,15 +246,6 @@ button {
 
 .button--ink:hover {
   background: var(--ink-500);
-}
-
-.button--ravi {
-  color: #16317e;
-  background: #e2e9ff;
-}
-
-.button--ravi:hover {
-  background: #f1f4ff;
 }
 
 .button--quiet {
@@ -2749,7 +2736,6 @@ button {
 .is-reading .proofbar,
 .is-reading .topbar-actions .button--primary,
 .is-reading .topbar-actions .button--ink,
-.is-reading .topbar-actions .button--ravi,
 .is-reading .library-trigger,
 .is-reading .local-note {
   display: none;
@@ -2897,24 +2883,6 @@ button {
 
   .button {
     padding-inline: 12px;
-  }
-
-  .button--ravi {
-    width: 42px;
-    padding: 0;
-  }
-
-  .button--ravi span {
-    display: none;
-  }
-
-  .shortcut-trigger {
-    width: 42px;
-    padding: 0;
-  }
-
-  .shortcut-trigger span {
-    display: none;
   }
 
   .markdown-body {

@@ -705,7 +705,6 @@ export default function Home() {
   const libraryPanelRef = useRef<HTMLElement>(null);
   const libraryCloseRef = useRef<HTMLButtonElement>(null);
   const libraryTriggerRef = useRef<HTMLButtonElement>(null);
-  const shortcutTriggerRef = useRef<HTMLButtonElement>(null);
   const annotationToggleRef = useRef<HTMLButtonElement>(null);
   const commentButtonRef = useRef<HTMLButtonElement>(null);
   const marginButtonRef = useRef<HTMLButtonElement>(null);
@@ -2373,41 +2372,6 @@ export default function Home() {
           >
             <Save size={18} aria-hidden="true" />
             <span>ذخیره</span>
-          </button>
-          <button
-            className="button button--ravi"
-            type="button"
-            onClick={() => openSaveFileModal(documentType)}
-            aria-keyshortcuts={commandAriaKeyShortcuts(
-              "file.saveAs",
-              commandEnvironment,
-            )}
-            title={commandTitle(
-              "file.saveAs",
-              commandEnvironment,
-              "ذخیره با نام و نوع فایل",
-            )}
-          >
-            <FileArchive size={18} aria-hidden="true" />
-            <span>ذخیره فایل</span>
-          </button>
-          <button
-            ref={shortcutTriggerRef}
-            className="button button--quiet shortcut-trigger"
-            type="button"
-            onClick={() => setShortcutHelpOpen(true)}
-            aria-keyshortcuts={commandAriaKeyShortcuts(
-              "help.shortcuts",
-              commandEnvironment,
-            )}
-            title={commandTitle(
-              "help.shortcuts",
-              commandEnvironment,
-              "راهنمای میان‌برها",
-            )}
-          >
-            <Keyboard size={18} aria-hidden="true" />
-            <span>میان‌برها</span>
           </button>
           <button
             className={`button button--quiet ${readingMode ? "is-active" : ""}`}
