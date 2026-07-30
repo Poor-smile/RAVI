@@ -52,6 +52,8 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /raaviDesktop/);
   assert.match(page, /کتابخانه/);
   assert.match(page, /تصویر خارجی بارگذاری نشد/);
+  assert.match(page, /برای اشتراک سند همراه با هایلایت و کامنت/);
+  assert.match(page, /\.ravi/);
   assert.match(page, /<ul className="library-branch">/);
   assert.match(layout, /lang="fa"/);
   assert.match(layout, /dir="rtl"/);

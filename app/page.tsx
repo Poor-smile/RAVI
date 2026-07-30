@@ -23,6 +23,7 @@ import {
   Italic,
   Library,
   Link2,
+  MessageSquareText,
   Minus,
   Plus,
   Quote,
@@ -1211,8 +1212,14 @@ export default function Home() {
             )}
           </div>
 
-          <div className="pane-footer">
-            Markdown استاندارد با پشتیبانی از جدول و چک‌لیست
+          <div className="pane-footer pane-footer--split">
+            <span>Markdown استاندارد با پشتیبانی از جدول و چک‌لیست</span>
+            <span className="ravi-share-hint">
+              <MessageSquareText size={14} aria-hidden="true" />
+              برای اشتراک سند همراه با هایلایت و کامنت، از پسوند
+              <code dir="ltr">.ravi</code>
+              استفاده کنید.
+            </span>
           </div>
         </section>
         </main>

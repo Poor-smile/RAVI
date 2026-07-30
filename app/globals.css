@@ -923,6 +923,33 @@ button {
   font-size: 9px;
 }
 
+.pane-footer--split {
+  justify-content: space-between;
+  gap: 10px 18px;
+  flex-wrap: wrap;
+}
+
+.ravi-share-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-700);
+}
+
+.ravi-share-hint > svg {
+  flex: none;
+  color: var(--proof-blue);
+}
+
+.ravi-share-hint code {
+  padding: 1px 4px;
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  border-radius: 3px;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 1em;
+}
+
 .registration-spine {
   grid-area: spine;
   position: relative;
@@ -1638,6 +1665,10 @@ button {
 }
 
 @media (max-width: 520px) {
+  .pane-footer--split > span:first-child {
+    display: none;
+  }
+
   .remote-media-blocked {
     grid-template-columns: auto minmax(0, 1fr);
   }
