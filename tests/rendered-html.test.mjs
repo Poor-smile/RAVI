@@ -94,6 +94,10 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /saveAsFile/);
   assert.match(page, /فایل‌های اخیر/);
   assert.match(page, /افزودن پوشه/);
+  assert.match(page, /role="tablist"/);
+  assert.match(page, /library-history-panel/);
+  assert.match(page, /library-catalog-panel/);
+  assert.match(page, /جمع‌کردن سایدبار/);
   assert.match(page, /هشدار: ذخیره نشده/);
   assert.match(page, /تاریخچه‌ی نسخه‌ها/);
   assert.match(page, /بازیابی/);

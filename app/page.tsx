@@ -33,6 +33,7 @@ import {
   Minus,
   NotebookPen,
   PanelLeftOpen,
+  PanelRightClose,
   Plus,
   Quote,
   RefreshCw,
@@ -47,6 +48,7 @@ import {
 } from "lucide-react";
 import {
   DragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
   useCallback,
@@ -153,6 +155,7 @@ const SAMPLE_MARKDOWN = [
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
 type MobilePane = "editor" | "preview";
+type LibraryTab = "history" | "library";
 type LibraryState = "idle" | "scanning" | "ready";
 type DocumentFileType = "markdown" | "ravi";
 type SaveFileType = DocumentFileType;
@@ -675,6 +678,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(true);
+  const [libraryTab, setLibraryTab] = useState<LibraryTab>("library");
   const [libraryIsModal, setLibraryIsModal] = useState(false);
   const [libraryState, setLibraryState] =
     useState<LibraryState>("scanning");
@@ -705,6 +709,8 @@ export default function Home() {
   const libraryPanelRef = useRef<HTMLElement>(null);
   const libraryCloseRef = useRef<HTMLButtonElement>(null);
   const libraryTriggerRef = useRef<HTMLButtonElement>(null);
+  const historyTabRef = useRef<HTMLButtonElement>(null);
+  const libraryTabRef = useRef<HTMLButtonElement>(null);
   const annotationToggleRef = useRef<HTMLButtonElement>(null);
   const commentButtonRef = useRef<HTMLButtonElement>(null);
   const marginButtonRef = useRef<HTMLButtonElement>(null);
@@ -2114,9 +2120,34 @@ export default function Home() {
 
   const focusLibrarySearch = () => {
     if (readingMode) setReadingMode(false);
+    setLibraryTab("library");
     setLibraryOpen(true);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => librarySearchRef.current?.focus()),
+    );
+  };
+
+  const handleLibraryTabKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    currentTab: LibraryTab,
+  ) => {
+    let nextTab: LibraryTab | null = null;
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      nextTab = currentTab === "history" ? "library" : "history";
+    } else if (event.key === "Home") {
+      nextTab = "history";
+    } else if (event.key === "End") {
+      nextTab = "library";
+    }
+    if (!nextTab) return;
+
+    event.preventDefault();
+    setLibraryTab(nextTab);
+    requestAnimationFrame(() =>
+      (nextTab === "history"
+        ? historyTabRef.current
+        : libraryTabRef.current
+      )?.focus(),
     );
   };
 
@@ -2325,6 +2356,7 @@ export default function Home() {
             }`}
             type="button"
             onClick={() => setLibraryOpen((current) => !current)}
+            aria-label="کتابخانه"
             aria-controls="library-panel"
             aria-expanded={libraryOpen}
             aria-keyshortcuts={commandAriaKeyShortcuts(
@@ -3133,34 +3165,14 @@ export default function Home() {
               </div>
               <div className="library-header-actions">
                 <button
-                  type="button"
-                  onClick={() => void connectLibrary()}
-                  aria-label="افزودن پوشه به کتابخانه"
-                  title="افزودن پوشه"
-                >
-                  <FolderPlus size={18} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void refreshLibrary()}
-                  disabled={libraryState === "scanning"}
-                  aria-label="به‌روزرسانی کتابخانه"
-                  title="به‌روزرسانی"
-                >
-                  <RefreshCw
-                    className={libraryState === "scanning" ? "is-spinning" : ""}
-                    size={18}
-                    aria-hidden="true"
-                  />
-                </button>
-                <button
                   ref={libraryCloseRef}
-                  className="library-close"
+                  className="library-collapse"
                   type="button"
                   onClick={() => setLibraryOpen(false)}
-                  aria-label="بستن کتابخانه"
+                  aria-label="جمع‌کردن سایدبار"
+                  title="جمع‌کردن سایدبار"
                 >
-                  <X size={18} aria-hidden="true" />
+                  <PanelRightClose size={19} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -3182,9 +3194,57 @@ export default function Home() {
               tabIndex={-1}
             />
 
-            <div className="library-content">
+            <div
+              className="library-tabs"
+              role="tablist"
+              aria-label="بخش‌های سایدبار"
+            >
+              <button
+                ref={historyTabRef}
+                id="library-history-tab"
+                type="button"
+                role="tab"
+                aria-selected={libraryTab === "history"}
+                aria-controls="library-history-panel"
+                tabIndex={libraryTab === "history" ? 0 : -1}
+                onClick={() => setLibraryTab("history")}
+                onKeyDown={(event) =>
+                  handleLibraryTabKeyDown(event, "history")
+                }
+              >
+                <Clock3 size={16} aria-hidden="true" />
+                <span>تاریخچه</span>
+                <b>{recentFiles.length.toLocaleString("fa-IR")}</b>
+              </button>
+              <button
+                ref={libraryTabRef}
+                id="library-catalog-tab"
+                type="button"
+                role="tab"
+                aria-selected={libraryTab === "library"}
+                aria-controls="library-catalog-panel"
+                tabIndex={libraryTab === "library" ? 0 : -1}
+                onClick={() => setLibraryTab("library")}
+                onKeyDown={(event) =>
+                  handleLibraryTabKeyDown(event, "library")
+                }
+              >
+                <Library size={16} aria-hidden="true" />
+                <span>کتابخانه</span>
+                <b>{libraryFiles.length.toLocaleString("fa-IR")}</b>
+              </button>
+            </div>
+
+            <div className={`library-content is-${libraryTab}`}>
               {recentFiles.length > 0 && (
-                <section className="library-section" aria-labelledby="recent-title">
+                <section
+                  className="library-section library-history-section"
+                  id="library-history-panel"
+                  role="tabpanel"
+                  aria-labelledby="library-history-tab"
+                  tabIndex={0}
+                  hidden={libraryTab !== "history"}
+                >
                   <div className="library-section-title">
                     <span>
                       <Clock3 size={15} aria-hidden="true" />
@@ -3193,7 +3253,7 @@ export default function Home() {
                     <small>{recentFiles.length.toLocaleString("fa-IR")}</small>
                   </div>
                   <div className="recent-list">
-                    {recentFiles.slice(0, 6).map((recent) => (
+                    {recentFiles.map((recent) => (
                       <button
                         key={recent.path}
                         className="recent-file"
@@ -3215,14 +3275,65 @@ export default function Home() {
                   </div>
                 </section>
               )}
+              {recentFiles.length === 0 && (
+                <div
+                  className="library-empty library-history-empty"
+                  id="library-history-panel"
+                  role="tabpanel"
+                  aria-labelledby="library-history-tab"
+                  tabIndex={0}
+                  hidden={libraryTab !== "history"}
+                >
+                  <Clock3 size={28} aria-hidden="true" />
+                  <strong>هنوز فایلی باز نشده است</strong>
+                  <span>فایل‌های md و ravi که باز می‌کنید اینجا می‌مانند.</span>
+                </div>
+              )}
 
-              <section className="library-section library-folders-section" aria-labelledby="folders-title">
+              <div
+                id="library-catalog-panel"
+                role="tabpanel"
+                aria-labelledby="library-catalog-tab"
+                tabIndex={0}
+                hidden={libraryTab !== "library"}
+              >
+              <section
+                className="library-section library-folders-section"
+                aria-labelledby="folders-title"
+              >
                 <div className="library-section-title">
                   <span>
                     <FolderOpen size={15} aria-hidden="true" />
                     <strong id="folders-title">پوشه‌ها</strong>
                   </span>
-                  <small>{libraryFolders.length.toLocaleString("fa-IR")}</small>
+                  <div className="library-tab-actions">
+                    <small>
+                      {libraryFolders.length.toLocaleString("fa-IR")}
+                    </small>
+                    <button
+                      type="button"
+                      onClick={() => void connectLibrary()}
+                      aria-label="افزودن پوشه به کتابخانه"
+                      title="افزودن پوشه"
+                    >
+                      <FolderPlus size={18} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void refreshLibrary()}
+                      disabled={libraryState === "scanning"}
+                      aria-label="به‌روزرسانی کتابخانه"
+                      title="به‌روزرسانی"
+                    >
+                      <RefreshCw
+                        className={
+                          libraryState === "scanning" ? "is-spinning" : ""
+                        }
+                        size={17}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </div>
                 </div>
 
                 {libraryFolders.length > 0 && (
@@ -3236,14 +3347,6 @@ export default function Home() {
                   </div>
                 )}
 
-                <button
-                  className="library-add-folder"
-                  type="button"
-                  onClick={() => void connectLibrary()}
-                >
-                  <FolderPlus size={16} aria-hidden="true" />
-                  افزودن پوشه
-                </button>
               </section>
 
               <label className="library-search">
@@ -3308,34 +3411,30 @@ export default function Home() {
                         ? "عبارت جست‌وجو را تغییر دهید."
                         : "یک پوشه اضافه کنید تا فایل‌های md و ravi همیشه در دسترس باشند."}
                     </span>
-                    {!libraryQuery && libraryState !== "scanning" && (
-                      <button
-                        className="button button--primary"
-                        type="button"
-                        onClick={() => void connectLibrary()}
-                      >
-                        <FolderPlus size={16} aria-hidden="true" />
-                        افزودن پوشه
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
+            </div>
             </div>
 
             <div className="library-footer">
               {openingLibraryPath ? (
                 <span>در حال باز کردن فایل…</span>
-              ) : activeLibraryPath ? (
+              ) : libraryTab === "library" && activeLibraryPath ? (
                 <span dir="auto" title={activeLibraryPath}>
                   {activeLibraryPath}
                 </span>
+              ) : libraryTab === "history" && recentFiles.length === 0 ? (
+                <span>فایل‌های بازشده در این بخش نمایش داده می‌شوند.</span>
               ) : (
                 <span>برای بازکردن، روی نام فایل کلیک کنید.</span>
               )}
             </div>
 
-            <div className="library-privacy">
+            <div
+              className="library-privacy"
+              hidden={libraryTab !== "library"}
+            >
               <ShieldCheck size={17} aria-hidden="true" />
               <span>
                 اسکن فقط پس از اجازه‌ی شما انجام می‌شود؛ فایلی به اینترنت ارسال

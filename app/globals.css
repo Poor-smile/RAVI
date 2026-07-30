@@ -336,7 +336,8 @@ button {
 .save-modal button:focus-visible,
 .save-modal input:focus-visible,
 .recent-file:focus-visible,
-.library-add-folder:focus-visible {
+.library-tabs button:focus-visible,
+.library-tab-actions button:focus-visible {
   outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
@@ -493,10 +494,6 @@ button {
   cursor: wait;
 }
 
-.library-close {
-  display: none !important;
-}
-
 .library-header button:hover {
   color: white;
   background: var(--ink-700);
@@ -530,10 +527,107 @@ button {
   overflow: hidden;
 }
 
+.library-content [hidden],
+.library-privacy[hidden] {
+  display: none !important;
+}
+
+.library-tabs {
+  flex: none;
+  min-height: 48px;
+  padding: 5px 8px 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--paper-100);
+  border-bottom: 1px solid var(--rule);
+}
+
+.library-tabs button {
+  position: relative;
+  min-width: 0;
+  min-height: 42px;
+  padding: 5px 9px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--ink-500);
+  background: transparent;
+  border: 0;
+  border-radius: 4px 4px 0 0;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.library-tabs button::after {
+  content: "";
+  position: absolute;
+  inset-inline: 8px;
+  bottom: -1px;
+  height: 2px;
+  background: transparent;
+}
+
+.library-tabs button:hover {
+  color: var(--ink-950);
+  background: var(--paper-50);
+}
+
+.library-tabs button[aria-selected="true"] {
+  color: var(--proof-blue-dark);
+  background: var(--paper-50);
+}
+
+.library-tabs button[aria-selected="true"]::after {
+  background: var(--proof-blue);
+}
+
+.library-tabs button svg {
+  flex: none;
+}
+
+.library-tabs button b {
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 4px;
+  display: inline-grid;
+  place-items: center;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 9%, transparent);
+  border-radius: 9px;
+  font-size: 8px;
+}
+
 .library-section {
   flex: none;
   padding: 11px 12px;
   border-bottom: 1px solid var(--rule);
+}
+
+.library-history-section,
+.library-history-empty {
+  flex: 1;
+  min-height: 0;
+}
+
+.library-history-section {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.library-history-empty {
+  min-height: 100%;
+}
+
+#library-catalog-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .library-section-title {
@@ -561,8 +655,38 @@ button {
   color: var(--proof-blue);
 }
 
+.library-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.library-tab-actions button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink-700);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.library-tab-actions button:hover {
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+}
+
+.library-tab-actions button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 .recent-list {
-  max-height: 154px;
+  flex: 1;
+  min-height: 0;
   margin-top: 4px;
   overflow: auto;
   scrollbar-color: var(--paper-300) transparent;
@@ -650,29 +774,6 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.library-add-folder {
-  width: 100%;
-  min-height: 34px;
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  color: var(--proof-blue-dark);
-  background: var(--proof-blue-soft);
-  border: 1px dashed color-mix(in srgb, var(--proof-blue) 45%, var(--rule));
-  border-radius: 4px;
-  font-size: 9px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.library-add-folder:hover {
-  color: white;
-  background: var(--proof-blue);
-  border-style: solid;
 }
 
 .library-seal {
@@ -1009,6 +1110,10 @@ button {
 }
 
 .mobile-library-trigger {
+  display: inline-flex;
+}
+
+.mobile-library-trigger[aria-expanded="true"] {
   display: none;
 }
 
@@ -2913,6 +3018,10 @@ button {
     display: inline-flex;
   }
 
+  .mobile-library-trigger[aria-expanded="true"] {
+    display: inline-flex;
+  }
+
   .button {
     height: 44px;
   }
@@ -2960,19 +3069,17 @@ button {
     border-inline-start: 0;
   }
 
-  .library-close {
-    display: grid !important;
-  }
-
   .library-header button,
   .library-rootbar button,
+  .library-tab-actions button,
   .folder-row,
   .library-file {
     min-height: 44px;
   }
 
   .library-header button,
-  .library-rootbar button {
+  .library-rootbar button,
+  .library-tab-actions button {
     width: 44px;
     height: 44px;
   }

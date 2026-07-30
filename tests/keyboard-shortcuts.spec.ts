@@ -242,6 +242,44 @@ test.describe("Electron keyboard integration", () => {
           { code, key, ctrlKey, altKey, shiftKey },
         );
 
+      const sidebar = window.locator("#library-panel");
+      const historyTab = sidebar.getByRole("tab", {
+        name: /تاریخچه/,
+      });
+      const libraryTab = sidebar.getByRole("tab", {
+        name: /کتابخانه/,
+      });
+      const addFolderButton = sidebar.getByRole("button", {
+        name: "افزودن پوشه به کتابخانه",
+        exact: true,
+      });
+      await expect(historyTab).toBeVisible();
+      await expect(libraryTab).toHaveAttribute("aria-selected", "true");
+      await expect(addFolderButton).toBeVisible();
+      await expect(addFolderButton).toHaveText("");
+
+      await historyTab.click();
+      await expect(historyTab).toHaveAttribute("aria-selected", "true");
+      await expect(window.locator("#library-history-panel")).toBeVisible();
+      await expect(addFolderButton).toBeHidden();
+
+      await historyTab.press("ArrowLeft");
+      await expect(libraryTab).toHaveAttribute("aria-selected", "true");
+      await expect(addFolderButton).toBeVisible();
+
+      const collapseSidebar = sidebar.getByRole("button", {
+        name: "جمع‌کردن سایدبار",
+        exact: true,
+      });
+      await collapseSidebar.click();
+      await expect(sidebar).toBeHidden();
+      const reopenSidebar = topbar.locator(".mobile-library-trigger");
+      await expect(reopenSidebar).toBeVisible();
+      await expect(reopenSidebar).toHaveAttribute("aria-label", "کتابخانه");
+      await reopenSidebar.click();
+      await expect(sidebar).toBeVisible();
+
+      await historyTab.click();
       await editor.fill("نمونه");
       await editor.evaluate((node: HTMLTextAreaElement) =>
         node.setSelectionRange(0, node.value.length),
@@ -266,6 +304,7 @@ test.describe("Electron keyboard integration", () => {
       const librarySearch = window.locator(
         '[data-editable-kind="librarySearch"]',
       );
+      await expect(libraryTab).toHaveAttribute("aria-selected", "true");
       await expect(librarySearch).toBeFocused();
 
       const browserOwned = await dispatchShortcut({
