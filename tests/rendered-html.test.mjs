@@ -163,6 +163,7 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(main, /document:save-current/);
   assert.match(main, /renderer:ready/);
   assert.match(main, /openInReadingMode: true/);
+  assert.match(main, /process\.platform !== "darwin"/);
   assert.match(preload, /saveRaavi/);
   assert.match(preload, /rendererReady/);
   assert.match(page, /<ul className="library-branch">/);
@@ -240,6 +241,15 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(css, /@keyframes paneCollapseReady/);
   assert.match(css, /height: 100dvh/);
   assert.match(packageJson, /"react-markdown"/);
+  assert.match(packageJson, /"desktop:pack:linux"/);
+  assert.match(packageJson, /"desktop:pack:linux:portable"/);
+  assert.match(packageJson, /"desktop:pack:mac"/);
+  assert.match(packageJson, /"target": "AppImage"/);
+  assert.match(packageJson, /"target": "deb"/);
+  assert.match(packageJson, /"target": "tar\.gz"/);
+  assert.match(packageJson, /"target": "dmg"/);
+  assert.match(packageJson, /"target": "zip"/);
+  assert.match(packageJson, /"appimage": "1\.0\.3"/);
   assert.match(packageJson, /"desktop:pack"/);
   assert.match(packageJson, /"fileAssociations"/);
   assert.match(packageJson, /"ext": "ravi"/);

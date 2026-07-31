@@ -70,3 +70,28 @@ npm run desktop:pack
 دوبارکلیک روی فایل Markdown آن را مستقیماً در راوی باز می‌کند. اگر ویندوز
 قبلاً برنامه‌ی پیش‌فرض دیگری را برای این پسوندها ثبت کرده باشد، تأیید نهایی
 باید یک‌بار توسط کاربر در پنجره‌ی Open with یا Default apps انجام شود.
+
+## نسخه‌های Linux و macOS
+
+ساخت کامل Linux باید روی میزبان Linux یا Docker فعال انجام شود:
+
+```bash
+npm run desktop:pack:linux
+```
+
+این فرمان AppImage، بستهٔ DEB و آرشیو `tar.gz` نسخهٔ x64 را در پوشهٔ
+`release` می‌سازد. برای ساخت آرشیو portable از ویندوز، پس از دریافت باینری
+صحیح Electron Linux از فرمان زیر استفاده کنید:
+
+```bash
+npm run desktop:pack:linux:portable
+```
+
+ساخت Universal برای Intel و Apple Silicon باید روی macOS انجام شود:
+
+```bash
+npm run desktop:pack:mac
+```
+
+این فرمان DMG و ZIP Universal تولید می‌کند. برای انتشار عمومی نسخهٔ macOS،
+گواهی Developer ID و notarization اپل نیز لازم است.

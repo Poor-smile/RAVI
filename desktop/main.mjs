@@ -559,7 +559,9 @@ if (!hasSingleInstanceLock) {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
   });
-  app.on("window-all-closed", () => app.quit());
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
   app.on("before-quit", () => {
     if (localServer) void localServer.close();
   });
