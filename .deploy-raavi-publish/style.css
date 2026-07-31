@@ -287,13 +287,21 @@ code {
 }
 
 .hero h1 {
-  max-width: 10ch;
+  max-width: 14ch;
   margin: 0;
-  font-size: clamp(48px, 6.6vw, 102px);
+  font-size: clamp(46px, 5.5vw, 46px);
   font-weight: 700;
-  letter-spacing: -0.035em;
   line-height: 1.28;
   text-wrap: balance;
+}
+
+.hero h1 span {
+  display: block;
+  white-space: nowrap;
+}
+
+.hero h1 span:first-child {
+  font-size: 0.72em;
 }
 
 .hero-lead {
@@ -376,7 +384,6 @@ code {
   margin: 0;
   background: var(--paper-50);
   box-shadow: 0 24px 64px var(--shadow);
-  animation: register-sheet 780ms var(--ease-paper) both;
 }
 
 .hero-visual img {
@@ -412,20 +419,6 @@ code {
   font-weight: 700;
 }
 
-@keyframes register-sheet {
-  from {
-    opacity: 0.8;
-    clip-path: inset(0 0 100% 0);
-    transform: translateY(20px);
-  }
-
-  to {
-    opacity: 1;
-    clip-path: inset(0);
-    transform: translateY(0);
-  }
-}
-
 .markdown-primer {
   display: grid;
   grid-template-columns: minmax(280px, 0.9fr) minmax(380px, 1.1fr);
@@ -433,6 +426,16 @@ code {
   padding: clamp(78px, 10vw, 140px) max(24px, calc((100vw - 1180px) / 2));
   background: var(--paper-50);
   border-block-start: 1px solid var(--rule);
+}
+
+.markdown-primer,
+.live-section,
+.proof-section,
+.local-first,
+.download-section,
+.support-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 900px;
 }
 
 .markdown-primer-heading h2 {
@@ -1140,8 +1143,14 @@ code {
   border-block-end: 1px solid var(--rule);
 }
 
+.download-web,
 .download-linux {
   background: var(--paper-50);
+}
+
+.download-web .platform-mark {
+  color: var(--proof-blue-dark);
+  border-color: var(--proof-blue);
 }
 
 .release-copy {
@@ -1635,6 +1644,7 @@ code {
 
 .footer-links {
   display: flex;
+  flex-wrap: wrap;
   gap: 24px;
 }
 
@@ -1690,8 +1700,8 @@ code {
   }
 
   .hero h1 {
-    max-width: 10ch;
-    font-size: clamp(48px, 12vw, 78px);
+    max-width: 14ch;
+    font-size: clamp(40px, 8.5vw, 60px);
   }
 
   .hero-visual {
@@ -1838,7 +1848,8 @@ code {
   }
 
   .hero h1 {
-    font-size: clamp(44px, 14.5vw, 66px);
+    max-width: 100%;
+    font-size: clamp(32px, 8.6vw, 52px);
   }
 
   .hero-actions .button {

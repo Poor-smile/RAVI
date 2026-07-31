@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "راوی",
+  "version": "1.1.0",
+  "identifier": "ir.raavi.markdown",
+  "build": {
+    "beforeDevCommand": "npm run tauri:frontend:dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run tauri:frontend",
+    "frontendDist": "../dist-tauri"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "راوی — Markdown فارسی",
+        "width": 1540,
+        "height": 920,
+        "minWidth": 1024,
+        "minHeight": 680,
+        "center": true,
+        "visible": true,
+        "backgroundColor": "#e9e5dc"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: data: blob: http: https:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Raavi",
+    "category": "Productivity",
+    "shortDescription": "Persian Markdown viewer and editor",
+    "longDescription": "A local-first Persian Markdown viewer and editor with RTL/LTR handling, annotations, Mermaid diagrams, and portable .ravi documents.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "name": "Raavi Markdown",
+        "description": "Markdown document"
+      },
+      {
+        "ext": ["ravi"],
+        "name": "Raavi Document",
+        "description": "Raavi annotated document"
+      }
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "perMachine",
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

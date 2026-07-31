@@ -368,7 +368,7 @@
 
     for (const url of candidates) {
       try {
-        const response = await fetch(url, { cache: "no-store" });
+        const response = await fetch(url, { cache: "force-cache" });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -585,14 +585,33 @@
   sourceTab.addEventListener("click", () => selectMobileView("source"));
   previewTab.addEventListener("click", () => selectMobileView("preview"));
 
-  fetch("./landing.md", { cache: "no-store" })
+  function embeddedInitialMarkdown() {
+    const embedded = document.querySelector("#initial-markdown");
+    if (!embedded || embedded.textContent.trim() === "null") {
+      return null;
+    }
+
+    try {
+      const value = JSON.parse(embedded.textContent);
+      return typeof value === "string" ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const embeddedMarkdown = embeddedInitialMarkdown();
+  const initialMarkdownRequest = embeddedMarkdown
+    ? Promise.resolve(embeddedMarkdown)
+    : fetch("./landing.md", { cache: "force-cache" }).then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.text();
+      });
+
+  initialMarkdownRequest
     .then((response) => {
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      return response.text();
-    })
-    .then((markdown) => {
+      const markdown = response;
       initialMarkdown = markdown.trim();
       source.value = initialMarkdown;
       updatePreview();

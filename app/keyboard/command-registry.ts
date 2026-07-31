@@ -21,6 +21,12 @@ export type CommandId =
   | "file.saveAs"
   | "file.new"
   | "help.shortcuts"
+  | "edit.undo"
+  | "edit.redo"
+  | "edit.find"
+  | "edit.findNext"
+  | "edit.findPrevious"
+  | "edit.selectAll"
   | "edit.bold"
   | "edit.italic"
   | "edit.code"
@@ -120,6 +126,67 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
     allowInEditable: ["editor"],
     showInHelp: true,
     contextLabel: "فقط برنامه ویندوز",
+  },
+  {
+    id: "edit.undo",
+    title: "واگرد آخرین تغییر",
+    group: "edit",
+    bindings: [{ code: "KeyZ", primary: true }],
+    allowInEditable: ["editor"],
+    showInHelp: true,
+    contextLabel: "فقط در ویرایشگر",
+  },
+  {
+    id: "edit.redo",
+    title: "انجام دوبارهٔ تغییر",
+    group: "edit",
+    bindings: [
+      { code: "KeyZ", primary: true, shift: true },
+      {
+        code: "KeyY",
+        primary: true,
+        platforms: ["windows", "linux"],
+      },
+    ],
+    allowInEditable: ["editor"],
+    showInHelp: true,
+    contextLabel: "فقط در ویرایشگر",
+  },
+  {
+    id: "edit.find",
+    title: "جست‌وجو و جایگزینی",
+    group: "edit",
+    bindings: [{ code: "KeyF", primary: true }],
+    allowInEditable: ["editor"],
+    showInHelp: true,
+    contextLabel: "فقط در ویرایشگر",
+  },
+  {
+    id: "edit.findNext",
+    title: "نتیجهٔ بعدی جست‌وجو",
+    group: "edit",
+    bindings: [{ code: "F3" }],
+    allowInEditable: ["editor"],
+    showInHelp: true,
+    contextLabel: "پس از جست‌وجو",
+  },
+  {
+    id: "edit.findPrevious",
+    title: "نتیجهٔ قبلی جست‌وجو",
+    group: "edit",
+    bindings: [{ code: "F3", shift: true }],
+    allowInEditable: ["editor"],
+    showInHelp: true,
+    contextLabel: "پس از جست‌وجو",
+  },
+  {
+    id: "edit.selectAll",
+    title: "انتخاب تمام متن",
+    group: "edit",
+    bindings: [{ code: "KeyA", primary: true }],
+    allowInEditable: ["editor"],
+    showInHelp: true,
+    contextLabel: "فقط در ویرایشگر",
   },
   {
     id: "edit.bold",

@@ -51,6 +51,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
     aboutDialog,
     supportDialog,
     newDocumentDialog,
+    markdownCodeEditor,
+    vazirCodeFont,
+    vazirCodeLicense,
   ] =
     await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
@@ -84,6 +87,15 @@ test("ships the viewer implementation instead of starter assets", async () => {
       new URL("../app/components/new-document-dialog.tsx", import.meta.url),
       "utf8",
     ),
+    readFile(
+      new URL("../app/components/markdown-code-editor.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(new URL("../public/fonts/Vazir-Code.woff2", import.meta.url)),
+    readFile(
+      new URL("../public/fonts/Vazir-Code-LICENSE.txt", import.meta.url),
+      "utf8",
+    ),
   ]);
 
   assert.match(page, /ReactMarkdown/);
@@ -97,11 +109,25 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /raaviImageUrl/);
   assert.match(page, /markdownWithEmbeddedRaaviImages/);
   assert.match(page, /localStorage/);
+  assert.match(page, /indexedDB/);
+  assert.match(page, /raavi-local-documents/);
   assert.match(page, /text\/markdown/);
   assert.match(page, /showDirectoryPicker/);
   assert.match(page, /scanMarkdownDirectory/);
   assert.match(page, /raaviDesktop/);
   assert.match(page, /کتابخانه/);
+  assert.match(page, /id="library-versions-tab"/);
+  assert.match(page, /id="library-versions-panel"/);
+  assert.match(page, /تاریخچهٔ نسخه‌ها/);
+  assert.match(page, /restoreVersion\(version\)/);
+  assert.match(page, /تجربه بهتر با نسخه دسکتاپ/);
+  assert.match(page, /دانلود برای Windows/);
+  assert.match(page, /دانلود برای Linux/);
+  assert.match(page, /isWebLibrary/);
+  assert.match(
+    page,
+    /\{!isWebLibrary && \([\s\S]*id="library-catalog-panel"/,
+  );
   assert.match(page, /فقط خود نشانی در Markdown می‌ماند/);
   assert.match(page, /برای اشتراک سند همراه با هایلایت، کامنت و تصویرهای درج‌شده/);
   assert.match(page, /\.ravi/);
@@ -110,6 +136,21 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /ابزار متن انتخاب‌شده/);
   assert.match(page, /captureEditorSelection/);
   assert.match(page, /editor-selection-mini-menu/);
+  assert.match(page, /format-tool--expanded-only/);
+  assert.match(page, /className="format-tool-expand"/);
+  assert.match(page, /collapseDesktopPane\("preview"\)/);
+  assert.match(page, /insertList\("check-done"\)/);
+  assert.match(page, /insertList\("check-empty"\)/);
+  assert.match(page, /insertList\("bullet"\)/);
+  assert.match(page, /insertList\("ordered"\)/);
+  assert.match(
+    css,
+    /\.workspace\.pane-layout-is-editor[\s\S]*\.format-tool--expanded-only/,
+  );
+  assert.match(
+    css,
+    /\.workspace\.pane-layout-is-editor[\s\S]*\.format-tool-expand/,
+  );
   assert.match(page, /قالب‌بندی متن انتخاب‌شده/);
   assert.match(page, /addAnnotation/);
   assert.match(page, /findAnnotationAtPoint/);
@@ -129,6 +170,7 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /جمع‌کردن سایدبار/);
   assert.match(page, /سنجاق‌شده‌ها/);
   assert.match(page, /raavi:library-pins:v1/);
+  assert.match(page, /useState\(false\);[\s\S]*setLibraryOpen\(Boolean\(window\.raaviDesktop\)\)/);
   assert.match(page, /libraryPinKey/);
   assert.match(page, /library-pin-action/);
   assert.match(page, /قفل کردن اسکرول ادیتور و پیش‌نمایش/);
@@ -168,7 +210,14 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(preload, /rendererReady/);
   assert.match(page, /<ul className="library-branch">/);
   assert.match(page, /useCommandSystem/);
-  assert.match(page, /data-editable-kind="editor"/);
+  assert.match(markdownCodeEditor, /"data-editable-kind": "editor"/);
+  assert.match(markdownCodeEditor, /EditorView\.perLineTextDirection\.of\(true\)/);
+  assert.doesNotMatch(markdownCodeEditor, /drawSelection|basicSetup/);
+  assert.match(markdownCodeEditor, /Find: "جست‌وجو"/);
+  assert.match(markdownCodeEditor, /"replace all": "جایگزینی همه"/);
+  assert.match(commandRegistry, /id: "edit\.find"/);
+  assert.match(commandRegistry, /id: "edit\.findPrevious"/);
+  assert.match(css, /\.cm-panel\.cm-search[\s\S]*grid-template-areas/);
   assert.match(page, /aria-keyshortcuts/);
   assert.match(page, /theme-transition-overlay/);
   assert.match(page, /view\.theme/);
@@ -213,6 +262,12 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(layout, /raavi:theme:v1/);
   assert.match(layout, /prefers-color-scheme: dark/);
   assert.match(css, /IRANSansX-Regular\.woff2/);
+  assert.match(css, /Vazir-Code\.woff2/);
+  assert.match(css, /--editor-font: "Vazir Code"/);
+  assert.match(css, /--editor-surface-bg: #fafbf7/);
+  assert.match(css, /\.cm-scroller[\s\S]*font-family: var\(--editor-font\) !important/);
+  assert.ok(vazirCodeFont.byteLength > 40_000);
+  assert.match(vazirCodeLicense, /Permission is hereby granted/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(css, /html\[data-theme="dark"\]/);
   assert.match(css, /@keyframes themeNightfall/);
@@ -236,6 +291,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(css, /\.new-document-name-control/);
   assert.match(css, /\.library-pinned-section/);
   assert.match(css, /\.library-pin-action/);
+  assert.match(css, /\.library-install-prompt/);
+  assert.match(css, /\.library-tabs--single/);
+  assert.match(css, /\.library-version-list/);
   assert.match(css, /\.pane-resize-handle/);
   assert.match(css, /\.work-pane\.is-pane-collapsed/);
   assert.match(css, /@keyframes paneCollapseReady/);

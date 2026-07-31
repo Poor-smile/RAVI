@@ -2,7 +2,7 @@
 THESIS: خودِ معرفی راوی یک سند Markdown زنده است؛ صفحه از هیروی عمومی نرم‌افزار و ردیف کارت‌های تکراری دوری می‌کند.
 OWN-WORLD: کاغذ سرد، مرکب زغالی، آبی نمونه‌خوان، خط صحافی و کنترل‌های کم‌گردِ میز راوی.
 STORY: بازدیدکننده در چند ثانیه می‌فهمد راوی چیست، همان‌جا Markdown را تغییر می‌دهد، شواهد واقعی را می‌بیند و برای استفاده یا حمایت تصمیم می‌گیرد.
-FIRST VIEWPORT: پیام اصلی و تصویر واقعی محصول روبه‌روی هم‌اند؛ CTA دانلود و ورود به تجربهٔ زنده بدون جست‌وجو دیده می‌شوند.
+FIRST VIEWPORT: پیام اصلی و تصویر واقعی محصول روبه‌روی هم‌اند؛ CTA نسخهٔ وب و دریافت دسکتاپ بدون جست‌وجو دیده می‌شوند.
 FORM: متن و نتیجه در دو برگ موازی، با اتصال مستقیم هر ادعا به نمای واقعی محصول؛ ساختار منتخب «سند زنده» با staging متن/ساخت کنار هم.
 -->
 <!doctype html>
@@ -12,11 +12,11 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="راوی؛ راه ساده و رایگان برای یادگیری، خواندن، نوشتن و مدیریت فایل‌های Markdown فارسی، مناسب کار با محتوای هوش مصنوعی."
+      content="راوی؛ ابزار رایگان خواندن، ویرایش و مدیریت فایل‌های Markdown فارسی در مرورگر و دسکتاپ، مناسب کار با محتوای هوش مصنوعی."
     />
     <meta name="theme-color" content="#171b18" />
     <meta name="color-scheme" content="light" />
-    <title>راوی — مارک‌دان فارسی، ساده و خوانا</title>
+    <title>راوی — Markdown فارسی، خوانا و مرتب</title>
     <link
       rel="preload"
       href="./assets/fonts/IRANSansX-Regular.woff2"
@@ -31,8 +31,2037 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
       type="font/woff2"
       crossorigin
     />
-    <link rel="stylesheet" href="./style.css?v=1.0.0-8" />
-    <script src="./app.js?v=1.0.0-5" defer></script>
+    <link
+      rel="preload"
+      href="./assets/screens/raavi-workspace.webp"
+      as="image"
+      type="image/webp"
+      fetchpriority="high"
+    />
+    <style>
+@font-face {
+  font-family: "IRANSansX";
+  src: url("./assets/fonts/IRANSansX-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IRANSansX";
+  src: url("./assets/fonts/IRANSansX-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --ink-950: #171b18;
+  --ink-900: #20251f;
+  --ink-700: #50584f;
+  --ink-500: #687168;
+  --paper-50: #fcfdf9;
+  --paper-100: #f5f6f0;
+  --paper-200: #e8ebe2;
+  --paper-300: #d5d9cf;
+  --proof-blue: #2557e5;
+  --proof-blue-dark: #1742bd;
+  --proof-blue-soft: #e9efff;
+  --rule: #cbd0c6;
+  --rule-strong: #aeb5ab;
+  --success: #299452;
+  --coral: #e8aa98;
+  --focus-ring: #9fb5ff;
+  --shadow: rgba(17, 25, 20, 0.2);
+  --max-page: 1540px;
+  --font-sans:
+    "IRANSansX", "IRANSans", "Vazirmatn", Tahoma, Arial, sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --ease-paper: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--ink-950);
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--paper-100);
+  color: var(--ink-950);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: var(--font-mono);
+}
+
+::selection {
+  color: var(--ink-950);
+  background: #cbd8ff;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  inset-block-start: 8px;
+  inset-inline-start: 8px;
+  padding: 10px 14px;
+  color: var(--paper-50);
+  background: var(--proof-blue-dark);
+  transform: translateY(-160%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.site-header {
+  position: sticky;
+  z-index: 20;
+  inset-block-start: 0;
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: clamp(18px, 3vw, 56px);
+  padding: 11px clamp(18px, 4vw, 64px);
+  color: var(--paper-50);
+  background: color-mix(in srgb, var(--ink-950) 96%, transparent);
+  border-block-end: 1px solid #3f463f;
+}
+
+.brand,
+.footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  text-decoration: none;
+}
+
+.brand-mark {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  flex: 0 0 42px;
+  place-items: center;
+  color: currentColor;
+  border: 1px solid #747c73;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.brand-mark::after {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  content: "";
+  inset-block-start: -1px;
+  inset-inline-end: -1px;
+  border-block-start: 2px solid var(--proof-blue);
+  border-inline-end: 2px solid var(--proof-blue);
+}
+
+.brand-copy,
+.footer-brand > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.brand-copy strong,
+.footer-brand strong {
+  font-size: 18px;
+}
+
+.brand-copy small,
+.footer-brand small {
+  color: var(--paper-300);
+  font-size: 10px;
+}
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(16px, 2.5vw, 38px);
+}
+
+.site-nav a,
+.footer-links a {
+  color: var(--paper-300);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.site-nav a {
+  position: relative;
+  padding: 8px 0;
+}
+
+.site-nav a::after {
+  position: absolute;
+  height: 2px;
+  content: "";
+  inset-inline: 0;
+  inset-block-end: 0;
+  background: var(--proof-blue);
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 180ms var(--ease-paper);
+}
+
+.site-nav a:hover::after,
+.site-nav a:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.header-action {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  color: #fff;
+  background: var(--proof-blue);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.header-action:hover {
+  background: var(--proof-blue-dark);
+}
+
+.hero {
+  position: relative;
+  width: min(var(--max-page), 100%);
+  min-height: min(820px, calc(100svh - 70px));
+  display: grid;
+  grid-template-columns: minmax(360px, 0.78fr) minmax(560px, 1.22fr);
+  align-items: center;
+  gap: clamp(44px, 6vw, 96px);
+  margin: 0 auto;
+  padding: clamp(72px, 9vw, 132px) clamp(24px, 5vw, 82px);
+}
+
+.hero::before {
+  position: absolute;
+  width: 1px;
+  content: "";
+  inset-block: 0;
+  inset-inline-start: clamp(16px, 2.7vw, 42px);
+  background: var(--rule);
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 2;
+}
+
+.hero-kicker,
+.section-kicker {
+  margin: 0 0 16px;
+  color: var(--ink-700);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.hero-kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-kicker span {
+  width: 24px;
+  height: 2px;
+  background: var(--proof-blue);
+}
+
+.hero h1 {
+  max-width: 14ch;
+  margin: 0;
+  font-size: clamp(46px, 5.5vw, 46px);
+  font-weight: 700;
+  line-height: 1.28;
+  text-wrap: balance;
+}
+
+.hero h1 span {
+  display: block;
+  white-space: nowrap;
+}
+
+.hero h1 span:first-child {
+  font-size: 0.72em;
+}
+
+.hero-lead {
+  max-width: 44ch;
+  margin: 28px 0 0;
+  color: var(--ink-700);
+  font-size: clamp(17px, 1.6vw, 21px);
+  line-height: 2;
+}
+
+.hero-actions,
+.support-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-block-start: 32px;
+}
+
+.button {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 180ms var(--ease-paper);
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button-primary {
+  color: #fff;
+  background: var(--proof-blue);
+}
+
+.button-primary:hover {
+  background: var(--proof-blue-dark);
+}
+
+.button-secondary {
+  color: var(--ink-950);
+  background: transparent;
+  border-color: var(--rule-strong);
+}
+
+.button-secondary:hover {
+  border-color: var(--ink-950);
+}
+
+.hero-trust {
+  display: grid;
+  gap: 9px;
+  margin: 32px 0 0;
+  padding: 0;
+  color: var(--ink-700);
+  font-size: 12px;
+  list-style: none;
+}
+
+.hero-trust span {
+  margin-inline-end: 7px;
+  color: var(--success);
+  font-weight: 700;
+}
+
+.hero-visual {
+  position: relative;
+  margin: 0;
+  background: var(--paper-50);
+  box-shadow: 0 24px 64px var(--shadow);
+}
+
+.hero-visual img {
+  width: 100%;
+  border: 1px solid var(--rule);
+}
+
+.proof-corner {
+  position: absolute;
+  z-index: 2;
+  width: 33px;
+  height: 33px;
+  inset-block-start: -7px;
+  inset-inline-end: -7px;
+  border-block-start: 2px solid var(--proof-blue);
+  border-inline-end: 2px solid var(--proof-blue);
+}
+
+.hero-visual figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 16px;
+  color: var(--ink-700);
+  border: 1px solid var(--rule);
+  border-block-start: 0;
+  font-size: 11px;
+}
+
+.hero-visual figcaption span {
+  color: var(--proof-blue-dark);
+  font-weight: 700;
+}
+
+.markdown-primer {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(380px, 1.1fr);
+  gap: clamp(40px, 8vw, 120px);
+  padding: clamp(78px, 10vw, 140px) max(24px, calc((100vw - 1180px) / 2));
+  background: var(--paper-50);
+  border-block-start: 1px solid var(--rule);
+}
+
+.markdown-primer,
+.live-section,
+.proof-section,
+.local-first,
+.download-section,
+.support-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 900px;
+}
+
+.markdown-primer-heading h2 {
+  margin: 0;
+  font-size: clamp(38px, 5vw, 68px);
+  line-height: 1.35;
+  letter-spacing: -0.025em;
+}
+
+.markdown-primer-heading > p:last-child,
+.markdown-bridge p {
+  max-width: 64ch;
+  margin: 24px 0 0;
+  color: var(--ink-700);
+  font-size: 16px;
+  line-height: 2;
+}
+
+.markdown-primer-body {
+  align-self: start;
+}
+
+.markdown-benefits {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: markdown-benefit;
+}
+
+.markdown-benefits li {
+  display: grid;
+  grid-template-columns: 34px 170px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  padding: 16px 0;
+  border-block-end: 1px solid var(--rule);
+  counter-increment: markdown-benefit;
+}
+
+.markdown-benefits li::before {
+  content: counter(markdown-benefit, persian);
+  color: var(--proof-blue-dark);
+  font-weight: 700;
+}
+
+.markdown-benefits strong {
+  font-size: 14px;
+}
+
+.markdown-benefits span {
+  color: var(--ink-700);
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.markdown-bridge {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.6fr) minmax(380px, 1.4fr);
+  gap: clamp(28px, 6vw, 90px);
+  padding-block-start: 34px;
+  border-block-start: 2px solid var(--ink-950);
+}
+
+.markdown-bridge strong {
+  font-size: 20px;
+}
+
+.markdown-bridge p {
+  margin: 0;
+}
+
+.live-section {
+  padding: clamp(72px, 9vw, 130px) clamp(18px, 4vw, 64px);
+  background: var(--paper-200);
+  border-block: 1px solid var(--rule);
+}
+
+.section-heading {
+  width: min(1180px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  align-items: end;
+  gap: clamp(32px, 6vw, 96px);
+  margin: 0 auto clamp(38px, 5vw, 68px);
+}
+
+.section-heading h2,
+.local-first h2,
+.support-section h2 {
+  max-width: 20ch;
+  margin: 0;
+  font-size: clamp(32px, 4.5vw, 64px);
+  line-height: 1.45;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.section-heading > p,
+.support-copy > p {
+  max-width: 56ch;
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 16px;
+  line-height: 2;
+}
+
+.workbench {
+  width: min(1440px, 100%);
+  margin: 0 auto;
+  overflow: hidden;
+  color: var(--ink-950);
+  background: var(--paper-50);
+  border: 1px solid var(--rule-strong);
+  box-shadow: 0 18px 48px rgba(29, 36, 30, 0.14);
+}
+
+.workbench-header {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 14px;
+  color: var(--paper-50);
+  background: var(--ink-950);
+  border-block-end: 1px solid #414841;
+}
+
+.workbench-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.workbench-title > span:last-child {
+  display: grid;
+  gap: 3px;
+}
+
+.workbench-title strong {
+  font-size: 13px;
+}
+
+.workbench-title small {
+  color: var(--paper-300);
+  font-size: 9px;
+}
+
+.sheet-mark {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  color: var(--paper-50);
+  border: 1px solid #737c73;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.reset-button {
+  min-height: 42px;
+  padding: 0 14px;
+  color: var(--paper-50);
+  background: transparent;
+  border: 1px solid #747c73;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.reset-button:hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--proof-blue);
+}
+
+.reset-button:disabled {
+  color: #8f988f;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.mobile-tabs {
+  display: none;
+}
+
+.workbench-body {
+  height: min(680px, 74svh);
+  min-height: 520px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr);
+  direction: rtl;
+}
+
+.editor-pane,
+.preview-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper-50);
+}
+
+.editor-pane {
+  background: var(--paper-100);
+}
+
+.pane-heading {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px;
+  background: color-mix(in srgb, var(--paper-50) 94%, transparent);
+  border-block-end: 1px solid var(--rule);
+}
+
+.pane-heading span {
+  color: var(--proof-blue-dark);
+  font-size: 10px;
+}
+
+.pane-heading strong {
+  font-size: 13px;
+}
+
+#markdown-source {
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  resize: none;
+  padding: 24px clamp(18px, 3vw, 42px);
+  color: var(--ink-900);
+  background-color: var(--paper-100);
+  background-image: linear-gradient(
+    to bottom,
+    transparent calc(32px - 1px),
+    color-mix(in srgb, var(--rule) 52%, transparent) 1px
+  );
+  background-size: 100% 32px;
+  border: 0;
+  outline: 0;
+  font-size: 14px;
+  line-height: 32px;
+}
+
+#markdown-source:focus {
+  box-shadow: inset 0 0 0 2px var(--proof-blue);
+}
+
+#editor-privacy {
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--ink-500);
+  border-block-start: 1px solid var(--rule);
+  font-size: 9px;
+}
+
+.registration-spine {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  color: var(--proof-blue-dark);
+  background: var(--paper-200);
+  border-inline: 1px solid var(--rule);
+}
+
+.registration-spine::before {
+  position: absolute;
+  width: 1px;
+  content: "";
+  inset-block: 28px;
+  background: var(--proof-blue);
+}
+
+.registration-spine span {
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  background: var(--paper-50);
+  border: 2px solid var(--proof-blue);
+  border-radius: 50%;
+}
+
+.registration-spine small {
+  z-index: 1;
+  padding: 8px 3px;
+  background: var(--paper-200);
+  font-size: 8px;
+  font-weight: 700;
+  writing-mode: vertical-rl;
+}
+
+.markdown-preview {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: clamp(32px, 5vw, 72px);
+  direction: rtl;
+  color: #272d27;
+  scrollbar-color: #8a948a transparent;
+}
+
+.markdown-preview > :first-child {
+  margin-block-start: 0;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4 {
+  max-width: 24ch;
+  margin-block: 2em 0.65em;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+.markdown-preview h1 {
+  position: relative;
+  margin-block-start: 0;
+  padding-block-end: 18px;
+  font-size: clamp(30px, 4vw, 52px);
+}
+
+.markdown-preview h1::after {
+  position: absolute;
+  width: 54px;
+  height: 3px;
+  content: "";
+  inset-inline-start: 0;
+  inset-block-end: 0;
+  background: var(--proof-blue);
+}
+
+.markdown-preview h2 {
+  font-size: clamp(23px, 2.7vw, 31px);
+}
+
+.markdown-preview h3 {
+  font-size: 20px;
+}
+
+.markdown-preview p,
+.markdown-preview li {
+  font-size: 16px;
+  line-height: 2;
+}
+
+.markdown-preview p {
+  max-width: 72ch;
+}
+
+.markdown-preview blockquote {
+  max-width: 66ch;
+  margin: 28px 0;
+  padding: 17px 22px;
+  color: var(--ink-700);
+  background: var(--paper-100);
+  border-inline-start: 1px solid var(--proof-blue);
+}
+
+.markdown-preview blockquote p {
+  margin: 0;
+}
+
+.markdown-preview pre {
+  max-width: 100%;
+  overflow: auto;
+  padding: 17px 20px;
+  direction: ltr;
+  color: #f4f7f4;
+  background: var(--ink-950);
+  border-radius: 4px;
+  text-align: left;
+}
+
+.markdown-preview code {
+  padding: 2px 5px;
+  background: var(--paper-200);
+  border-radius: 3px;
+  font-size: 0.88em;
+}
+
+.markdown-preview pre code {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.markdown-preview a {
+  color: var(--proof-blue-dark);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.markdown-preview img {
+  margin: 30px 0;
+  border: 1px solid var(--rule);
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  max-width: 68ch;
+  padding-inline-start: 24px;
+}
+
+.markdown-preview .task-list {
+  padding: 0;
+  list-style: none;
+}
+
+.markdown-preview .task-list input {
+  margin-inline-end: 9px;
+  accent-color: var(--proof-blue);
+}
+
+.markdown-preview .table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 28px 0;
+}
+
+.markdown-preview table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  padding: 12px 14px;
+  border-block-end: 1px solid var(--rule);
+  text-align: start;
+}
+
+.markdown-preview th {
+  background: var(--paper-200);
+}
+
+.loading-copy,
+.markdown-error {
+  color: var(--ink-700);
+}
+
+.markdown-error {
+  padding: 16px;
+  background: #fff0ed;
+  border: 1px solid #df9e98;
+}
+
+.workbench-status {
+  min-height: 40px;
+  margin: 0;
+  padding: 11px 16px;
+  color: var(--ink-500);
+  background: var(--paper-100);
+  border-block-start: 1px solid var(--rule);
+  font-size: 9px;
+}
+
+.proof-section {
+  padding: clamp(82px, 10vw, 150px) clamp(20px, 5vw, 80px);
+  background: var(--paper-50);
+}
+
+.feature-band {
+  width: min(1280px, 100%);
+  display: grid;
+  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: clamp(48px, 8vw, 120px);
+  margin: 0 auto;
+  padding-block: clamp(54px, 7vw, 96px);
+  border-block-start: 1px solid var(--rule);
+}
+
+.feature-band:last-of-type {
+  border-block-end: 1px solid var(--rule);
+}
+
+.feature-band figure {
+  position: relative;
+  margin: 0;
+}
+
+.ravi-explainer {
+  width: min(1180px, 100%);
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(380px, 1.2fr);
+  gap: clamp(34px, 7vw, 110px);
+  margin: clamp(70px, 9vw, 120px) auto 0;
+  padding: clamp(28px, 4vw, 48px);
+  color: var(--paper-50);
+  background: var(--ink-950);
+}
+
+.ravi-explainer h3 {
+  max-width: 18ch;
+  margin: 0;
+  font-size: clamp(26px, 3.2vw, 42px);
+  line-height: 1.55;
+  letter-spacing: -0.02em;
+}
+
+.ravi-explainer .section-kicker {
+  color: var(--paper-300);
+}
+
+.ravi-explainer p {
+  max-width: 66ch;
+  margin: 0;
+  color: var(--paper-300);
+  font-size: 14px;
+  line-height: 2.1;
+}
+
+.ravi-explainer p + p {
+  margin-block-start: 16px;
+}
+
+.ravi-explainer code {
+  color: #fff;
+}
+
+.feature-band figure::before {
+  position: absolute;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  content: "";
+  inset-block-start: -6px;
+  inset-inline-end: -6px;
+  border-block-start: 2px solid var(--proof-blue);
+  border-inline-end: 2px solid var(--proof-blue);
+}
+
+.feature-band img {
+  width: 100%;
+  border: 1px solid var(--rule);
+}
+
+.feature-copy {
+  max-width: 54ch;
+}
+
+.feature-index {
+  display: inline-block;
+  margin-block-end: 17px;
+  padding-block-end: 6px;
+  color: var(--proof-blue-dark);
+  border-block-end: 2px solid var(--proof-blue);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.feature-copy h3 {
+  margin: 0;
+  font-size: clamp(28px, 3.4vw, 46px);
+  line-height: 1.5;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.feature-copy p {
+  margin: 22px 0 0;
+  color: var(--ink-700);
+  font-size: 16px;
+  line-height: 2;
+}
+
+.feature-copy ul {
+  display: grid;
+  gap: 10px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feature-copy li {
+  position: relative;
+  padding-inline-start: 20px;
+  color: var(--ink-700);
+  font-size: 13px;
+}
+
+.feature-copy li::before {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  content: "";
+  inset-block-start: 8px;
+  inset-inline-start: 0;
+  background: var(--proof-blue);
+}
+
+.feature-reading {
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+}
+
+.feature-reading figure {
+  order: 1;
+}
+
+.feature-reading .feature-copy {
+  order: 2;
+}
+
+.local-first {
+  display: grid;
+  grid-template-columns: auto minmax(280px, 0.85fr) minmax(380px, 1.15fr);
+  align-items: center;
+  gap: clamp(26px, 5vw, 72px);
+  padding: clamp(54px, 7vw, 92px) max(24px, calc((100vw - 1280px) / 2));
+  color: var(--paper-50);
+  background: var(--ink-950);
+}
+
+.local-first .section-kicker {
+  color: var(--paper-300);
+}
+
+.local-first h2 {
+  font-size: clamp(30px, 4vw, 54px);
+}
+
+.local-mark {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  color: var(--paper-50);
+  border: 1px solid #566057;
+  border-radius: 50%;
+  font-size: 25px;
+}
+
+.local-first ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+  padding: 0;
+  color: var(--paper-300);
+  list-style: none;
+  font-size: 13px;
+}
+
+.local-first li {
+  padding-block-end: 10px;
+  border-block-end: 1px solid #3d453e;
+}
+
+.download-section {
+  padding: clamp(82px, 10vw, 150px) clamp(20px, 5vw, 80px);
+  background: var(--paper-100);
+}
+
+.download-ledger {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  border-block-start: 2px solid var(--ink-950);
+}
+
+.download-heading-copy {
+  display: grid;
+  align-content: end;
+  justify-items: start;
+  gap: 20px;
+}
+
+.download-heading-copy p {
+  max-width: 56ch;
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 16px;
+  line-height: 2;
+}
+
+.changelog-trigger {
+  cursor: pointer;
+}
+
+.changelog-trigger span {
+  color: var(--proof-blue-dark);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.download-row {
+  min-height: 110px;
+  display: grid;
+  grid-template-columns: 76px minmax(220px, 1fr) minmax(190px, 0.75fr) auto;
+  align-items: start;
+  gap: 22px;
+  padding: 20px 0;
+  border-block-end: 1px solid var(--rule);
+}
+
+.download-web,
+.download-linux {
+  background: var(--paper-50);
+}
+
+.download-web .platform-mark {
+  color: var(--proof-blue-dark);
+  border-color: var(--proof-blue);
+}
+
+.release-copy {
+  min-width: 0;
+}
+
+.platform-mark {
+  width: 60px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-700);
+  border: 1px solid var(--rule-strong);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.download-row h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.download-row p {
+  margin: 5px 0 0;
+  color: var(--ink-700);
+  font-size: 12px;
+}
+
+.release-details {
+  margin-block-start: 9px;
+}
+
+.release-details summary {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--proof-blue-dark);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.release-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.release-details summary::before {
+  content: "+";
+  font-family: var(--font-mono);
+  font-size: 15px;
+}
+
+.release-details[open] summary::before {
+  content: "−";
+}
+
+.release-details-body {
+  max-width: 620px;
+  padding: 14px 16px 16px;
+  background: var(--paper-100);
+  border: 1px solid var(--rule);
+}
+
+.release-details dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin: 0;
+}
+
+.release-details dl div {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.release-details dt {
+  color: var(--ink-500);
+}
+
+.release-details dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.release-details-body > p {
+  max-width: 66ch;
+  margin-block-start: 12px;
+  line-height: 1.9;
+}
+
+.release-hash-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-block-start: 12px;
+}
+
+.release-hash {
+  display: block;
+  min-width: 0;
+  padding: 8px 10px;
+  color: var(--ink-500);
+  background: var(--paper-50);
+  border: 1px solid var(--rule);
+  font-size: 9px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.hash-copy-button {
+  min-width: 72px;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: var(--proof-blue-dark);
+  background: var(--paper-50);
+  border: 1px solid var(--rule-strong);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.hash-copy-button:hover {
+  border-color: var(--proof-blue-dark);
+}
+
+.download-row > .release-state,
+.download-row > .button {
+  margin-block-start: 4px;
+}
+
+.release-state {
+  color: var(--ink-500);
+  font-size: 11px;
+}
+
+.state-ready {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.button-disabled {
+  color: var(--ink-500);
+  background: var(--paper-200);
+  border-color: var(--rule);
+  cursor: not-allowed;
+}
+
+.button-disabled:hover {
+  transform: none;
+}
+
+.changelog-dialog {
+  width: min(820px, calc(100% - 32px));
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  box-shadow: 0 28px 80px rgba(10, 17, 12, 0.34);
+}
+
+.changelog-dialog::backdrop {
+  background: rgba(13, 18, 14, 0.72);
+}
+
+.changelog-sheet {
+  max-height: min(84svh, 860px);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--paper-50);
+}
+
+.changelog-header {
+  min-height: 86px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 18px 16px 24px;
+  color: var(--paper-50);
+  background: var(--ink-950);
+}
+
+.changelog-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.changelog-heading p,
+.changelog-heading h1 {
+  margin: 0;
+}
+
+.changelog-heading p {
+  margin-block-end: 3px;
+  color: var(--paper-300);
+  font-size: 9px;
+}
+
+.changelog-heading h1 {
+  color: var(--paper-50);
+  font-size: 22px;
+}
+
+.changelog-close {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: var(--paper-50);
+  background: transparent;
+  border: 1px solid #747c73;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.changelog-close:hover {
+  border-color: var(--focus-ring);
+}
+
+.changelog-source {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 9px 24px;
+  color: var(--ink-700);
+  background: var(--paper-200);
+  border-block-end: 1px solid var(--rule);
+  font-size: 10px;
+}
+
+.changelog-source code {
+  color: var(--proof-blue-dark);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.changelog-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 30px clamp(22px, 5vw, 52px) 42px;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+.changelog-content > :first-child {
+  margin-block-start: 0;
+}
+
+.changelog-content h2 {
+  margin: 0 0 12px;
+  font-size: 19px;
+  line-height: 1.6;
+}
+
+.changelog-intro {
+  margin: 0 0 26px;
+  padding-block-end: 22px;
+  border-block-end: 1px solid var(--rule);
+}
+
+.changelog-release {
+  padding: 24px 0;
+  border-block-end: 1px solid var(--rule);
+}
+
+.changelog-release:first-of-type {
+  padding-block-start: 0;
+}
+
+.changelog-archive {
+  margin-block-start: 24px;
+}
+
+.changelog-archive > summary {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  border: 1px solid #bdcafa;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.changelog-archive > summary::-webkit-details-marker {
+  display: none;
+}
+
+.changelog-archive > summary::after {
+  content: "+";
+  font-family: var(--font-mono);
+  font-size: 18px;
+}
+
+.changelog-archive[open] > summary::after {
+  content: "−";
+}
+
+.changelog-archive-body .changelog-release:first-child {
+  padding-block-start: 24px;
+}
+
+.changelog-content p,
+.changelog-content li {
+  font-size: 13px;
+  line-height: 2;
+}
+
+.changelog-content p {
+  max-width: 72ch;
+  color: var(--ink-700);
+}
+
+.changelog-content ul,
+.changelog-content ol {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-inline-start: 24px;
+}
+
+.changelog-content code {
+  padding: 2px 5px;
+  background: var(--paper-200);
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.changelog-loading,
+.changelog-error {
+  margin: 0;
+  padding: 20px;
+  background: var(--paper-100);
+  border: 1px solid var(--rule);
+}
+
+.changelog-error strong {
+  display: block;
+  margin-block-end: 8px;
+}
+
+.changelog-retry {
+  margin-block-start: 16px;
+  cursor: pointer;
+}
+
+.changelog-footer {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 11px 24px;
+  color: var(--ink-500);
+  background: var(--paper-100);
+  border-block-start: 1px solid var(--rule);
+  font-size: 9px;
+}
+
+.changelog-footer .button {
+  min-height: 42px;
+  cursor: pointer;
+}
+
+.support-section {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  align-items: center;
+  gap: clamp(54px, 9vw, 140px);
+  padding: clamp(90px, 11vw, 160px) max(24px, calc((100vw - 1180px) / 2));
+  overflow: hidden;
+  color: var(--paper-50);
+  background: var(--proof-blue-dark);
+}
+
+.support-section::after {
+  position: absolute;
+  content: "♡";
+  inset-block-end: -0.42em;
+  inset-inline-end: -0.12em;
+  color: color-mix(in srgb, var(--coral) 42%, transparent);
+  font-size: clamp(240px, 28vw, 440px);
+  line-height: 1;
+  transform: rotate(-7deg);
+  pointer-events: none;
+}
+
+.support-copy,
+.support-note {
+  position: relative;
+  z-index: 1;
+}
+
+.support-section .section-kicker,
+.support-copy > p {
+  color: #dbe4ff;
+}
+
+.support-section h2 {
+  max-width: 14ch;
+}
+
+.button-support {
+  color: var(--ink-950);
+  background: var(--paper-50);
+}
+
+.button-support span {
+  color: #c56f5b;
+}
+
+.button-support:hover {
+  color: var(--ink-950);
+  background: #fff;
+}
+
+.text-link {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-underline-offset: 5px;
+}
+
+.support-note {
+  position: relative;
+  max-width: 390px;
+  padding: 34px;
+  color: var(--ink-950);
+  background: var(--paper-50);
+  box-shadow: 0 18px 46px rgba(4, 17, 55, 0.22);
+  transform: rotate(-1.25deg);
+}
+
+.support-note strong {
+  font-size: 21px;
+}
+
+.support-note p {
+  margin: 15px 0 0;
+  color: var(--ink-700);
+  font-size: 13px;
+  line-height: 2;
+}
+
+.note-pin {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  inset-block-start: 15px;
+  inset-inline-end: 17px;
+  background: var(--coral);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.26);
+}
+
+.site-footer {
+  min-height: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px max(24px, calc((100vw - 1180px) / 2));
+  color: var(--paper-50);
+  background: var(--ink-950);
+  border-block-start: 1px solid #3f463f;
+}
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.noscript-note {
+  position: fixed;
+  z-index: 90;
+  inset-inline: 16px;
+  inset-block-end: 16px;
+  margin: 0;
+  padding: 12px 16px;
+  color: #fff;
+  background: #8c2e27;
+  font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+  .hero {
+    grid-template-columns: minmax(310px, 0.75fr) minmax(480px, 1.25fr);
+    gap: 38px;
+  }
+
+  .site-nav {
+    gap: 18px;
+  }
+
+  .local-first {
+    grid-template-columns: auto 1fr;
+  }
+
+  .local-first ul {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 860px) {
+  .site-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .site-nav {
+    display: none;
+  }
+
+  .brand-copy small {
+    display: none;
+  }
+
+  .hero {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 52px;
+    padding-block: 76px;
+  }
+
+  .hero h1 {
+    max-width: 14ch;
+    font-size: clamp(40px, 8.5vw, 60px);
+  }
+
+  .hero-visual {
+    width: min(100%, 700px);
+    justify-self: center;
+  }
+
+  .section-heading {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .markdown-primer,
+  .markdown-bridge {
+    grid-template-columns: 1fr;
+  }
+
+  .workbench-header {
+    flex-wrap: wrap;
+  }
+
+  .workbench-title {
+    flex: 1 1 auto;
+  }
+
+  .mobile-tabs {
+    display: flex;
+    order: 3;
+    width: 100%;
+    border-block-start: 1px solid #3f463f;
+  }
+
+  .mobile-tabs button {
+    min-height: 42px;
+    flex: 1;
+    color: var(--paper-300);
+    background: transparent;
+    border: 0;
+    border-block-end: 2px solid transparent;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .mobile-tabs button[aria-selected="true"] {
+    color: #fff;
+    border-color: var(--proof-blue);
+  }
+
+  .workbench-body {
+    height: min(680px, 72svh);
+    min-height: 520px;
+    grid-template-columns: 1fr;
+  }
+
+  .registration-spine {
+    display: none;
+  }
+
+  .editor-pane,
+  .preview-pane {
+    display: none;
+  }
+
+  .workbench[data-view="source"] .editor-pane,
+  .workbench[data-view="preview"] .preview-pane {
+    display: flex;
+  }
+
+  .feature-band,
+  .feature-reading,
+  .ravi-explainer {
+    grid-template-columns: 1fr;
+    gap: 38px;
+  }
+
+  .feature-band .feature-copy,
+  .feature-band figure,
+  .feature-reading .feature-copy,
+  .feature-reading figure {
+    order: initial;
+  }
+
+  .feature-band figure {
+    width: min(100%, 700px);
+  }
+
+  .local-first {
+    grid-template-columns: 1fr;
+  }
+
+  .local-first ul {
+    grid-column: auto;
+  }
+
+  .download-row {
+    grid-template-columns: 64px 1fr auto;
+  }
+
+  .changelog-dialog {
+    width: min(760px, calc(100% - 24px));
+  }
+
+  .download-row .release-state {
+    grid-column: 2;
+  }
+
+  .download-row .button {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .support-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .site-header {
+    min-height: 62px;
+    padding: 9px 13px;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+  }
+
+  .header-action {
+    min-height: 40px;
+  }
+
+  .hero,
+  .markdown-primer,
+  .live-section,
+  .proof-section,
+  .download-section {
+    padding-inline: 16px;
+  }
+
+  .hero::before {
+    display: none;
+  }
+
+  .hero h1 {
+    max-width: 100%;
+    font-size: clamp(32px, 8.6vw, 52px);
+  }
+
+  .hero-actions .button {
+    width: 100%;
+  }
+
+  .hero-visual figcaption {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .section-heading h2,
+  .local-first h2,
+  .support-section h2 {
+    font-size: 34px;
+  }
+
+  .live-section {
+    padding-block: 70px;
+  }
+
+  .workbench-header {
+    padding: 9px;
+  }
+
+  .reset-button {
+    min-height: 40px;
+    font-size: 9px;
+  }
+
+  .workbench-body {
+    height: 68svh;
+    min-height: 480px;
+  }
+
+  #markdown-source {
+    padding-inline: 16px;
+    font-size: 13px;
+  }
+
+  .markdown-preview {
+    padding: 28px 20px 54px;
+  }
+
+  .markdown-preview p,
+  .markdown-preview li {
+    font-size: 15px;
+  }
+
+  .feature-band {
+    padding-block: 54px;
+  }
+
+  .feature-copy h3 {
+    font-size: 30px;
+  }
+
+  .local-first {
+    padding-inline: 20px;
+  }
+
+  .local-first ul {
+    grid-template-columns: 1fr;
+  }
+
+  .download-row {
+    grid-template-columns: 56px 1fr;
+    gap: 14px;
+    padding: 18px 0;
+  }
+
+  .download-row .release-state {
+    grid-column: 2;
+  }
+
+  .download-row .button {
+    width: 100%;
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .platform-mark {
+    width: 50px;
+  }
+
+  .markdown-benefits li {
+    grid-template-columns: 28px 1fr;
+    gap: 8px 10px;
+  }
+
+  .markdown-benefits li span {
+    grid-column: 2;
+  }
+
+  .release-hash-row {
+    grid-template-columns: 1fr;
+  }
+
+  .hash-copy-button {
+    width: 100%;
+  }
+
+  .changelog-dialog {
+    width: calc(100% - 20px);
+  }
+
+  .changelog-sheet {
+    max-height: 90svh;
+  }
+
+  .changelog-header {
+    padding-inline: 14px;
+  }
+
+  .changelog-source,
+  .changelog-footer {
+    padding-inline: 16px;
+  }
+
+  .changelog-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding-block: 12px;
+  }
+
+  .changelog-footer .button {
+    width: 100%;
+  }
+
+  .support-section {
+    padding-inline: 20px;
+  }
+
+  .support-actions .button,
+  .support-actions .text-link {
+    width: 100%;
+  }
+
+  .support-actions .text-link {
+    padding: 12px 0;
+  }
+
+  .support-note {
+    padding: 28px 22px;
+  }
+
+  .site-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-inline: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+    </style>
   </head>
   <body>
     <a class="skip-link" href="#main-content">رفتن به محتوای اصلی</a>
@@ -52,7 +2081,12 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
         <a href="#features">ویژگی‌ها</a>
       </nav>
 
-      <a class="header-action" href="#download">دریافت راوی</a>
+      <a
+        class="header-action"
+        href="https://raviweb.poorsmile.ir/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >باز کردن نسخهٔ وب</a>
     </header>
 
     <main id="main-content">
@@ -60,30 +2094,37 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
         <div class="hero-copy">
           <p class="hero-kicker">
             <span aria-hidden="true"></span>
-            نسخهٔ پایدار <bdi dir="ltr">1.0.0</bdi>
+            نسخهٔ وب؛ بدون نصب
           </p>
-          <h1 id="hero-title">مارک‌دان ؛ ساده و مرتب.</h1>
+          <h1 id="hero-title">
+            <span>Markdown فارسی؛</span>
+            <span>خوانا و مرتب.</span>
+          </h1>
           <p class="hero-lead">
-            فایل‌های <code>md</code> همان متن‌های ساده‌ای هستند که هوش مصنوعی‌ها
-            زیاد تولید می‌کنند؛ متن‌هایی که می‌توانند <strong>عنوان، لیست، لینک
-            و بولد</strong> داشته باشند. اما محتوای فارسی داخل این فایل‌ها درست
-            نمایش داده نشود، جهت متن به‌هم می‌ریزد و خواندنش سخت می‌شود.
-            <strong>راوی</strong> کمک می‌کند فایل‌های Markdown فارسی را مرتب،
-            خوانا و راست‌به‌چپ ببینید و راحت‌تر ویرایش کنید.
+            فایل‌های <code>md</code> همان متن‌های ساده‌ای هستند که ابزارهای هوش
+            مصنوعی زیاد تولید می‌کنند؛ اما فارسی و انگلیسی در بسیاری از برنامه‌ها
+            کنار هم درست نمایش داده نمی‌شوند. <strong>راوی</strong> کمک می‌کند
+            فایل‌های Markdown فارسی را در مرورگر یا روی دسکتاپ، مرتب و خوانا
+            ببینید و ویرایش کنید.
           </p>
           <div class="hero-actions">
-            <a class="button button-primary" href="#download">
-              دانلود رایگان
-              <span aria-hidden="true">←</span>
+            <a
+              class="button button-primary"
+              href="https://raviweb.poorsmile.ir/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              باز کردن نسخهٔ وب
+              <span aria-hidden="true">↗</span>
             </a>
-            <a class="button button-secondary" href="#live-demo">
-              مارک‌دان را امتحان کنید
+            <a class="button button-secondary" href="#download">
+              دانلود نسخهٔ دسکتاپ
             </a>
           </div>
           <ul class="hero-trust" aria-label="ویژگی‌های اصلی">
-            <li><span aria-hidden="true">✓</span> فارسی و انگلیسی بدون به‌هم‌ریخنگی</li>
-            <li><span aria-hidden="true">✓</span> نگه‌داری فایل‌ها در سیستم‌تان</li>
-            <li><span aria-hidden="true">✓</span> تا همیشه رایگان</li>
+            <li><span aria-hidden="true">✓</span> فارسی و انگلیسی بدون به‌هم‌ریختگی</li>
+            <li><span aria-hidden="true">✓</span> فایل‌ها روی دستگاه شما</li>
+            <li><span aria-hidden="true">✓</span> نسخهٔ وب و دسکتاپ، رایگان</li>
           </ul>
         </div>
 
@@ -112,12 +2153,12 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
           <p class="section-kicker">پیش از راوی</p>
           <h2 id="markdown-primer-title">مارک‌دان چیست؟</h2>
           <p>
-            فایل‌های <code>md</code> همان متن‌های ساده‌ای هستند که هوش مصنوعی‌ها
-            زیاد تولید می‌کنند؛ متن‌هایی که می‌توانند <strong>عنوان، لیست، لینک
-            و بولد</strong> داشته باشند. اما محتوای فارسی داخل این فایل‌ها درست
-            نمایش داده نشود، جهت متن به‌هم می‌ریزد و خواندنش سخت می‌شود.
-            <strong>راوی</strong> کمک می‌کند فایل‌های Markdown فارسی را مرتب،
-            خوانا و راست‌به‌چپ ببینید و راحت‌تر ویرایش کنید.
+            فایل‌های <code>md</code> متن‌های ساده‌ای هستند که می‌توانند
+            <strong>عنوان، فهرست، پیوند و متن پررنگ</strong> داشته باشند و بسیاری
+            از ابزارهای هوش مصنوعی هم با همین ساختار کار می‌کنند. وقتی فارسی و
+            انگلیسی کنار هم قرار می‌گیرند، جهت متن ممکن است به‌هم بریزد.
+            <strong>راوی</strong> جهت هر بخش را درست تشخیص می‌دهد تا فایل را مرتب،
+            خوانا و راحت‌تر ویرایش کنید.
           </p>
         </div>
 
@@ -137,9 +2178,9 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
         <aside class="markdown-bridge">
           <strong>پس راوی چه کاری انجام می‌دهد؟</strong>
           <p>
-            بیشتر ابزارهای Markdown برای متن انگلیسی ساخته شده‌اند. راوی فایل
-            را با جهت درست فارسی، پیش‌نمایش زنده در اختیارتان می‌گذارد تا
-            به‌جای درگیری با تنظیمات، روی اصل کارتان تمرکز کنید.
+            راوی فایل را با جهت درست فارسی و پیش‌نمایش زنده نشان می‌دهد. بدون
+            نصب در نسخهٔ وب شروع کنید؛ برای اتصال پوشه‌ها و باز کردن مستقیم فایل‌ها
+            از سیستم‌عامل، نسخهٔ دسکتاپ را بگیرید.
           </p>
         </aside>
       </section>
@@ -152,12 +2193,12 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
         <div class="section-heading live-heading">
           <div>
             <p class="section-kicker">تجربهٔ زنده</p>
-            <h2 id="live-title">متن این معرفی را تغییر دهید.</h2>
+            <h2 id="live-title">Markdown فارسی را همین‌جا امتحان کنید.</h2>
           </div>
           <p>
-            <strong>مارک دان فارسی</strong> را امتحان کنید.
-            منبع این بخش یک فایل <code>landing.md</code> است. هر تغییری فقط
-            در همین مرورگر پیش‌نمایش می‌شود و به جایی فرستاده نمی‌شود.
+            متن این معرفی را تغییر دهید. منبع این بخش یک فایل
+            <code>landing.md</code> است؛ هر تغییری فقط در همین مرورگر پیش‌نمایش
+            می‌شود و به جایی فرستاده نمی‌شود.
           </p>
         </div>
 
@@ -264,12 +2305,12 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
       <section class="proof-section" id="features" aria-labelledby="proof-title">
         <div class="section-heading proof-heading">
           <div>
-            <p class="section-kicker">فراتر از یک نمایشگر ساده</p>
-            <h2 id="proof-title">یک میز کامل برای فایل‌های متنی شما.</h2>
+            <p class="section-kicker">از شروع سریع تا کار عمیق</p>
+            <h2 id="proof-title">در مرورگر شروع کنید؛ روی دسکتاپ ادامه دهید.</h2>
           </div>
           <p>
-            راوی برای کاربر فارسی‌زبان ساخته شده است؛ نه با برگرداندن یک رابط
-            انگلیسی، بلکه با رفتار درست متن، مطالعه و فایل از ابتدا.
+            نسخهٔ وب برای باز کردن، ویرایش و مطالعه آماده است؛ نسخهٔ دسکتاپ
+            اتصال پوشه‌ها و کار مستقیم با فایل‌های سیستم را هم اضافه می‌کند.
           </p>
         </div>
 
@@ -278,14 +2319,15 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
             <span class="feature-index" aria-hidden="true">قفسه</span>
             <h3>کتابخانه‌ای که روی دستگاه می‌ماند</h3>
             <p>
-              پوشه‌های Markdown را با اجازهٔ خودتان اضافه کنید، میان فایل‌ها
-              جست‌وجو کنید و نوشته‌های مهم را سنجاق بزنید. مسیر و محتوای فایل
-              برای ساخت کتابخانه به اینترنت فرستاده نمی‌شود.
+              در نسخهٔ وب، فایل‌هایی که باز می‌کنید در کتابخانهٔ همان مرورگر
+              می‌مانند. در نسخهٔ دسکتاپ می‌توانید پوشه‌ها و زیرپوشه‌ها را هم با
+              اجازهٔ خودتان متصل کنید. مسیر و محتوای فایل به اینترنت فرستاده
+              نمی‌شود.
             </p>
             <ul>
-              <li>اسکن پوشه و زیرپوشه‌ها</li>
-              <li>جست‌وجوی فایل‌های <code>.md</code> و <code>.ravi</code></li>
-              <li>سنجاق فایل‌های پراستفاده</li>
+              <li>فایل‌های اخیر در نسخهٔ وب</li>
+              <li>اتصال پوشه و زیرپوشه در نسخهٔ دسکتاپ</li>
+              <li>جست‌وجو و سنجاق فایل‌های پراستفاده</li>
             </ul>
           </div>
           <figure>
@@ -364,7 +2406,7 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
             <p>
               فایل <code>.ravi</code> علاوه بر متن اصلی، تصویرهای استفاده‌شده،
               یادداشت‌ها، برجسته‌سازی‌ها و حاشیه‌نویسی‌ها را نیز همراه خود نگه
-              می‌دارد. این قالب اختصاصی راوی است و فقط با نرم‌افزار راوی باز
+              می‌دارد. این قالب اختصاصی راوی است و فقط با راوی باز
               می‌شود؛ برای نوشته‌های معمولی همچنان می‌توانید از <code>.md</code>
               استفاده کنید.
             </p>
@@ -381,21 +2423,21 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
         <ul>
           <li>بدون حساب کاربری</li>
           <li>بدون آپلود محتوای سند</li>
-          <li>دسترسی به پوشه فقط با اجازهٔ شما</li>
-          <li>تنظیمات و آخرین نوشته به‌صورت محلی</li>
+          <li>اتصال پوشه در دسکتاپ، فقط با اجازهٔ شما</li>
+          <li>تنظیمات و آخرین نوشته روی همان دستگاه</li>
         </ul>
       </section>
 
       <section class="download-section" id="download" aria-labelledby="download-title">
         <div class="section-heading download-heading">
           <div>
-            <p class="section-kicker">دریافت راوی</p>
-            <h2 id="download-title">رایگان برای دسکتاپ.</h2>
+            <p class="section-kicker">راه‌های استفاده</p>
+            <h2 id="download-title">در مرورگر یا روی دسکتاپ.</h2>
           </div>
           <div class="download-heading-copy">
             <p>
-              نسخه‌های Windows و Linux همین حالا آماده‌اند. نسخهٔ macOS پس از
-              آماده‌شدن در همین بخش قرار می‌گیرد.
+              نسخهٔ وب بدون نصب آماده است. برای اتصال پوشه‌ها و باز کردن مستقیم
+              فایل‌ها از سیستم‌عامل، نسخهٔ Windows یا Linux را دریافت کنید.
             </p>
             <button
               class="button button-secondary changelog-trigger"
@@ -410,12 +2452,30 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
           </div>
         </div>
 
-        <div class="download-ledger" aria-label="نسخه‌های قابل دریافت">
+        <div class="download-ledger" aria-label="راه‌های استفاده و نسخه‌های قابل دریافت">
+          <article class="download-row download-web">
+            <div class="platform-mark" aria-hidden="true">Web</div>
+            <div>
+              <h3>نسخهٔ وب</h3>
+              <p>بدون نصب · آماده در مرورگر</p>
+            </div>
+            <span class="release-state state-ready">آمادهٔ استفاده</span>
+            <a
+              class="button button-primary"
+              href="https://raviweb.poorsmile.ir/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="باز کردن نسخهٔ وب راوی"
+            >
+              باز کردن نسخهٔ وب
+            </a>
+          </article>
+
           <article class="download-row download-windows">
             <div class="platform-mark" aria-hidden="true">Win</div>
             <div class="release-copy">
               <h3>Windows</h3>
-              <p>نصب آسان · نسخهٔ <bdi dir="ltr">1.0.0</bdi> · ۱۸۳٫۴۰ مگابایت</p>
+              <p>نصب آسان · نسخهٔ <bdi dir="ltr">1.1.0</bdi> · ۳٫۳۱ مگابایت</p>
               <details class="release-details">
                 <summary>جزئیات و بررسی اصالت فایل</summary>
                 <div class="release-details-body">
@@ -428,11 +2488,11 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
                     مطمئن شوید فایل دانلودشده دقیقاً همان نسخهٔ رسمی است.
                   </p>
                   <div class="release-hash-row">
-                    <code class="release-hash" dir="ltr">40530BD4ABAB38580F3CF90B1CDF7FE69A3843F2A04FCCC2862A132859832D2A</code>
+                    <code class="release-hash" dir="ltr">3EFC465D27A65D20A2B252915B3CD62B78777DF142D49A710A21503891A02C3D</code>
                     <button
                       class="hash-copy-button"
                       type="button"
-                      data-copy-hash="40530BD4ABAB38580F3CF90B1CDF7FE69A3843F2A04FCCC2862A132859832D2A"
+                      data-copy-hash="3EFC465D27A65D20A2B252915B3CD62B78777DF142D49A710A21503891A02C3D"
                       aria-label="کپی‌کردن کد بررسی فایل Windows"
                     >کپی کد</button>
                   </div>
@@ -442,9 +2502,9 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
             <span class="release-state state-ready">آمادهٔ دانلود</span>
             <a
               class="button button-primary"
-              href="./downloads/Raavi-Setup-1.0.0-x64.exe"
+              href="./downloads/Raavi-Setup-1.1.0-x64.exe"
               download
-              aria-label="دانلود راوی 1.0.0 برای Windows، حجم ۱۸۳٫۴۰ مگابایت"
+              aria-label="دانلود راوی 1.1.0 برای Windows، حجم ۳٫۳۱ مگابایت"
             >
               دانلود Windows
             </a>
@@ -509,9 +2569,9 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
           <p class="section-kicker">توسعهٔ مستقل</p>
           <h2 id="support-title">راوی رایگان می‌ماند.</h2>
           <p>
-            حمایت داوطلبانهٔ شما برای نگه‌داری، توسعه، ساخت نسخه‌های دسکتاپ
-            و هزینه‌های زیرساخت پروژه صرف می‌شود. مبلغ و متن پیام را خودتان
-            در صفحهٔ امن دارمت انتخاب می‌کنید.
+            حمایت داوطلبانهٔ شما برای نگه‌داری نسخهٔ وب، توسعهٔ راوی، ساخت
+            نسخه‌های دسکتاپ و هزینه‌های زیرساخت پروژه صرف می‌شود. مبلغ و متن
+            پیام را خودتان در صفحهٔ امن دارمت انتخاب می‌کنید.
           </p>
           <div class="support-actions">
             <a
@@ -609,6 +2669,7 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
       </div>
       <div class="footer-links">
         <a href="#top">ابتدای صفحه</a>
+        <a href="https://raviweb.poorsmile.ir/">نسخهٔ وب</a>
         <a href="https://ravi.poorsmile.ir">ravi.poorsmile.ir</a>
       </div>
     </footer>
@@ -616,8 +2677,643 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
     <noscript>
       <p class="noscript-note">
         برای استفاده از پیش‌نمایش زندهٔ Markdown، جاوااسکریپت مرورگر را فعال
-        کنید. معرفی، تصاویر و لینک‌های دانلود بدون آن نیز در دسترس‌اند.
+        کنید. معرفی، تصاویر، لینک نسخهٔ وب و دانلودها بدون آن نیز در دسترس‌اند.
       </p>
     </noscript>
+    <script id="initial-markdown" type="application/json">"# Markdown فارسی را ساده شروع کنید\n\nاگر در پاسخ یک ابزار هوش مصنوعی یا کنار یک پروژه با فایل `.md` روبه‌رو شده‌اید، نگران نباشید. Markdown فقط روشی ساده برای ساخت متن مرتب است.\n\n> این متن را تغییر دهید. نتیجه همان لحظه در برگهٔ پیش‌نمایش دیده می‌شود و با دکمهٔ «بازگرداندن متن اصلی» همیشه می‌توانید از نو شروع کنید.\n\n## Markdown چه مزیتی دارد؟\n\nبا چند نشانهٔ ساده می‌توانید تیتر، فهرست، پیوند و کد بسازید.\n\n## چرا راوی ساخته شد؟\n\nبا گسترش فایل‌های Markdown و ابزارهای هوش مصنوعی، راوی ساخته شد تا کار با فایل‌های `.md` برای فارسی‌زبان‌ها ساده‌تر شود؛ با نمایش درست فارسی، بدون حساب کاربری و بدون ارسال محتوا به اینترنت.\n\n## متن را بنویسید؛ نتیجه را همان لحظه ببینید\n\n- [x] ویرایش و پیش‌نمایش زنده\n- [x] نمایش درست فارسی و انگلیسی\n- [x] مطالعه، کتابخانه و جست‌وجوی محلی\n- [x] برجسته‌سازی، یادداشت و نمودارهای Mermaid\n\n| قابلیت | نتیجه |\n| --- | --- |\n| جهت متن | فارسی راست‌به‌چپ و کد چپ‌به‌راست |\n| کتابخانه | جست‌وجو و سنجاق فایل‌ها روی دستگاه شما |\n| حریم خصوصی | بدون ارسال محتوای سند |\n\n### کد هم در جهت طبیعی خودش می‌ماند\n\n```js\nconst direction = isCode ? \"ltr\" : \"rtl\";\nconsole.log(\"راوی آماده است\");\n```\n\n## همکاری با فایل `.ravi`\n\nمی‌توانید روی فایل یکدیگر یادداشت بگذارید، بخش‌های مهم را برجسته کنید یا حاشیه بنویسید و سپس آن را با پسوند `.ravi` برای هم بفرستید.\n\nفایل `.ravi` علاوه بر متن اصلی، تصویرهای استفاده‌شده، یادداشت‌ها، برجسته‌سازی‌ها و حاشیه‌نویسی‌ها را نیز همراه خود نگه می‌دارد. این قالب اختصاصی است و فقط با راوی باز می‌شود؛ برای نوشته‌های معمولی همان فایل `.md` کافی است.\n\n[ویرایش در نسخهٔ وب راوی](https://raviweb.poorsmile.ir/)\n"</script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+(() => {
+  "use strict";
+
+  const source = document.querySelector("#markdown-source");
+  const preview = document.querySelector("#markdown-preview");
+  const resetButton = document.querySelector("#reset-content");
+  const status = document.querySelector("#editor-status");
+  const stats = document.querySelector("#editor-stats");
+  const workbench = document.querySelector(".workbench");
+  const sourceTab = document.querySelector("#source-tab");
+  const previewTab = document.querySelector("#preview-tab");
+  const changelogTrigger = document.querySelector("#open-changelog");
+  const changelogDialog = document.querySelector("#changelog-dialog");
+  const changelogClose = document.querySelector("#close-changelog");
+  const changelogDismiss = document.querySelector("#dismiss-changelog");
+  const changelogContent = document.querySelector("#changelog-content");
+  const hashCopyButtons = document.querySelectorAll("[data-copy-hash]");
+  const hashCopyStatus = document.querySelector("#hash-copy-status");
+
+  if (
+    !source ||
+    !preview ||
+    !resetButton ||
+    !status ||
+    !stats ||
+    !workbench ||
+    !sourceTab ||
+    !previewTab
+  ) {
+    return;
+  }
+
+  let initialMarkdown = "";
+  let renderFrame = 0;
+  let changelogLoadId = 0;
+  let changelogReturnFocus = null;
+
+  const faNumber = new Intl.NumberFormat("fa-IR");
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function safeUrl(rawUrl) {
+    const value = String(rawUrl).trim();
+
+    if (
+      value.startsWith("./") ||
+      value.startsWith("../") ||
+      value.startsWith("/") ||
+      value.startsWith("#")
+    ) {
+      return escapeHtml(value);
+    }
+
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+        return escapeHtml(parsed.href);
+      }
+    } catch {
+      return "#";
+    }
+
+    return "#";
+  }
+
+  function inlineMarkdown(rawText) {
+    let text = escapeHtml(rawText);
+    const codeTokens = [];
+
+    text = text.replace(/`([^`\n]+)`/g, (_match, code) => {
+      const token = `%%RAAVI_CODE_${codeTokens.length}%%`;
+      codeTokens.push(`<code>${code}</code>`);
+      return token;
+    });
+
+    text = text.replace(
+      /!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
+      (_match, alt, url, title) => {
+        const safe = safeUrl(url);
+        const titleAttribute = title
+          ? ` title="${escapeHtml(title)}"`
+          : "";
+        return `<img src="${safe}" alt="${alt}" loading="lazy"${titleAttribute}>`;
+      },
+    );
+
+    text = text.replace(
+      /\[([^\]]+)\]\(([^)\s]+)\)/g,
+      (_match, label, url) => {
+        const safe = safeUrl(url);
+        const external = /^https?:/i.test(url);
+        const attributes = external
+          ? ' target="_blank" rel="noopener noreferrer"'
+          : "";
+        return `<a href="${safe}"${attributes}>${label}</a>`;
+      },
+    );
+
+    text = text.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+    text = text.replace(/__([^_\n]+)__/g, "<strong>$1</strong>");
+    text = text.replace(
+      /(^|[\s(])\*([^*\n]+)\*(?=$|[\s).،؛])/g,
+      "$1<em>$2</em>",
+    );
+
+    codeTokens.forEach((html, index) => {
+      text = text.replace(`%%RAAVI_CODE_${index}%%`, html);
+    });
+
+    return text;
+  }
+
+  function isTableDivider(line) {
+    const cells = line
+      .trim()
+      .replace(/^\||\|$/g, "")
+      .split("|")
+      .map((cell) => cell.trim());
+
+    return (
+      cells.length > 1 &&
+      cells.every((cell) => /^:?-{3,}:?$/.test(cell))
+    );
+  }
+
+  function parseTableRow(line) {
+    return line
+      .trim()
+      .replace(/^\||\|$/g, "")
+      .split("|")
+      .map((cell) => cell.trim());
+  }
+
+  function isBlockStart(lines, index) {
+    const line = lines[index] ?? "";
+    const nextLine = lines[index + 1] ?? "";
+
+    return (
+      line.trim() === "" ||
+      /^#{1,4}\s+/.test(line) ||
+      /^```/.test(line.trim()) ||
+      /^>\s?/.test(line) ||
+      /^[-*+]\s+/.test(line) ||
+      /^\d+\.\s+/.test(line) ||
+      /^(?:-{3,}|\*{3,}|_{3,})$/.test(line.trim()) ||
+      (line.includes("|") && isTableDivider(nextLine))
+    );
+  }
+
+  function renderMarkdown(markdown) {
+    const lines = String(markdown).replace(/\r\n?/g, "\n").split("\n");
+    const output = [];
+    let index = 0;
+
+    while (index < lines.length) {
+      const line = lines[index];
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        index += 1;
+        continue;
+      }
+
+      const fenceMatch = trimmed.match(/^```([\w-]*)\s*$/);
+      if (fenceMatch) {
+        const language = fenceMatch[1];
+        const codeLines = [];
+        index += 1;
+
+        while (index < lines.length && !/^```\s*$/.test(lines[index].trim())) {
+          codeLines.push(lines[index]);
+          index += 1;
+        }
+
+        if (index < lines.length) {
+          index += 1;
+        }
+
+        const languageClass = language
+          ? ` class="language-${escapeHtml(language)}"`
+          : "";
+        output.push(
+          `<pre dir="ltr"><code${languageClass}>${escapeHtml(
+            codeLines.join("\n"),
+          )}</code></pre>`,
+        );
+        continue;
+      }
+
+      const headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+      if (headingMatch) {
+        const level = headingMatch[1].length;
+        output.push(
+          `<h${level}>${inlineMarkdown(headingMatch[2])}</h${level}>`,
+        );
+        index += 1;
+        continue;
+      }
+
+      if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+        output.push("<hr>");
+        index += 1;
+        continue;
+      }
+
+      if (/^>\s?/.test(line)) {
+        const quoteLines = [];
+        while (index < lines.length && /^>\s?/.test(lines[index])) {
+          quoteLines.push(lines[index].replace(/^>\s?/, ""));
+          index += 1;
+        }
+        output.push(
+          `<blockquote><p>${inlineMarkdown(quoteLines.join(" "))}</p></blockquote>`,
+        );
+        continue;
+      }
+
+      if (
+        line.includes("|") &&
+        index + 1 < lines.length &&
+        isTableDivider(lines[index + 1])
+      ) {
+        const headers = parseTableRow(line);
+        const rows = [];
+        index += 2;
+
+        while (index < lines.length && lines[index].includes("|")) {
+          rows.push(parseTableRow(lines[index]));
+          index += 1;
+        }
+
+        const headerHtml = headers
+          .map((cell) => `<th scope="col">${inlineMarkdown(cell)}</th>`)
+          .join("");
+        const bodyHtml = rows
+          .map(
+            (row) =>
+              `<tr>${headers
+                .map(
+                  (_header, cellIndex) =>
+                    `<td>${inlineMarkdown(row[cellIndex] ?? "")}</td>`,
+                )
+                .join("")}</tr>`,
+          )
+          .join("");
+
+        output.push(
+          `<div class="table-wrap"><table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table></div>`,
+        );
+        continue;
+      }
+
+      if (/^[-*+]\s+/.test(line)) {
+        const items = [];
+        let taskList = false;
+
+        while (index < lines.length && /^[-*+]\s+/.test(lines[index])) {
+          const item = lines[index].replace(/^[-*+]\s+/, "");
+          const taskMatch = item.match(/^\[([ xX])\]\s+(.+)$/);
+
+          if (taskMatch) {
+            taskList = true;
+            const checked = taskMatch[1].toLowerCase() === "x";
+            items.push(
+              `<li><label><input type="checkbox" disabled${
+                checked ? " checked" : ""
+              }> ${inlineMarkdown(taskMatch[2])}</label></li>`,
+            );
+          } else {
+            items.push(`<li>${inlineMarkdown(item)}</li>`);
+          }
+          index += 1;
+        }
+
+        output.push(
+          `<ul${taskList ? ' class="task-list"' : ""}>${items.join("")}</ul>`,
+        );
+        continue;
+      }
+
+      if (/^\d+\.\s+/.test(line)) {
+        const items = [];
+        while (index < lines.length && /^\d+\.\s+/.test(lines[index])) {
+          items.push(
+            `<li>${inlineMarkdown(
+              lines[index].replace(/^\d+\.\s+/, ""),
+            )}</li>`,
+          );
+          index += 1;
+        }
+        output.push(`<ol>${items.join("")}</ol>`);
+        continue;
+      }
+
+      const paragraphLines = [trimmed];
+      index += 1;
+      while (index < lines.length && !isBlockStart(lines, index)) {
+        paragraphLines.push(lines[index].trim());
+        index += 1;
+      }
+
+      output.push(`<p>${inlineMarkdown(paragraphLines.join(" "))}</p>`);
+    }
+
+    return output.join("\n");
+  }
+
+  function wordCount(value) {
+    const words = String(value)
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/[#>*_`|[\]()!-]/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    return words.length;
+  }
+
+  function updateStats(value) {
+    const words = wordCount(value);
+    const lines = value ? value.split("\n").length : 0;
+    stats.textContent = `${faNumber.format(words)} واژه · ${faNumber.format(
+      lines,
+    )} خط`;
+  }
+
+  function updatePreview() {
+    const value = source.value;
+    preview.innerHTML = renderMarkdown(value);
+    updateStats(value);
+
+    const changed = value !== initialMarkdown;
+    resetButton.disabled = !changed;
+    status.textContent = changed
+      ? "پیش‌نمایش تغییر کرده است؛ برای شروع دوباره متن اصلی را بازگردانید."
+      : "متن اصلی بدون تغییر است.";
+  }
+
+  function scheduleRender() {
+    window.cancelAnimationFrame(renderFrame);
+    renderFrame = window.requestAnimationFrame(updatePreview);
+  }
+
+  function selectMobileView(view) {
+    const sourceSelected = view === "source";
+    workbench.dataset.view = sourceSelected ? "source" : "preview";
+    sourceTab.setAttribute("aria-selected", String(sourceSelected));
+    previewTab.setAttribute("aria-selected", String(!sourceSelected));
+
+    if (window.matchMedia("(max-width: 860px)").matches) {
+      const activePane = sourceSelected
+        ? document.querySelector("#source-pane")
+        : document.querySelector("#preview-pane");
+      activePane?.focus({ preventScroll: true });
+    }
+  }
+
+  async function fetchChangelogSource() {
+    const candidates = ["./CHANGELOG.md", "../CHANGELOG.md"];
+    let lastError = new Error("فایل CHANGELOG.md پیدا نشد.");
+
+    for (const url of candidates) {
+      try {
+        const response = await fetch(url, { cache: "force-cache" });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return await response.text();
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError;
+  }
+
+  function enhanceChangelog() {
+    if (!changelogContent) {
+      return;
+    }
+
+    const nodes = Array.from(changelogContent.children);
+    const fragment = document.createDocumentFragment();
+    const releases = [];
+    let currentRelease = null;
+
+    nodes.forEach((node) => {
+      if (node.tagName === "H1") {
+        node.remove();
+        return;
+      }
+
+      if (node.tagName === "H2") {
+        node.innerHTML = node.innerHTML.replace(
+          /^(\d+\.\d+\.\d+)/,
+          '<bdi dir="ltr">$1</bdi>',
+        );
+        currentRelease = document.createElement("section");
+        currentRelease.className = "changelog-release";
+        currentRelease.append(node);
+        fragment.append(currentRelease);
+        releases.push(currentRelease);
+        return;
+      }
+
+      if (currentRelease) {
+        currentRelease.append(node);
+        return;
+      }
+
+      if (node.tagName === "P") {
+        node.classList.add("changelog-intro");
+      }
+      fragment.append(node);
+    });
+
+    changelogContent.replaceChildren(fragment);
+
+    if (releases.length > 3) {
+      const archive = document.createElement("details");
+      archive.className = "changelog-archive";
+
+      const summary = document.createElement("summary");
+      summary.textContent = "نمایش همهٔ نسخه‌ها";
+
+      const archiveBody = document.createElement("div");
+      archiveBody.className = "changelog-archive-body";
+      releases.slice(3).forEach((release) => archiveBody.append(release));
+
+      archive.append(summary, archiveBody);
+      changelogContent.append(archive);
+    }
+  }
+
+  async function loadChangelog() {
+    if (!changelogContent) {
+      return;
+    }
+
+    const loadId = ++changelogLoadId;
+    changelogContent.setAttribute("aria-busy", "true");
+    changelogContent.innerHTML =
+      '<p class="changelog-loading" role="status">در حال خواندن دفتر تغییرات…</p>';
+
+    try {
+      const markdown = (await fetchChangelogSource()).trim();
+      if (!markdown) {
+        throw new Error("فایل دفتر تغییرات خالی است.");
+      }
+
+      if (loadId !== changelogLoadId) {
+        return;
+      }
+
+      changelogContent.innerHTML = renderMarkdown(markdown);
+      enhanceChangelog();
+      changelogContent.scrollTop = 0;
+    } catch {
+      if (loadId !== changelogLoadId) {
+        return;
+      }
+
+      changelogContent.innerHTML = `
+        <div class="changelog-error" role="alert">
+          <strong>دفتر تغییرات بارگذاری نشد.</strong>
+          <span>اتصال را بررسی کنید و دوباره تلاش کنید.</span>
+          <button class="button button-secondary changelog-retry" type="button">
+            تلاش دوباره
+          </button>
+        </div>
+      `;
+      changelogContent
+        .querySelector(".changelog-retry")
+        ?.addEventListener("click", loadChangelog);
+    } finally {
+      if (loadId === changelogLoadId) {
+        changelogContent.removeAttribute("aria-busy");
+      }
+    }
+  }
+
+  async function copyHash(button) {
+    const hash = button.dataset.copyHash;
+    if (!hash) {
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(hash);
+      } else {
+        const temporaryInput = document.createElement("textarea");
+        temporaryInput.value = hash;
+        temporaryInput.setAttribute("readonly", "");
+        temporaryInput.style.position = "fixed";
+        temporaryInput.style.opacity = "0";
+        document.body.append(temporaryInput);
+        temporaryInput.select();
+        const copied = document.execCommand("copy");
+        temporaryInput.remove();
+        if (!copied) {
+          throw new Error("copy failed");
+        }
+      }
+
+      const originalLabel = button.textContent;
+      button.textContent = "کپی شد";
+      if (hashCopyStatus) {
+        hashCopyStatus.textContent = "کد بررسی فایل کپی شد.";
+      }
+      window.setTimeout(() => {
+        button.textContent = originalLabel;
+      }, 1800);
+    } catch {
+      if (hashCopyStatus) {
+        hashCopyStatus.textContent =
+          "کپی خودکار انجام نشد؛ کد را انتخاب و دستی کپی کنید.";
+      }
+    }
+  }
+
+  function closeChangelog() {
+    if (changelogDialog?.open) {
+      changelogDialog.close();
+    }
+  }
+
+  if (
+    changelogTrigger &&
+    changelogDialog &&
+    changelogClose &&
+    changelogDismiss &&
+    changelogContent
+  ) {
+    changelogTrigger.addEventListener("click", () => {
+      changelogReturnFocus = document.activeElement;
+      changelogDialog.showModal();
+      changelogClose.focus({ preventScroll: true });
+      loadChangelog();
+    });
+
+    changelogClose.addEventListener("click", closeChangelog);
+    changelogDismiss.addEventListener("click", closeChangelog);
+
+    changelogDialog.addEventListener("click", (event) => {
+      if (event.target === changelogDialog) {
+        closeChangelog();
+      }
+    });
+
+    changelogDialog.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeChangelog();
+      }
+    });
+
+    changelogDialog.addEventListener("close", () => {
+      if (changelogReturnFocus instanceof HTMLElement) {
+        changelogReturnFocus.focus({ preventScroll: true });
+      }
+    });
+  }
+
+  source.addEventListener("input", scheduleRender);
+
+  hashCopyButtons.forEach((button) => {
+    button.addEventListener("click", () => copyHash(button));
+  });
+
+  resetButton.addEventListener("click", () => {
+    source.value = initialMarkdown;
+    updatePreview();
+    status.textContent = "متن نمونه به نسخهٔ اصلی بازگردانده شد.";
+    source.focus();
+  });
+
+  sourceTab.addEventListener("click", () => selectMobileView("source"));
+  previewTab.addEventListener("click", () => selectMobileView("preview"));
+
+  function embeddedInitialMarkdown() {
+    const embedded = document.querySelector("#initial-markdown");
+    if (!embedded || embedded.textContent.trim() === "null") {
+      return null;
+    }
+
+    try {
+      const value = JSON.parse(embedded.textContent);
+      return typeof value === "string" ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const embeddedMarkdown = embeddedInitialMarkdown();
+  const initialMarkdownRequest = embeddedMarkdown
+    ? Promise.resolve(embeddedMarkdown)
+    : fetch("./landing.md", { cache: "force-cache" }).then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return response.text();
+      });
+
+  initialMarkdownRequest
+    .then((response) => {
+      const markdown = response;
+      initialMarkdown = markdown.trim();
+      source.value = initialMarkdown;
+      updatePreview();
+    })
+    .catch(() => {
+      source.value = "";
+      source.disabled = true;
+      resetButton.disabled = true;
+      stats.textContent = "فایل معرفی بارگذاری نشد";
+      status.textContent =
+        "برای اجرای نمونه، پوشهٔ لندینگ باید از طریق هاست یا سرور محلی باز شود.";
+      preview.innerHTML =
+        '<p class="markdown-error">فایل <code>landing.md</code> در دسترس نیست. مطمئن شوید همهٔ فایل‌های پوشهٔ لندینگ کنار هم آپلود شده‌اند.</p>';
+    });
+})();
+
+      });
+    </script>
   </body>
 </html>

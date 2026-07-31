@@ -11,11 +11,14 @@ FORM: مسیر هفتم، میز دوبرگی با ساختار bench؛ seed a26
 import {
   Bold,
   BookOpen,
+  Braces,
   Check,
   ChevronDown,
   ChevronLeft,
   Clock3,
   Code2,
+  Download,
+  Ellipsis,
   Eye,
   FileArchive,
   FilePlus2,
@@ -23,6 +26,7 @@ import {
   Folder,
   FolderPlus,
   FolderOpen,
+  Heading1,
   Highlighter,
   Heart,
   History,
@@ -30,6 +34,10 @@ import {
   Italic,
   Keyboard,
   Library,
+  List as ListIcon,
+  ListChecks,
+  ListOrdered,
+  ListTodo,
   Link2,
   ListTree,
   Lock,
@@ -48,13 +56,17 @@ import {
   Plus,
   Quote,
   RefreshCw,
+  Redo2,
   Save,
   Search,
   Send,
   ShieldCheck,
   Sun,
+  Table2,
   Trash2,
   Upload,
+  Undo2,
+  Wand2,
   X,
 } from "lucide-react";
 import {
@@ -97,6 +109,10 @@ import {
   commandTitle,
 } from "./components/command-tooltip";
 import { ShortcutHelpDialog } from "./components/shortcut-help-dialog";
+import {
+  MarkdownCodeEditor,
+  MarkdownCodeEditorHandle,
+} from "./components/markdown-code-editor";
 import { useCommandSystem } from "./hooks/use-command-system";
 import {
   ALL_COMMAND_IDS,
@@ -127,6 +143,10 @@ import {
 } from "./raavi";
 
 const STORAGE_KEY = "raavi:document:v1";
+const LOCAL_DOCUMENT_DB_NAME = "raavi-local-documents";
+const LOCAL_DOCUMENT_DB_VERSION = 1;
+const LOCAL_DOCUMENT_STORE = "documents";
+const LOCAL_DOCUMENT_ID = "active";
 const THEME_STORAGE_KEY = "raavi:theme:v1";
 const PINNED_LIBRARY_STORAGE_KEY = "raavi:library-pins:v1";
 const PANE_LAYOUT_STORAGE_KEY = "raavi:pane-layout:v1";
@@ -135,6 +155,23 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024;
 const MAX_LOCAL_VERSIONS = 10;
 const PANE_COLLAPSE_THRESHOLD = 10;
 const PANE_SPINE_WIDTH = 34;
+const EDITOR_SELECTION_MENU_DELAY_MS = 480;
+const DESKTOP_DOWNLOAD_PAGE = "https://ravi.poorsmile.ir/#download";
+
+type DesktopInstallRecommendation = {
+  platformLabel: string;
+  description: string;
+  actionLabel: string;
+  href: string;
+};
+
+const DEFAULT_DESKTOP_INSTALL_RECOMMENDATION: DesktopInstallRecommendation = {
+  platformLabel: "دسکتاپ",
+  description:
+    "برای اتصال پوشه‌ها و دسترسی سریع‌تر به نوشته‌ها، نسخه دسکتاپ را روی رایانه نصب کنید.",
+  actionLabel: "مشاهده نسخه‌ها",
+  href: DESKTOP_DOWNLOAD_PAGE,
+};
 
 function detectCommandEnvironment(): CommandEnvironment {
   if (typeof navigator === "undefined") {
@@ -161,6 +198,64 @@ function detectCommandEnvironment(): CommandEnvironment {
         ? "electron"
         : "web",
   };
+}
+
+function detectDesktopInstallRecommendation(): DesktopInstallRecommendation {
+  if (typeof navigator === "undefined") {
+    return DEFAULT_DESKTOP_INSTALL_RECOMMENDATION;
+  }
+
+  const navigatorWithPlatform = navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  };
+  const platformValue = (
+    navigatorWithPlatform.userAgentData?.platform ??
+    navigator.platform ??
+    navigator.userAgent ??
+    ""
+  ).toLocaleLowerCase("en-US");
+  const userAgent = navigator.userAgent.toLocaleLowerCase("en-US");
+  const isMobile = /android|iphone|ipad|ipod|mobile/u.test(userAgent);
+
+  if (isMobile) {
+    return {
+      ...DEFAULT_DESKTOP_INSTALL_RECOMMENDATION,
+      description:
+        "برای کتابخانه کامل و اتصال پوشه‌ها، راوی را متناسب با سیستم‌عامل رایانه‌تان نصب کنید.",
+    };
+  }
+
+  if (platformValue.includes("win")) {
+    return {
+      platformLabel: "Windows",
+      description:
+        "برای اتصال پوشه‌ها و دسترسی سریع‌تر به نوشته‌ها، نسخه Windows را روی همین دستگاه نصب کنید.",
+      actionLabel: "دانلود برای Windows",
+      href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.1.0-x64.exe",
+    };
+  }
+
+  if (platformValue.includes("mac")) {
+    return {
+      platformLabel: "macOS",
+      description:
+        "نسخه macOS هنوز منتشر نشده است؛ وضعیت انتشار آن را در وب‌سایت راوی ببینید.",
+      actionLabel: "مشاهده وضعیت macOS",
+      href: DESKTOP_DOWNLOAD_PAGE,
+    };
+  }
+
+  if (platformValue.includes("linux")) {
+    return {
+      platformLabel: "Linux",
+      description:
+        "برای اتصال پوشه‌ها و دسترسی سریع‌تر به نوشته‌ها، نسخه Linux را روی همین دستگاه نصب کنید.",
+      actionLabel: "دانلود برای Linux",
+      href: "https://ravi.poorsmile.ir/downloads/Raavi-1.0.0-linux-x64-portable.tar.gz",
+    };
+  }
+
+  return DEFAULT_DESKTOP_INSTALL_RECOMMENDATION;
 }
 
 const SAMPLE_MARKDOWN = [
@@ -208,7 +303,7 @@ type SaveState = "saved" | "dirty" | "saving" | "error";
 type MobilePane = "editor" | "preview";
 type ScrollPane = "editor" | "preview";
 type DesktopPaneMode = "split" | ScrollPane;
-type LibraryTab = "history" | "library";
+type LibraryTab = "history" | "library" | "versions";
 type LibraryState = "idle" | "scanning" | "ready";
 type DocumentFileType = "markdown" | "ravi";
 type SaveFileType = DocumentFileType;
@@ -221,6 +316,20 @@ type ReadingHeading = {
 type TextDirection = "ltr" | "rtl";
 type ThemeMode = "light" | "dark";
 type ThemeTransition = "to-dark" | "to-light" | null;
+type EditorAssistantTab = "outline" | "review";
+type PersianReviewIssueId =
+  | "arabic-characters"
+  | "half-space"
+  | "punctuation-spacing"
+  | "heading-spacing"
+  | "trailing-space"
+  | "blank-lines";
+type PersianReviewIssue = {
+  id: PersianReviewIssueId;
+  title: string;
+  detail: string;
+  count: number;
+};
 
 type LocalFileHandle = {
   kind: "file";
@@ -290,7 +399,20 @@ type DocumentSavePayload = {
   raavi: ReturnType<typeof makeRaaviDocument>;
 };
 
-type RaaviDesktopAPI = {
+type LocalDocumentSnapshot = {
+  content: string;
+  fileName: string;
+  readerSize: number;
+  annotations: RaaviAnnotation[];
+  assets: RaaviImageAsset[];
+  revision: number;
+  versions: RaaviVersion[];
+  activeDocumentPath: string;
+  documentType: DocumentFileType;
+  lastSavedSnapshot: string;
+};
+
+export type RaaviDesktopAPI = {
   isDesktop: true;
   getLibraryState: () => Promise<DesktopLibraryState>;
   chooseMarkdownFolder: () => Promise<DesktopLibraryScan | null>;
@@ -430,6 +552,212 @@ function detectBlockTextDirection(
   if (directionalLetterCount === 0) return "rtl";
 
   return latin / directionalLetterCount > 0.7 ? "ltr" : "rtl";
+}
+
+function normalizePersianMarkdownLine(line: string) {
+  const leadingWhitespace = line.match(/^\s*/u)?.[0] ?? "";
+  const body = line.slice(leadingWhitespace.length).replace(/[ \t]+$/u, "");
+
+  return (
+    leadingWhitespace +
+    body
+      .replace(/\u064A/g, "ی")
+      .replace(/\u0643/g, "ک")
+      .replace(/\b(ن?می) /gu, "$1‌")
+      .replace(/\s+([،؛؟!])/gu, "$1")
+      .replace(/([،؛؟!])(?=\S)/gu, "$1 ")
+      .replace(/^(#{1,6})([^\s#])/u, "$1 $2")
+      .replace(/^([-*+])\s*\[(x|X| )\]\s*/u, "$1 [$2] ")
+  );
+}
+
+function normalizePersianMarkdown(markdown: string) {
+  const lines = markdown.split(/\r?\n/u);
+  let fenceMarker = "";
+
+  return lines
+    .map((line) => {
+      const fence = line.match(/^ {0,3}(`{3,}|~{3,})/u);
+      if (fence) {
+        const marker = fence[1][0];
+        fenceMarker = fenceMarker === marker ? "" : fenceMarker || marker;
+        return line.replace(/[ \t]+$/u, "");
+      }
+
+      if (fenceMarker) return line;
+      return normalizePersianMarkdownLine(line);
+    })
+    .join("\n")
+    .replace(/\n{3,}/gu, "\n\n");
+}
+
+function editorHeadings(markdown: string) {
+  const headings: Array<{ level: number; offset: number; text: string }> = [];
+  const lines = markdown.split(/\r?\n/u);
+  let offset = 0;
+  let fenceMarker = "";
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/u);
+    if (fence) {
+      const marker = fence[1][0];
+      fenceMarker = fenceMarker === marker ? "" : fenceMarker || marker;
+    } else if (!fenceMarker) {
+      const atx = line.match(/^ {0,3}(#{1,6})[ \t]+(.+?)[ \t]*$/u);
+      if (atx) {
+        const text = plainHeadingText(
+          atx[2].replace(/[ \t]+#+[ \t]*$/u, ""),
+        );
+        if (text) headings.push({ level: atx[1].length, offset, text });
+      } else {
+        const setext = lines[lineIndex + 1]?.match(
+          /^ {0,3}(=+|-+)[ \t]*$/u,
+        );
+        if (line.trim() && setext) {
+          const text = plainHeadingText(line.trim());
+          if (text) {
+            headings.push({
+              level: setext[1][0] === "=" ? 1 : 2,
+              offset,
+              text,
+            });
+          }
+        }
+      }
+    }
+    offset += line.length + 1;
+  }
+
+  return headings;
+}
+
+function analyzePersianMarkdown(markdown: string): PersianReviewIssue[] {
+  const counts: Record<PersianReviewIssueId, number> = {
+    "arabic-characters": 0,
+    "half-space": 0,
+    "punctuation-spacing": 0,
+    "heading-spacing": 0,
+    "trailing-space": 0,
+    "blank-lines": 0,
+  };
+  const lines = markdown.split(/\r?\n/u);
+  let fenceMarker = "";
+  let blankRun = 0;
+
+  for (const line of lines) {
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/u);
+    if (fence) {
+      const marker = fence[1][0];
+      fenceMarker = fenceMarker === marker ? "" : fenceMarker || marker;
+      blankRun = 0;
+      continue;
+    }
+    if (fenceMarker) continue;
+
+    counts["arabic-characters"] += line.match(/[\u064A\u0643]/gu)?.length ?? 0;
+    counts["half-space"] += line.match(/\b(?:ن?می) /gu)?.length ?? 0;
+    counts["punctuation-spacing"] +=
+      (line.match(/\s+[،؛؟!]/gu)?.length ?? 0) +
+      (line.match(/[،؛؟!](?=\S)/gu)?.length ?? 0);
+    counts["heading-spacing"] += /^ {0,3}#{1,6}[^\s#]/u.test(line) ? 1 : 0;
+    counts["trailing-space"] += /[ \t]+$/u.test(line) ? 1 : 0;
+
+    if (!line.trim()) {
+      blankRun += 1;
+      if (blankRun > 1) counts["blank-lines"] += 1;
+    } else {
+      blankRun = 0;
+    }
+  }
+
+  const definitions: Array<Omit<PersianReviewIssue, "count">> = [
+    {
+      id: "arabic-characters",
+      title: "نویسه‌های عربی",
+      detail: "ی و ک عربی را به شکل فارسی تبدیل می‌کند.",
+    },
+    {
+      id: "half-space",
+      title: "نیم‌فاصله",
+      detail: "می و نمی را به واژهٔ بعدی متصل می‌کند.",
+    },
+    {
+      id: "punctuation-spacing",
+      title: "فاصلهٔ نشانه‌ها",
+      detail: "فاصلهٔ ویرگول، سؤال و تعجب را اصلاح می‌کند.",
+    },
+    {
+      id: "heading-spacing",
+      title: "تیتر Markdown",
+      detail: "بعد از نشانهٔ تیتر فاصله می‌گذارد.",
+    },
+    {
+      id: "trailing-space",
+      title: "فاصلهٔ انتهای خط",
+      detail: "فاصله‌های پنهان انتهای خط را حذف می‌کند.",
+    },
+    {
+      id: "blank-lines",
+      title: "خط‌های خالی اضافه",
+      detail: "فاصلهٔ عمودی سند را یکدست می‌کند.",
+    },
+  ];
+
+  return definitions
+    .map((issue) => ({ ...issue, count: counts[issue.id] }))
+    .filter((issue) => issue.count > 0);
+}
+
+function applyPersianReviewIssue(
+  markdown: string,
+  issueId: PersianReviewIssueId,
+) {
+  const lines = markdown.split(/\r?\n/u);
+  const nextLines: string[] = [];
+  let fenceMarker = "";
+  let blankRun = 0;
+
+  for (const line of lines) {
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/u);
+    if (fence) {
+      const marker = fence[1][0];
+      fenceMarker = fenceMarker === marker ? "" : fenceMarker || marker;
+      blankRun = 0;
+      nextLines.push(line);
+      continue;
+    }
+    if (fenceMarker) {
+      nextLines.push(line);
+      continue;
+    }
+
+    if (issueId === "blank-lines") {
+      blankRun = line.trim() ? 0 : blankRun + 1;
+      if (blankRun > 1) continue;
+      nextLines.push(line);
+      continue;
+    }
+
+    blankRun = 0;
+    let nextLine = line;
+    if (issueId === "arabic-characters") {
+      nextLine = nextLine.replace(/\u064A/g, "ی").replace(/\u0643/g, "ک");
+    } else if (issueId === "half-space") {
+      nextLine = nextLine.replace(/\b(ن?می) /gu, "$1‌");
+    } else if (issueId === "punctuation-spacing") {
+      nextLine = nextLine
+        .replace(/\s+([،؛؟!])/gu, "$1")
+        .replace(/([،؛؟!])(?=\S)/gu, "$1 ");
+    } else if (issueId === "heading-spacing") {
+      nextLine = nextLine.replace(/^( {0,3}#{1,6})([^\s#])/u, "$1 $2");
+    } else if (issueId === "trailing-space") {
+      nextLine = nextLine.replace(/[ \t]+$/u, "");
+    }
+    nextLines.push(nextLine);
+  }
+
+  return nextLines.join("\n");
 }
 
 function extractReadingHeadings(markdown: string): ReadingHeading[] {
@@ -917,6 +1245,76 @@ function raaviMarkdownUrlTransform(url: string) {
   return defaultUrlTransform(url);
 }
 
+function openLocalDocumentDb() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("INDEXEDDB_UNAVAILABLE"));
+      return;
+    }
+
+    const request = indexedDB.open(
+      LOCAL_DOCUMENT_DB_NAME,
+      LOCAL_DOCUMENT_DB_VERSION,
+    );
+    request.addEventListener("upgradeneeded", () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(LOCAL_DOCUMENT_STORE)) {
+        db.createObjectStore(LOCAL_DOCUMENT_STORE, { keyPath: "id" });
+      }
+    });
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () =>
+      reject(request.error ?? new Error("INDEXEDDB_OPEN_FAILED")),
+    );
+  });
+}
+
+function readLocalDocumentSnapshot() {
+  return new Promise<LocalDocumentSnapshot | null>((resolve, reject) => {
+    openLocalDocumentDb()
+      .then((db) => {
+        const transaction = db.transaction(LOCAL_DOCUMENT_STORE, "readonly");
+        const store = transaction.objectStore(LOCAL_DOCUMENT_STORE);
+        const request = store.get(LOCAL_DOCUMENT_ID);
+        request.addEventListener("success", () => {
+          const record = request.result as
+            | { snapshot?: LocalDocumentSnapshot }
+            | undefined;
+          resolve(record?.snapshot ?? null);
+          db.close();
+        });
+        request.addEventListener("error", () => {
+          reject(request.error ?? new Error("INDEXEDDB_READ_FAILED"));
+          db.close();
+        });
+      })
+      .catch(reject);
+  });
+}
+
+function writeLocalDocumentSnapshot(snapshot: LocalDocumentSnapshot) {
+  return new Promise<void>((resolve, reject) => {
+    openLocalDocumentDb()
+      .then((db) => {
+        const transaction = db.transaction(LOCAL_DOCUMENT_STORE, "readwrite");
+        transaction.objectStore(LOCAL_DOCUMENT_STORE).put({
+          id: LOCAL_DOCUMENT_ID,
+          snapshot,
+          updatedAt: new Date().toISOString(),
+        });
+        transaction.addEventListener("complete", () => {
+          db.close();
+          resolve();
+        });
+        transaction.addEventListener("error", () => {
+          db.close();
+          reject(transaction.error ?? new Error("INDEXEDDB_WRITE_FAILED"));
+        });
+      })
+      .catch(reject);
+  });
+}
+
 export default function Home() {
   const [content, setContent] = useState(SAMPLE_MARKDOWN);
   const [fileName, setFileName] = useState(DEFAULT_FILE_NAME);
@@ -954,6 +1352,10 @@ export default function Home() {
     useState<ThemeTransition>(null);
   const [commandEnvironment, setCommandEnvironment] =
     useState<CommandEnvironment>(() => detectCommandEnvironment());
+  const [desktopInstallRecommendation, setDesktopInstallRecommendation] =
+    useState<DesktopInstallRecommendation>(
+      DEFAULT_DESKTOP_INSTALL_RECOMMENDATION,
+    );
   const [readingMode, setReadingMode] = useState(false);
   const [readingHeaderVisible, setReadingHeaderVisible] = useState(true);
   const [readingOutlineOpen, setReadingOutlineOpen] = useState(true);
@@ -961,6 +1363,8 @@ export default function Home() {
     useState(-1);
   const [readerSize, setReaderSize] = useState(18);
   const [mobilePane, setMobilePane] = useState<MobilePane>("preview");
+  const [editorAssistantTab, setEditorAssistantTab] =
+    useState<EditorAssistantTab | null>(null);
   const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
   const [desktopPaneMode, setDesktopPaneMode] =
     useState<DesktopPaneMode>("split");
@@ -973,7 +1377,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [hydrated, setHydrated] = useState(false);
-  const [libraryOpen, setLibraryOpen] = useState(true);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryTab, setLibraryTab] = useState<LibraryTab>("library");
   const [libraryIsModal, setLibraryIsModal] = useState(false);
   const [libraryState, setLibraryState] =
@@ -1002,9 +1406,10 @@ export default function Home() {
   const [hoverPreview, setHoverPreview] =
     useState<AnnotationHoverPreview | null>(null);
 
-  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<MarkdownCodeEditorHandle>(null);
   const editorPaneRef = useRef<HTMLElement>(null);
   const editorSelectionMenuRef = useRef<HTMLDivElement>(null);
+  const editorSelectionMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const workspaceRef = useRef<HTMLElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
   const previewArticleRef = useRef<HTMLElement>(null);
@@ -1023,6 +1428,7 @@ export default function Home() {
   const libraryTriggerRef = useRef<HTMLButtonElement>(null);
   const historyTabRef = useRef<HTMLButtonElement>(null);
   const libraryTabRef = useRef<HTMLButtonElement>(null);
+  const versionsTabRef = useRef<HTMLButtonElement>(null);
   const annotationToggleRef = useRef<HTMLButtonElement>(null);
   const selectionMenuRef = useRef<HTMLDivElement>(null);
   const commentButtonRef = useRef<HTMLButtonElement>(null);
@@ -1059,6 +1465,11 @@ export default function Home() {
   const { topLayer, syncLayer } = useModalStack();
   const readingHeadings = useMemo(
     () => extractReadingHeadings(content),
+    [content],
+  );
+  const documentEditorHeadings = useMemo(() => editorHeadings(content), [content]);
+  const persianReviewIssues = useMemo(
+    () => analyzePersianMarkdown(content),
     [content],
   );
   const mermaidBlocks = useMemo(() => findMermaidBlocks(content), [content]);
@@ -1666,6 +2077,32 @@ export default function Home() {
     () => documentSnapshot(content, annotations, imageAssets),
     [annotations, content, imageAssets],
   );
+  const localDocumentSnapshot = useMemo<LocalDocumentSnapshot>(
+    () => ({
+      content,
+      fileName,
+      readerSize,
+      annotations,
+      assets: imageAssets,
+      revision,
+      versions: versions.slice(-MAX_LOCAL_VERSIONS),
+      activeDocumentPath,
+      documentType,
+      lastSavedSnapshot,
+    }),
+    [
+      activeDocumentPath,
+      annotations,
+      content,
+      documentType,
+      fileName,
+      imageAssets,
+      lastSavedSnapshot,
+      readerSize,
+      revision,
+      versions,
+    ],
+  );
 
   const effectiveSaveState: SaveState =
     saveState === "saving" || saveState === "error"
@@ -1842,58 +2279,58 @@ export default function Home() {
     return unsubscribe;
   }, [applyOpenedDocument]);
 
+  const applyLocalDocumentSnapshot = useCallback(
+    (snapshot: Partial<LocalDocumentSnapshot>) => {
+      if (typeof snapshot.content === "string") setContent(snapshot.content);
+      if (typeof snapshot.fileName === "string") setFileName(snapshot.fileName);
+      if (Array.isArray(snapshot.annotations)) {
+        setAnnotations(snapshot.annotations);
+      }
+      if (Array.isArray(snapshot.assets)) {
+        setImageAssets(snapshot.assets.slice(0, MAX_RAVI_IMAGE_ASSETS));
+      }
+      if (typeof snapshot.readerSize === "number") {
+        setReaderSize(Math.min(22, Math.max(16, snapshot.readerSize)));
+      }
+      if (
+        Number.isSafeInteger(snapshot.revision) &&
+        Number(snapshot.revision) > 0
+      ) {
+        setRevision(Number(snapshot.revision));
+      }
+      if (Array.isArray(snapshot.versions)) {
+        setVersions(snapshot.versions.slice(-MAX_LOCAL_VERSIONS));
+      }
+      if (typeof snapshot.activeDocumentPath === "string") {
+        setActiveDocumentPath(snapshot.activeDocumentPath);
+      }
+      if (
+        snapshot.documentType === "markdown" ||
+        snapshot.documentType === "ravi"
+      ) {
+        setDocumentType(snapshot.documentType);
+      }
+      setLastSavedSnapshot(
+        typeof snapshot.lastSavedSnapshot === "string"
+          ? snapshot.lastSavedSnapshot
+          : "",
+      );
+    },
+    [],
+  );
+
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
+      void (async () => {
       try {
         if (openedDocumentRef.current) return;
-        const saved = window.localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as {
-            content?: string;
-            fileName?: string;
-            readerSize?: number;
-            annotations?: RaaviAnnotation[];
-            assets?: RaaviImageAsset[];
-            revision?: number;
-            versions?: RaaviVersion[];
-            activeDocumentPath?: string;
-            documentType?: DocumentFileType;
-            lastSavedSnapshot?: string;
-          };
-          if (typeof parsed.content === "string") setContent(parsed.content);
-          if (typeof parsed.fileName === "string") setFileName(parsed.fileName);
-          if (Array.isArray(parsed.annotations)) {
-            setAnnotations(parsed.annotations);
-          }
-          if (Array.isArray(parsed.assets)) {
-            setImageAssets(parsed.assets.slice(0, MAX_RAVI_IMAGE_ASSETS));
-          }
-          if (typeof parsed.readerSize === "number") {
-            setReaderSize(Math.min(22, Math.max(16, parsed.readerSize)));
-          }
-          if (
-            Number.isSafeInteger(parsed.revision) &&
-            Number(parsed.revision) > 0
-          ) {
-            setRevision(Number(parsed.revision));
-          }
-          if (Array.isArray(parsed.versions)) {
-            setVersions(parsed.versions.slice(-MAX_LOCAL_VERSIONS));
-          }
-          if (typeof parsed.activeDocumentPath === "string") {
-            setActiveDocumentPath(parsed.activeDocumentPath);
-          }
-          if (
-            parsed.documentType === "markdown" ||
-            parsed.documentType === "ravi"
-          ) {
-            setDocumentType(parsed.documentType);
-          }
-          setLastSavedSnapshot(
-            typeof parsed.lastSavedSnapshot === "string"
-              ? parsed.lastSavedSnapshot
-              : "",
-          );
+        let parsed = await readLocalDocumentSnapshot().catch(() => null);
+        if (!parsed) {
+          const saved = window.localStorage.getItem(STORAGE_KEY);
+          parsed = saved ? (JSON.parse(saved) as LocalDocumentSnapshot) : null;
+        }
+        if (parsed) {
+          applyLocalDocumentSnapshot(parsed);
         }
       } catch {
         setError(
@@ -1902,29 +2339,20 @@ export default function Home() {
       } finally {
         setHydrated(true);
       }
+      })();
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [applyLocalDocumentSnapshot]);
 
   useEffect(() => {
     if (!hydrated) return;
 
     const timer = setTimeout(() => {
+      void writeLocalDocumentSnapshot(localDocumentSnapshot).catch(() => {});
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({
-            content,
-            fileName,
-            readerSize,
-            annotations,
-            assets: imageAssets,
-            revision,
-            versions: versions.slice(-MAX_LOCAL_VERSIONS),
-            activeDocumentPath,
-            documentType,
-            lastSavedSnapshot,
-          }),
+          JSON.stringify(localDocumentSnapshot),
         );
       } catch {
         setError(
@@ -1934,39 +2362,17 @@ export default function Home() {
     }, 450);
 
     return () => clearTimeout(timer);
-  }, [
-    activeDocumentPath,
-    annotations,
-    content,
-    documentType,
-    fileName,
-    hydrated,
-    imageAssets,
-    lastSavedSnapshot,
-    readerSize,
-    revision,
-    versions,
-  ]);
+  }, [hydrated, localDocumentSnapshot]);
 
   useEffect(() => {
     if (!hydrated) return;
 
     const flushLatestDocument = () => {
+      void writeLocalDocumentSnapshot(localDocumentSnapshot).catch(() => {});
       try {
         window.localStorage.setItem(
           STORAGE_KEY,
-          JSON.stringify({
-            content,
-            fileName,
-            readerSize,
-            annotations,
-            assets: imageAssets,
-            revision,
-            versions: versions.slice(-MAX_LOCAL_VERSIONS),
-            activeDocumentPath,
-            documentType,
-            lastSavedSnapshot,
-          }),
+          JSON.stringify(localDocumentSnapshot),
         );
       } catch {
         // The visible save state already communicates storage failures.
@@ -1975,23 +2381,14 @@ export default function Home() {
 
     window.addEventListener("pagehide", flushLatestDocument);
     return () => window.removeEventListener("pagehide", flushLatestDocument);
-  }, [
-    activeDocumentPath,
-    annotations,
-    content,
-    documentType,
-    fileName,
-    hydrated,
-    imageAssets,
-    lastSavedSnapshot,
-    readerSize,
-    revision,
-    versions,
-  ]);
+  }, [hydrated, localDocumentSnapshot]);
 
   useEffect(() => {
     return () => {
       if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+      if (editorSelectionMenuTimerRef.current) {
+        clearTimeout(editorSelectionMenuTimerRef.current);
+      }
       if (annotationHoverFrameRef.current) {
         cancelAnimationFrame(annotationHoverFrameRef.current);
       }
@@ -2060,19 +2457,29 @@ export default function Home() {
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 820px)");
-    const syncLibraryMode = () => {
-      setLibraryIsModal(mediaQuery.matches);
-      setLibraryOpen(!mediaQuery.matches);
+    const syncLibraryMode = (initialize = false) => {
+      const isModal = mediaQuery.matches;
+      setLibraryIsModal(isModal);
+      if (isModal) {
+        setLibraryOpen(false);
+      } else if (initialize) {
+        setLibraryOpen(Boolean(window.raaviDesktop));
+      }
     };
-    syncLibraryMode();
-    mediaQuery.addEventListener("change", syncLibraryMode);
-    return () => mediaQuery.removeEventListener("change", syncLibraryMode);
+    const handleLibraryModeChange = () => syncLibraryMode();
+    syncLibraryMode(true);
+    mediaQuery.addEventListener("change", handleLibraryModeChange);
+    return () =>
+      mediaQuery.removeEventListener("change", handleLibraryModeChange);
   }, []);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() =>
-      setCommandEnvironment(detectCommandEnvironment()),
-    );
+    const frame = requestAnimationFrame(() => {
+      setCommandEnvironment(detectCommandEnvironment());
+      setDesktopInstallRecommendation(
+        detectDesktopInstallRecommendation(),
+      );
+    });
     return () => cancelAnimationFrame(frame);
   }, []);
 
@@ -3223,20 +3630,36 @@ export default function Home() {
   const captureEditorSelection = (
     pointer?: { clientX: number; clientY: number },
   ) => {
-    requestAnimationFrame(() => {
+    if (editorSelectionMenuTimerRef.current) {
+      clearTimeout(editorSelectionMenuTimerRef.current);
+    }
+    setEditorSelectionMenuPosition(null);
+
+    const editor = editorRef.current;
+    const selectionStart = editor?.selectionStart ?? 0;
+    const selectionEnd = editor?.selectionEnd ?? 0;
+    if (!editor || selectionStart === selectionEnd) return;
+
+    editorSelectionMenuTimerRef.current = setTimeout(() => {
+      editorSelectionMenuTimerRef.current = null;
+      requestAnimationFrame(() => {
       const editor = editorRef.current;
       const editorPane = editorPaneRef.current;
       if (!editor || !editorPane) return;
-      if (editor.selectionStart === editor.selectionEnd) {
-        setEditorSelectionMenuPosition(null);
-        return;
-      }
+      if (
+        editor.selectionStart !== selectionStart ||
+        editor.selectionEnd !== selectionEnd
+      ) return;
 
       const editorRect = editor.getBoundingClientRect();
       const paneRect = editorPane.getBoundingClientRect();
+      const selectionAnchor = editor.getSelectionAnchor();
       const anchorClientX =
-        pointer?.clientX ?? editorRect.left + editorRect.width / 2;
-      const anchorClientY = pointer?.clientY ?? editorRect.top + 54;
+        pointer?.clientX ??
+        selectionAnchor?.clientX ??
+        editorRect.left + editorRect.width / 2;
+      const anchorClientY =
+        pointer?.clientY ?? selectionAnchor?.clientY ?? editorRect.top + 54;
       const placement =
         anchorClientY - editorRect.top >= 58 ? "above" : "below";
       const menuHalfWidth = Math.min(
@@ -3255,7 +3678,8 @@ export default function Home() {
           (placement === "above" ? -10 : 10),
         placement,
       });
-    });
+      });
+    }, EDITOR_SELECTION_MENU_DELAY_MS);
   };
 
   const insertInline = (
@@ -3309,6 +3733,159 @@ export default function Home() {
       editor.focus();
       editor.setSelectionRange(start, start + quoted.length);
     });
+  };
+
+  const insertHeading = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    setEditorSelectionMenuPosition(null);
+    const start = editor.selectionStart;
+    const editorContent = editor.value;
+    const lineStart = editorContent.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+    const nextBreak = editorContent.indexOf("\n", start);
+    const lineEnd = nextBreak === -1 ? editorContent.length : nextBreak;
+    const currentLine = editorContent.slice(lineStart, lineEnd);
+    const title = currentLine.replace(/^#{1,6}\s*/u, "").trim() || "عنوان بخش";
+    const nextLine = `## ${title}`;
+    const nextContent =
+      editorContent.slice(0, lineStart) +
+      nextLine +
+      editorContent.slice(lineEnd);
+
+    setContent(nextContent);
+    requestAnimationFrame(() => {
+      editor.focus();
+      editor.setSelectionRange(lineStart + 3, lineStart + nextLine.length);
+    });
+  };
+
+  const insertList = (
+    kind: "check-done" | "check-empty" | "bullet" | "ordered",
+  ) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    setEditorSelectionMenuPosition(null);
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const editorContent = editor.value;
+    const selected = editorContent.slice(start, end).trim();
+    const items = selected
+      ? selected.split(/\r?\n/u)
+      : ["مورد اول", "مورد دوم", "مورد سوم"];
+    const list = items
+      .map((line, index) => {
+        const item = line
+          .replace(/^\s*(?:[-*+]\s+(?:\[[ xX]\]\s*)?|\d+[.)]\s+)/u, "")
+          .trim();
+        const prefix =
+          kind === "check-done"
+            ? "- [x] "
+            : kind === "check-empty"
+              ? "- [ ] "
+              : kind === "ordered"
+                ? `${index + 1}. `
+                : "- ";
+        return `${prefix}${item}`;
+      })
+      .join("\n");
+    const prefix = start > 0 && !editorContent.slice(0, start).endsWith("\n\n") ? "\n\n" : "";
+    const suffix = end < editorContent.length && !editorContent.slice(end).startsWith("\n\n") ? "\n\n" : "";
+    const inserted = `${prefix}${list}${suffix}`;
+
+    setContent(editorContent.slice(0, start) + inserted + editorContent.slice(end));
+    requestAnimationFrame(() => {
+      editor.focus();
+      editor.setSelectionRange(start + prefix.length, start + prefix.length + list.length);
+    });
+  };
+
+  const insertCodeBlock = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    setEditorSelectionMenuPosition(null);
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const editorContent = editor.value;
+    const selected =
+      editorContent.slice(start, end) ||
+      'const direction = isCode ? "ltr" : "rtl";\nconsole.log("راوی آماده است");';
+    const block = `\`\`\`js\n${selected}\n\`\`\``;
+    const prefix = start > 0 && !editorContent.slice(0, start).endsWith("\n\n") ? "\n\n" : "";
+    const suffix = end < editorContent.length && !editorContent.slice(end).startsWith("\n\n") ? "\n\n" : "";
+    const inserted = `${prefix}${block}${suffix}`;
+
+    setContent(editorContent.slice(0, start) + inserted + editorContent.slice(end));
+    requestAnimationFrame(() => {
+      editor.focus();
+      editor.setSelectionRange(
+        start + prefix.length + 6,
+        start + prefix.length + 6 + selected.length,
+      );
+    });
+  };
+
+  const insertTable = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    setEditorSelectionMenuPosition(null);
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const editorContent = editor.value;
+    const table = [
+      "| قابلیت | وضعیت | یادداشت |",
+      "| :--- | :---: | :--- |",
+      "| پیش‌نمایش زنده | ✓ | آماده |",
+      "| پاکسازی فارسی | ✓ | نیم‌فاصله و نشانه‌گذاری |",
+    ].join("\n");
+    const prefix = start > 0 && !editorContent.slice(0, start).endsWith("\n\n") ? "\n\n" : "";
+    const suffix = end < editorContent.length && !editorContent.slice(end).startsWith("\n\n") ? "\n\n" : "";
+    const inserted = `${prefix}${table}${suffix}`;
+
+    setContent(editorContent.slice(0, start) + inserted + editorContent.slice(end));
+    requestAnimationFrame(() => {
+      editor.focus();
+      editor.setSelectionRange(start + prefix.length, start + prefix.length + table.length);
+    });
+  };
+
+  const cleanPersianMarkdown = () => {
+    const editor = editorRef.current;
+    const normalized = normalizePersianMarkdown(content);
+    setEditorSelectionMenuPosition(null);
+    setContent(normalized);
+    showNotice("متن فارسی پاکسازی شد");
+    requestAnimationFrame(() => {
+      if (!editor) return;
+      editor.focus();
+      const caret = Math.min(editor.selectionStart, normalized.length);
+      editor.setSelectionRange(caret, caret);
+    });
+  };
+
+  const toggleEditorAssistant = (tab: EditorAssistantTab) => {
+    setEditorSelectionMenuPosition(null);
+    setEditorAssistantTab((current) => (current === tab ? null : tab));
+  };
+
+  const jumpToEditorHeading = (offset: number) => {
+    setMobilePane("editor");
+    setDesktopPaneMode((current) =>
+      current === "preview" ? "split" : current,
+    );
+    requestAnimationFrame(() => {
+      editorRef.current?.focus();
+      editorRef.current?.setSelectionRange(offset, offset);
+    });
+  };
+
+  const fixPersianReviewIssue = (issue: PersianReviewIssue) => {
+    setContent((current) => applyPersianReviewIssue(current, issue.id));
+    showNotice(`«${issue.title}» اصلاح شد`);
+    requestAnimationFrame(() => editorRef.current?.focus());
   };
 
   const insertImageAsset = async (file: File) => {
@@ -3497,7 +4074,7 @@ export default function Home() {
       mermaidReturnFocusRef.current =
         mode === "edit"
           ? previewArticleRef.current
-          : editor ?? previewArticleRef.current;
+          : editor?.element ?? previewArticleRef.current;
       setEditorSelectionMenuPosition(null);
       setSelectionDraft(null);
       setComposerKind(null);
@@ -3633,10 +4210,16 @@ export default function Home() {
   const focusLibrarySearch = () => {
     if (readingMode) setReadingMode(false);
     setEditorSelectionMenuPosition(null);
-    setLibraryTab("library");
+    const isWebSurface = commandEnvironment.surface === "web";
+    setLibraryTab(isWebSurface ? "history" : "library");
     setLibraryOpen(true);
     requestAnimationFrame(() =>
-      requestAnimationFrame(() => librarySearchRef.current?.focus()),
+      requestAnimationFrame(() =>
+        (isWebSurface
+          ? libraryCloseRef.current
+          : librarySearchRef.current
+        )?.focus(),
+      ),
     );
   };
 
@@ -3644,23 +4227,34 @@ export default function Home() {
     event: ReactKeyboardEvent<HTMLButtonElement>,
     currentTab: LibraryTab,
   ) => {
+    const availableTabs: LibraryTab[] =
+      commandEnvironment.surface === "web"
+        ? ["history", "versions"]
+        : ["history", "library", "versions"];
+    const currentIndex = availableTabs.indexOf(currentTab);
     let nextTab: LibraryTab | null = null;
-    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      nextTab = currentTab === "history" ? "library" : "history";
+    if (event.key === "ArrowLeft") {
+      nextTab = availableTabs[(currentIndex + 1) % availableTabs.length];
+    } else if (event.key === "ArrowRight") {
+      nextTab =
+        availableTabs[
+          (currentIndex - 1 + availableTabs.length) % availableTabs.length
+        ];
     } else if (event.key === "Home") {
-      nextTab = "history";
+      nextTab = availableTabs[0];
     } else if (event.key === "End") {
-      nextTab = "library";
+      nextTab = availableTabs.at(-1) ?? null;
     }
     if (!nextTab) return;
 
     event.preventDefault();
     setLibraryTab(nextTab);
     requestAnimationFrame(() =>
-      (nextTab === "history"
-        ? historyTabRef.current
-        : libraryTabRef.current
-      )?.focus(),
+      ({
+        history: historyTabRef.current,
+        library: libraryTabRef.current,
+        versions: versionsTabRef.current,
+      })[nextTab]?.focus(),
     );
   };
 
@@ -3758,6 +4352,12 @@ export default function Home() {
       clearAnnotationHover();
       setShortcutHelpOpen((current) => !current);
     },
+    "edit.undo": () => editorRef.current?.undo(),
+    "edit.redo": () => editorRef.current?.redo(),
+    "edit.find": () => editorRef.current?.openSearch(),
+    "edit.findNext": () => editorRef.current?.findNext(),
+    "edit.findPrevious": () => editorRef.current?.findPrevious(),
+    "edit.selectAll": () => editorRef.current?.selectAll(),
     "edit.bold": () => insertInline("**", "**", "متن پررنگ"),
     "edit.italic": () => insertInline("_", "_", "متن مورب"),
     "edit.code": () => insertInline("`", "`", "code"),
@@ -3790,7 +4390,7 @@ export default function Home() {
 
   const isCommandEnabled = (id: CommandId, event: KeyboardEvent) => {
     const activeElement = document.activeElement;
-    const editorFocused = activeElement === editorRef.current;
+    const editorFocused = editorRef.current?.contains(activeElement) ?? false;
     const previewFocused = Boolean(
       previewArticleRef.current &&
         (activeElement === previewArticleRef.current ||
@@ -3823,6 +4423,12 @@ export default function Home() {
       case "edit.link":
       case "edit.image":
       case "edit.quote":
+      case "edit.undo":
+      case "edit.redo":
+      case "edit.find":
+      case "edit.findNext":
+      case "edit.findPrevious":
+      case "edit.selectAll":
       case "diagram.mermaid":
         return !modalIsOpen && !composerKind && editorFocused;
       case "view.reading":
@@ -3882,6 +4488,13 @@ export default function Home() {
           ? "100fr"
           : `${100 - previewPanePercent}fr`,
   } as React.CSSProperties;
+  const isWebLibrary =
+    hydrated && commandEnvironment.surface === "web";
+  const activeLibraryTab: LibraryTab = isWebLibrary
+    ? libraryTab === "versions"
+      ? "versions"
+      : "history"
+    : libraryTab;
 
   return (
     <div
@@ -4396,6 +5009,16 @@ export default function Home() {
             </div>
 
             <div className="format-tools" aria-label="ابزار قالب‌بندی">
+              <span className="format-tool-group" aria-label="قالب متن">
+              <button
+                className="format-tool--expanded-only"
+                type="button"
+                onClick={insertHeading}
+                aria-label="درج تیتر"
+                title="درج تیتر Markdown"
+              >
+                <Heading1 size={16} aria-hidden="true" />
+              </button>
               <button
                 type="button"
                 onClick={() => insertInline("**", "**", "متن پررنگ")}
@@ -4433,6 +5056,16 @@ export default function Home() {
                 <Code2 size={16} aria-hidden="true" />
               </button>
               <button
+                className="format-tool--expanded-only"
+                type="button"
+                onClick={insertCodeBlock}
+                aria-label="درج قطعه‌کد"
+                title="درج قطعه‌کد LTR"
+              >
+                <Braces size={16} aria-hidden="true" />
+              </button>
+              <button
+                className="format-tool--expanded-only"
                 type="button"
                 onClick={insertQuote}
                 aria-label="نقل‌قول"
@@ -4445,6 +5078,7 @@ export default function Home() {
                 <Quote size={16} aria-hidden="true" />
               </button>
               <button
+                className="format-tool--expanded-only"
                 type="button"
                 onClick={() =>
                   insertInline("[", "](https://example.com)", "عنوان پیوند")
@@ -4457,6 +5091,53 @@ export default function Home() {
                 title={commandTitle("edit.link", commandEnvironment)}
               >
                 <Link2 size={16} aria-hidden="true" />
+              </button>
+              </span>
+              <span className="format-tool-group" aria-label="درج بلوک">
+              <button
+                className="format-tool--expanded-only"
+                type="button"
+                onClick={() => insertList("check-done")}
+                aria-label="درج چک‌لیست انجام‌شده"
+                title="چک‌لیست انجام‌شده"
+              >
+                <ListChecks size={16} aria-hidden="true" />
+              </button>
+              <button
+                className="format-tool--expanded-only"
+                type="button"
+                onClick={() => insertList("check-empty")}
+                aria-label="درج چک‌لیست خالی"
+                title="چک‌لیست خالی"
+              >
+                <ListTodo size={16} aria-hidden="true" />
+              </button>
+              <button
+                className="format-tool--expanded-only"
+                type="button"
+                onClick={() => insertList("bullet")}
+                aria-label="درج فهرست بولت‌دار"
+                title="فهرست بولت‌دار"
+              >
+                <ListIcon size={16} aria-hidden="true" />
+              </button>
+              <button
+                className="format-tool--expanded-only"
+                type="button"
+                onClick={() => insertList("ordered")}
+                aria-label="درج فهرست شماره‌ای"
+                title="فهرست شماره‌ای"
+              >
+                <ListOrdered size={16} aria-hidden="true" />
+              </button>
+              <button
+                className="format-tool--expanded-only"
+                type="button"
+                onClick={insertTable}
+                aria-label="درج جدول"
+                title="درج جدول Markdown"
+              >
+                <Table2 size={16} aria-hidden="true" />
               </button>
               <button
                 ref={imageInsertButtonRef}
@@ -4491,62 +5172,200 @@ export default function Home() {
               >
                 <Network size={16} aria-hidden="true" />
               </button>
+              </span>
               <span className="tool-divider" aria-hidden="true" />
+              <span className="format-tool-group format-tool-group--editor" aria-label="ابزار ویرایشگر">
+                <button
+                  className="format-tool--expanded-only"
+                  type="button"
+                  onClick={() => editorRef.current?.undo()}
+                  aria-label="واگرد"
+                  aria-keyshortcuts={commandAriaKeyShortcuts(
+                    "edit.undo",
+                    commandEnvironment,
+                  )}
+                  title={commandTitle("edit.undo", commandEnvironment)}
+                >
+                  <Undo2 size={16} aria-hidden="true" />
+                </button>
+                <button
+                  className="format-tool--expanded-only"
+                  type="button"
+                  onClick={() => editorRef.current?.redo()}
+                  aria-label="ازنو"
+                  aria-keyshortcuts={commandAriaKeyShortcuts(
+                    "edit.redo",
+                    commandEnvironment,
+                  )}
+                  title={commandTitle("edit.redo", commandEnvironment)}
+                >
+                  <Redo2 size={16} aria-hidden="true" />
+                </button>
+                <button
+                  className="format-tool--expanded-only"
+                  type="button"
+                  onClick={() => editorRef.current?.openSearch()}
+                  aria-label="جست‌وجو و جایگزینی"
+                  aria-keyshortcuts={commandAriaKeyShortcuts(
+                    "edit.find",
+                    commandEnvironment,
+                  )}
+                  title={commandTitle("edit.find", commandEnvironment)}
+                >
+                  <Search size={16} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`format-tool--expanded-only ${
+                    editorAssistantTab === "outline" ? "is-active" : ""
+                  }`}
+                  onClick={() => toggleEditorAssistant("outline")}
+                  aria-label="نمایش ساختار سند"
+                  aria-pressed={editorAssistantTab === "outline"}
+                  title="ساختار سند"
+                >
+                  <ListTree size={16} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={editorAssistantTab === "review" ? "is-active" : ""}
+                  onClick={() => toggleEditorAssistant("review")}
+                  aria-label={`بازبینی فارسی؛ ${persianReviewIssues.length} نوع اصلاح`}
+                  aria-pressed={editorAssistantTab === "review"}
+                  title="بازبینی فارسی"
+                >
+                  <Wand2 size={16} aria-hidden="true" />
+                  {persianReviewIssues.length > 0 && (
+                    <span className="format-tool-badge" aria-hidden="true">
+                      {persianReviewIssues.length}
+                    </span>
+                  )}
+                </button>
+              </span>
               <button
+                className="format-tool-expand"
                 type="button"
-                onClick={openNewDocumentModal}
-                aria-label="ساخت فایل جدید"
-                aria-keyshortcuts={commandAriaKeyShortcuts(
-                  "file.new",
-                  commandEnvironment,
-                )}
-                title={commandTitle(
-                  "file.new",
-                  commandEnvironment,
-                  "ساخت فایل جدید",
-                )}
+                onClick={() => collapseDesktopPane("preview")}
+                aria-label="نمایش تمام‌صفحهٔ ویرایشگر و همهٔ ابزارها"
+                title="نمایش همهٔ ابزارها در ویرایشگر تمام‌صفحه"
               >
-                <FilePlus2 size={16} aria-hidden="true" />
+                <Ellipsis size={18} aria-hidden="true" />
               </button>
             </div>
           </div>
 
-          <label className="visually-hidden" htmlFor="markdown-editor">
-            متن Markdown
-          </label>
-          <textarea
-            id="markdown-editor"
-            ref={editorRef}
-            value={content}
-            onChange={(event) => {
-              setEditorSelectionMenuPosition(null);
-              setContent(event.target.value);
-              if (saveState === "error") setSaveState("saved");
-            }}
-            onScroll={() => {
-              setEditorSelectionMenuPosition(null);
-              handleSyncedScroll("editor");
-            }}
-            onMouseUp={(event) =>
-              captureEditorSelection({
-                clientX: event.clientX,
-                clientY: event.clientY,
-              })
-            }
-            onPointerUp={(event) => {
-              if (event.pointerType !== "mouse") {
-                captureEditorSelection({
-                  clientX: event.clientX,
-                  clientY: event.clientY,
-                });
-              }
-            }}
-            onKeyUp={() => captureEditorSelection()}
-            data-editable-kind="editor"
-            spellCheck
-            dir="auto"
-            aria-describedby="editor-hint"
-          />
+          <div className="editor-surface">
+            <MarkdownCodeEditor
+              id="markdown-editor"
+              ref={editorRef}
+              value={content}
+              onChange={(nextContent) => {
+                setEditorSelectionMenuPosition(null);
+                setContent(nextContent);
+                if (saveState === "error") setSaveState("saved");
+              }}
+              onScroll={() => {
+                setEditorSelectionMenuPosition(null);
+                handleSyncedScroll("editor");
+              }}
+              onSelectionChange={captureEditorSelection}
+              transformPastedText={normalizePersianMarkdown}
+              ariaDescribedBy="editor-hint"
+            />
+
+            {editorAssistantTab && (
+              <aside
+                className="editor-assistant"
+                aria-label={
+                  editorAssistantTab === "outline"
+                    ? "ساختار سند"
+                    : "بازبینی فارسی"
+                }
+              >
+                <div className="editor-assistant-header">
+                  <div>
+                    <span>ابزار نمونه‌خوان</span>
+                    <strong>
+                      {editorAssistantTab === "outline"
+                        ? "ساختار سند"
+                        : "بازبینی فارسی"}
+                    </strong>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditorAssistantTab(null)}
+                    aria-label="بستن پنل ابزار"
+                    title="بستن"
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </button>
+                </div>
+
+                {editorAssistantTab === "outline" ? (
+                  documentEditorHeadings.length ? (
+                    <nav className="editor-outline" aria-label="تیترهای سند">
+                      {documentEditorHeadings.map((heading, index) => (
+                        <button
+                          key={`${heading.offset}-${heading.text}`}
+                          type="button"
+                          className={`is-level-${Math.min(heading.level, 4)}`}
+                          onClick={() => jumpToEditorHeading(heading.offset)}
+                        >
+                          <span>
+                            {(index + 1).toLocaleString("fa-IR", {
+                              minimumIntegerDigits: 2,
+                              useGrouping: false,
+                            })}
+                          </span>
+                          {heading.text}
+                        </button>
+                      ))}
+                    </nav>
+                  ) : (
+                    <div className="editor-assistant-empty">
+                      <Heading1 size={20} aria-hidden="true" />
+                      <strong>هنوز تیتری ندارید</strong>
+                      <p>با تیترها، سند بلند سریع‌تر مرور می‌شود.</p>
+                      <button type="button" onClick={insertHeading}>
+                        افزودن اولین تیتر
+                      </button>
+                    </div>
+                  )
+                ) : persianReviewIssues.length ? (
+                  <>
+                    <div className="review-summary">
+                      <span>{persianReviewIssues.length} نوع اصلاح</span>
+                      <button type="button" onClick={cleanPersianMarkdown}>
+                        اصلاح همه
+                      </button>
+                    </div>
+                    <div className="review-issues">
+                      {persianReviewIssues.map((issue) => (
+                        <button
+                          key={issue.id}
+                          type="button"
+                          onClick={() => fixPersianReviewIssue(issue)}
+                        >
+                          <span className="review-issue-count">{issue.count}</span>
+                          <span>
+                            <strong>{issue.title}</strong>
+                            <small>{issue.detail}</small>
+                          </span>
+                          <Wand2 size={14} aria-hidden="true" />
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="editor-assistant-empty is-clean">
+                    <Check size={20} aria-hidden="true" />
+                    <strong>متن فارسی مرتب است</strong>
+                    <p>نویسه‌ها، فاصله‌ها و نشانه‌گذاری مشکلی ندارند.</p>
+                  </div>
+                )}
+              </aside>
+            )}
+          </div>
           {editorSelectionMenuPosition && (
             <div
               ref={editorSelectionMenuRef}
@@ -4634,7 +5453,21 @@ export default function Home() {
             </div>
           )}
           <div className="pane-footer" id="editor-hint">
-            <span>Markdown با ذخیرهٔ نسخه‌ای</span>
+            <div className="editor-status">
+              <span>
+                <i aria-hidden="true" /> CodeMirror
+              </span>
+              <span>جهت هوشمند سطر</span>
+              <button
+                type="button"
+                onClick={() => toggleEditorAssistant("review")}
+                className={persianReviewIssues.length ? "has-issues" : ""}
+              >
+                {persianReviewIssues.length
+                  ? `${persianReviewIssues.length} نوع اصلاح فارسی`
+                  : "متن فارسی مرتب"}
+              </button>
+            </div>
             <button
               className="editor-shortcut-help"
               type="button"
@@ -5342,7 +6175,9 @@ export default function Home() {
             />
 
             <div
-              className="library-tabs"
+              className={`library-tabs ${
+                isWebLibrary ? "library-tabs--single" : ""
+              }`}
               role="tablist"
               aria-label="بخش‌های سایدبار"
             >
@@ -5351,9 +6186,9 @@ export default function Home() {
                 id="library-history-tab"
                 type="button"
                 role="tab"
-                aria-selected={libraryTab === "history"}
+                aria-selected={activeLibraryTab === "history"}
                 aria-controls="library-history-panel"
-                tabIndex={libraryTab === "history" ? 0 : -1}
+                tabIndex={activeLibraryTab === "history" ? 0 : -1}
                 onClick={() => setLibraryTab("history")}
                 onKeyDown={(event) =>
                   handleLibraryTabKeyDown(event, "history")
@@ -5363,26 +6198,75 @@ export default function Home() {
                 <span>تاریخچه</span>
                 <b>{recentFiles.length.toLocaleString("fa-IR")}</b>
               </button>
+              {!isWebLibrary && (
+                <button
+                  ref={libraryTabRef}
+                  id="library-catalog-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected={activeLibraryTab === "library"}
+                  aria-controls="library-catalog-panel"
+                  tabIndex={activeLibraryTab === "library" ? 0 : -1}
+                  onClick={() => setLibraryTab("library")}
+                  onKeyDown={(event) =>
+                    handleLibraryTabKeyDown(event, "library")
+                  }
+                >
+                  <Library size={16} aria-hidden="true" />
+                  <span>کتابخانه</span>
+                  <b>{libraryFiles.length.toLocaleString("fa-IR")}</b>
+                </button>
+              )}
               <button
-                ref={libraryTabRef}
-                id="library-catalog-tab"
+                ref={versionsTabRef}
+                id="library-versions-tab"
                 type="button"
                 role="tab"
-                aria-selected={libraryTab === "library"}
-                aria-controls="library-catalog-panel"
-                tabIndex={libraryTab === "library" ? 0 : -1}
-                onClick={() => setLibraryTab("library")}
+                aria-selected={activeLibraryTab === "versions"}
+                aria-controls="library-versions-panel"
+                tabIndex={activeLibraryTab === "versions" ? 0 : -1}
+                onClick={() => setLibraryTab("versions")}
                 onKeyDown={(event) =>
-                  handleLibraryTabKeyDown(event, "library")
+                  handleLibraryTabKeyDown(event, "versions")
                 }
               >
-                <Library size={16} aria-hidden="true" />
-                <span>کتابخانه</span>
-                <b>{libraryFiles.length.toLocaleString("fa-IR")}</b>
+                <History size={16} aria-hidden="true" />
+                <span>نسخه‌ها</span>
+                <b>{versions.length.toLocaleString("fa-IR")}</b>
               </button>
             </div>
 
-            <div className={`library-content is-${libraryTab}`}>
+            <div
+              className={`library-content is-${activeLibraryTab} ${
+                isWebLibrary ? "is-web-library" : ""
+              }`}
+            >
+              {isWebLibrary && activeLibraryTab !== "versions" && (
+                <section
+                  className="library-install-prompt"
+                  aria-labelledby="library-install-title"
+                >
+                  <div className="library-install-copy">
+                    <span className="library-install-icon" aria-hidden="true">
+                      <Download size={19} />
+                    </span>
+                    <div>
+                      <strong id="library-install-title">
+                        تجربه بهتر با نسخه دسکتاپ
+                      </strong>
+                      <p>{desktopInstallRecommendation.description}</p>
+                    </div>
+                  </div>
+                  <a
+                    className="button button--primary library-install-action"
+                    href={desktopInstallRecommendation.href}
+                    aria-label={`${desktopInstallRecommendation.actionLabel}، پیشنهادشده برای ${desktopInstallRecommendation.platformLabel}`}
+                  >
+                    <Download size={16} aria-hidden="true" />
+                    <span>{desktopInstallRecommendation.actionLabel}</span>
+                  </a>
+                </section>
+              )}
               {recentFiles.length > 0 && (
                 <section
                   className="library-section library-history-section"
@@ -5390,7 +6274,7 @@ export default function Home() {
                   role="tabpanel"
                   aria-labelledby="library-history-tab"
                   tabIndex={0}
-                  hidden={libraryTab !== "history"}
+                  hidden={activeLibraryTab !== "history"}
                 >
                   <div className="library-section-title">
                     <span>
@@ -5429,7 +6313,7 @@ export default function Home() {
                   role="tabpanel"
                   aria-labelledby="library-history-tab"
                   tabIndex={0}
-                  hidden={libraryTab !== "history"}
+                  hidden={activeLibraryTab !== "history"}
                 >
                   <Clock3 size={28} aria-hidden="true" />
                   <strong>هنوز فایلی باز نشده است</strong>
@@ -5437,13 +6321,76 @@ export default function Home() {
                 </div>
               )}
 
-              <div
-                id="library-catalog-panel"
+              <section
+                className="library-section library-versions-section"
+                id="library-versions-panel"
                 role="tabpanel"
-                aria-labelledby="library-catalog-tab"
+                aria-labelledby="library-versions-tab"
                 tabIndex={0}
-                hidden={libraryTab !== "library"}
+                hidden={activeLibraryTab !== "versions"}
               >
+                <div className="library-section-title">
+                  <span>
+                    <History size={15} aria-hidden="true" />
+                    <strong>تاریخچهٔ نسخه‌ها</strong>
+                  </span>
+                  <small dir="auto" title={fileName}>
+                    {fileName}
+                  </small>
+                </div>
+                {versions.length > 0 ? (
+                  <ol className="library-version-list">
+                    {[...versions].reverse().map((version) => (
+                      <li key={`${version.number}-${version.savedAt}`}>
+                        <span className="library-version-index" aria-hidden="true">
+                          {version.number.toLocaleString("fa-IR")}
+                        </span>
+                        <span className="library-version-copy">
+                          <strong>
+                            نسخهٔ {version.number.toLocaleString("fa-IR")}
+                          </strong>
+                          <time dateTime={version.savedAt}>
+                            {new Date(version.savedAt).toLocaleString("fa-IR", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })}
+                          </time>
+                          <small>
+                            {version.content.length.toLocaleString("fa-IR")} نویسه
+                            {version.annotations.length > 0 &&
+                              ` · ${version.annotations.length.toLocaleString("fa-IR")} یادداشت`}
+                          </small>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => restoreVersion(version)}
+                          aria-label={`بازیابی نسخهٔ ${version.number.toLocaleString("fa-IR")}`}
+                        >
+                          <RefreshCw size={14} aria-hidden="true" />
+                          بازیابی
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className="library-empty library-versions-empty">
+                    <History size={28} aria-hidden="true" />
+                    <strong>هنوز نسخه‌ای ثبت نشده است</strong>
+                    <span>
+                      با اولین ذخیره، نسخهٔ سند در این بخش نگه‌داری می‌شود.
+                    </span>
+                  </div>
+                )}
+              </section>
+
+              {!isWebLibrary && (
+                <div
+                  id="library-catalog-panel"
+                  role="tabpanel"
+                  aria-labelledby="library-catalog-tab"
+                  tabIndex={0}
+                  hidden={activeLibraryTab !== "library"}
+                >
               <section
                 className="library-section library-pinned-section"
                 aria-labelledby="pinned-files-title"
@@ -5602,33 +6549,40 @@ export default function Home() {
                   </div>
                 )}
               </div>
-            </div>
+                </div>
+              )}
             </div>
 
             <div className="library-footer">
               {openingLibraryPath ? (
                 <span>در حال باز کردن فایل…</span>
-              ) : libraryTab === "library" && activeLibraryPath ? (
+              ) : activeLibraryTab === "library" && activeLibraryPath ? (
                 <span dir="auto" title={activeLibraryPath}>
                   {activeLibraryPath}
                 </span>
-              ) : libraryTab === "history" && recentFiles.length === 0 ? (
+              ) : activeLibraryTab === "history" && recentFiles.length === 0 ? (
                 <span>فایل‌های بازشده در این بخش نمایش داده می‌شوند.</span>
+              ) : activeLibraryTab === "versions" ? (
+                <span>
+                  نسخهٔ بعدی {Math.max(revision + 1, 1).toLocaleString("fa-IR")} با ذخیرهٔ سند ثبت می‌شود.
+                </span>
               ) : (
                 <span>برای بازکردن، روی نام فایل کلیک کنید.</span>
               )}
             </div>
 
-            <div
-              className="library-privacy"
-              hidden={libraryTab !== "library"}
-            >
-              <ShieldCheck size={17} aria-hidden="true" />
-              <span>
-                اسکن فقط پس از اجازه‌ی شما انجام می‌شود؛ فایلی به اینترنت ارسال
-                نمی‌شود.
-              </span>
-            </div>
+            {!isWebLibrary && (
+              <div
+                className="library-privacy"
+                hidden={activeLibraryTab !== "library"}
+              >
+                <ShieldCheck size={17} aria-hidden="true" />
+                <span>
+                  اسکن فقط پس از اجازه‌ی شما انجام می‌شود؛ فایلی به اینترنت ارسال
+                  نمی‌شود.
+                </span>
+              </div>
+            )}
           </aside>
         )}
       </div>

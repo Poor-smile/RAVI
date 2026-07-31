@@ -129,6 +129,49 @@ test.describe("command resolver", () => {
     ).toBe("edit.image");
   });
 
+  test("routes the new editor shortcuts by physical key", () => {
+    expect(
+      resolveOnly(
+        "edit.find",
+        keyboardEvent("KeyF", { key: "ب", ctrlKey: true }),
+        windowsWeb,
+        "editor",
+      ),
+    ).toBe("edit.find");
+    expect(
+      resolveOnly(
+        "edit.undo",
+        keyboardEvent("KeyZ", { key: "ظ", ctrlKey: true }),
+        windowsWeb,
+        "editor",
+      ),
+    ).toBe("edit.undo");
+    expect(
+      resolveOnly(
+        "edit.redo",
+        keyboardEvent("KeyZ", { key: "ظ", ctrlKey: true, shiftKey: true }),
+        windowsWeb,
+        "editor",
+      ),
+    ).toBe("edit.redo");
+    expect(
+      resolveOnly(
+        "edit.selectAll",
+        keyboardEvent("KeyA", { key: "ش", ctrlKey: true }),
+        windowsWeb,
+        "editor",
+      ),
+    ).toBe("edit.selectAll");
+    expect(
+      resolveOnly(
+        "edit.findPrevious",
+        keyboardEvent("F3", { shiftKey: true }),
+        windowsWeb,
+        "editor",
+      ),
+    ).toBe("edit.findPrevious");
+  });
+
   test("requires exact modifiers and ignores IME composition", () => {
     expect(
       resolveOnly(

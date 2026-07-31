@@ -2,7 +2,7 @@
 THESIS: خودِ معرفی راوی یک سند Markdown زنده است؛ صفحه از هیروی عمومی نرم‌افزار و ردیف کارت‌های تکراری دوری می‌کند.
 OWN-WORLD: کاغذ سرد، مرکب زغالی، آبی نمونه‌خوان، خط صحافی و کنترل‌های کم‌گردِ میز راوی.
 STORY: بازدیدکننده در چند ثانیه می‌فهمد راوی چیست، همان‌جا Markdown را تغییر می‌دهد، شواهد واقعی را می‌بیند و برای استفاده یا حمایت تصمیم می‌گیرد.
-FIRST VIEWPORT: پیام اصلی و تصویر واقعی محصول روبه‌روی هم‌اند؛ CTA دانلود و ورود به تجربهٔ زنده بدون جست‌وجو دیده می‌شوند.
+FIRST VIEWPORT: پیام اصلی و تصویر واقعی محصول روبه‌روی هم‌اند؛ CTA نسخهٔ وب و دریافت دسکتاپ بدون جست‌وجو دیده می‌شوند.
 FORM: متن و نتیجه در دو برگ موازی، با اتصال مستقیم هر ادعا به نمای واقعی محصول؛ ساختار منتخب «سند زنده» با staging متن/ساخت کنار هم.
 -->
 <!doctype html>
@@ -12,11 +12,11 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="راوی؛ راه ساده و رایگان برای یادگیری، خواندن، نوشتن و مدیریت فایل‌های Markdown فارسی، مناسب کار با محتوای هوش مصنوعی."
+      content="راوی؛ ابزار رایگان خواندن، ویرایش و مدیریت فایل‌های Markdown فارسی در مرورگر و دسکتاپ، مناسب کار با محتوای هوش مصنوعی."
     />
     <meta name="theme-color" content="#171b18" />
     <meta name="color-scheme" content="light" />
-    <title>راوی — مارک‌دان فارسی، ساده و خوانا</title>
+    <title>راوی — Markdown فارسی، خوانا و مرتب</title>
     <link
       rel="preload"
       href="./assets/fonts/IRANSansX-Regular.woff2"
@@ -31,8 +31,15 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
       type="font/woff2"
       crossorigin
     />
-    <link rel="stylesheet" href="./style.css?v=1.0.0-8" />
-    <script src="./app.js?v=1.0.0-5" defer></script>
+    <link
+      rel="preload"
+      href="./assets/screens/raavi-workspace.webp"
+      as="image"
+      type="image/webp"
+      fetchpriority="high"
+    />
+    <link rel="stylesheet" href="./style.css?v=1.1.0-1" />
+    <script src="./app.js?v=1.1.0-1" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">رفتن به محتوای اصلی</a>
@@ -52,7 +59,12 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
         <a href="#features">ویژگی‌ها</a>
       </nav>
 
-      <a class="header-action" href="#download">دریافت راوی</a>
+      <a
+        class="header-action"
+        href="https://raviweb.poorsmile.ir/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >باز کردن نسخهٔ وب</a>
     </header>
 
     <main id="main-content">
@@ -60,30 +72,37 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
         <div class="hero-copy">
           <p class="hero-kicker">
             <span aria-hidden="true"></span>
-            نسخهٔ پایدار <bdi dir="ltr">1.0.0</bdi>
+            نسخهٔ وب؛ بدون نصب
           </p>
-          <h1 id="hero-title">مارک‌دان ؛ ساده و مرتب.</h1>
+          <h1 id="hero-title">
+            <span>Markdown فارسی؛</span>
+            <span>خوانا و مرتب.</span>
+          </h1>
           <p class="hero-lead">
-            فایل‌های <code>md</code> همان متن‌های ساده‌ای هستند که هوش مصنوعی‌ها
-            زیاد تولید می‌کنند؛ متن‌هایی که می‌توانند <strong>عنوان، لیست، لینک
-            و بولد</strong> داشته باشند. اما محتوای فارسی داخل این فایل‌ها درست
-            نمایش داده نشود، جهت متن به‌هم می‌ریزد و خواندنش سخت می‌شود.
-            <strong>راوی</strong> کمک می‌کند فایل‌های Markdown فارسی را مرتب،
-            خوانا و راست‌به‌چپ ببینید و راحت‌تر ویرایش کنید.
+            فایل‌های <code>md</code> همان متن‌های ساده‌ای هستند که ابزارهای هوش
+            مصنوعی زیاد تولید می‌کنند؛ اما فارسی و انگلیسی در بسیاری از برنامه‌ها
+            کنار هم درست نمایش داده نمی‌شوند. <strong>راوی</strong> کمک می‌کند
+            فایل‌های Markdown فارسی را در مرورگر یا روی دسکتاپ، مرتب و خوانا
+            ببینید و ویرایش کنید.
           </p>
           <div class="hero-actions">
-            <a class="button button-primary" href="#download">
-              دانلود رایگان
-              <span aria-hidden="true">←</span>
+            <a
+              class="button button-primary"
+              href="https://raviweb.poorsmile.ir/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              باز کردن نسخهٔ وب
+              <span aria-hidden="true">↗</span>
             </a>
-            <a class="button button-secondary" href="#live-demo">
-              مارک‌دان را امتحان کنید
+            <a class="button button-secondary" href="#download">
+              دانلود نسخهٔ دسکتاپ
             </a>
           </div>
           <ul class="hero-trust" aria-label="ویژگی‌های اصلی">
-            <li><span aria-hidden="true">✓</span> فارسی و انگلیسی بدون به‌هم‌ریخنگی</li>
-            <li><span aria-hidden="true">✓</span> نگه‌داری فایل‌ها در سیستم‌تان</li>
-            <li><span aria-hidden="true">✓</span> تا همیشه رایگان</li>
+            <li><span aria-hidden="true">✓</span> فارسی و انگلیسی بدون به‌هم‌ریختگی</li>
+            <li><span aria-hidden="true">✓</span> فایل‌ها روی دستگاه شما</li>
+            <li><span aria-hidden="true">✓</span> نسخهٔ وب و دسکتاپ، رایگان</li>
           </ul>
         </div>
 
@@ -112,12 +131,12 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
           <p class="section-kicker">پیش از راوی</p>
           <h2 id="markdown-primer-title">مارک‌دان چیست؟</h2>
           <p>
-            فایل‌های <code>md</code> همان متن‌های ساده‌ای هستند که هوش مصنوعی‌ها
-            زیاد تولید می‌کنند؛ متن‌هایی که می‌توانند <strong>عنوان، لیست، لینک
-            و بولد</strong> داشته باشند. اما محتوای فارسی داخل این فایل‌ها درست
-            نمایش داده نشود، جهت متن به‌هم می‌ریزد و خواندنش سخت می‌شود.
-            <strong>راوی</strong> کمک می‌کند فایل‌های Markdown فارسی را مرتب،
-            خوانا و راست‌به‌چپ ببینید و راحت‌تر ویرایش کنید.
+            فایل‌های <code>md</code> متن‌های ساده‌ای هستند که می‌توانند
+            <strong>عنوان، فهرست، پیوند و متن پررنگ</strong> داشته باشند و بسیاری
+            از ابزارهای هوش مصنوعی هم با همین ساختار کار می‌کنند. وقتی فارسی و
+            انگلیسی کنار هم قرار می‌گیرند، جهت متن ممکن است به‌هم بریزد.
+            <strong>راوی</strong> جهت هر بخش را درست تشخیص می‌دهد تا فایل را مرتب،
+            خوانا و راحت‌تر ویرایش کنید.
           </p>
         </div>
 
@@ -137,9 +156,9 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
         <aside class="markdown-bridge">
           <strong>پس راوی چه کاری انجام می‌دهد؟</strong>
           <p>
-            بیشتر ابزارهای Markdown برای متن انگلیسی ساخته شده‌اند. راوی فایل
-            را با جهت درست فارسی، پیش‌نمایش زنده در اختیارتان می‌گذارد تا
-            به‌جای درگیری با تنظیمات، روی اصل کارتان تمرکز کنید.
+            راوی فایل را با جهت درست فارسی و پیش‌نمایش زنده نشان می‌دهد. بدون
+            نصب در نسخهٔ وب شروع کنید؛ برای اتصال پوشه‌ها و باز کردن مستقیم فایل‌ها
+            از سیستم‌عامل، نسخهٔ دسکتاپ را بگیرید.
           </p>
         </aside>
       </section>
@@ -152,12 +171,12 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
         <div class="section-heading live-heading">
           <div>
             <p class="section-kicker">تجربهٔ زنده</p>
-            <h2 id="live-title">متن این معرفی را تغییر دهید.</h2>
+            <h2 id="live-title">Markdown فارسی را همین‌جا امتحان کنید.</h2>
           </div>
           <p>
-            <strong>مارک دان فارسی</strong> را امتحان کنید.
-            منبع این بخش یک فایل <code>landing.md</code> است. هر تغییری فقط
-            در همین مرورگر پیش‌نمایش می‌شود و به جایی فرستاده نمی‌شود.
+            متن این معرفی را تغییر دهید. منبع این بخش یک فایل
+            <code>landing.md</code> است؛ هر تغییری فقط در همین مرورگر پیش‌نمایش
+            می‌شود و به جایی فرستاده نمی‌شود.
           </p>
         </div>
 
@@ -264,12 +283,12 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
       <section class="proof-section" id="features" aria-labelledby="proof-title">
         <div class="section-heading proof-heading">
           <div>
-            <p class="section-kicker">فراتر از یک نمایشگر ساده</p>
-            <h2 id="proof-title">یک میز کامل برای فایل‌های متنی شما.</h2>
+            <p class="section-kicker">از شروع سریع تا کار عمیق</p>
+            <h2 id="proof-title">در مرورگر شروع کنید؛ روی دسکتاپ ادامه دهید.</h2>
           </div>
           <p>
-            راوی برای کاربر فارسی‌زبان ساخته شده است؛ نه با برگرداندن یک رابط
-            انگلیسی، بلکه با رفتار درست متن، مطالعه و فایل از ابتدا.
+            نسخهٔ وب برای باز کردن، ویرایش و مطالعه آماده است؛ نسخهٔ دسکتاپ
+            اتصال پوشه‌ها و کار مستقیم با فایل‌های سیستم را هم اضافه می‌کند.
           </p>
         </div>
 
@@ -278,14 +297,15 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
             <span class="feature-index" aria-hidden="true">قفسه</span>
             <h3>کتابخانه‌ای که روی دستگاه می‌ماند</h3>
             <p>
-              پوشه‌های Markdown را با اجازهٔ خودتان اضافه کنید، میان فایل‌ها
-              جست‌وجو کنید و نوشته‌های مهم را سنجاق بزنید. مسیر و محتوای فایل
-              برای ساخت کتابخانه به اینترنت فرستاده نمی‌شود.
+              در نسخهٔ وب، فایل‌هایی که باز می‌کنید در کتابخانهٔ همان مرورگر
+              می‌مانند. در نسخهٔ دسکتاپ می‌توانید پوشه‌ها و زیرپوشه‌ها را هم با
+              اجازهٔ خودتان متصل کنید. مسیر و محتوای فایل به اینترنت فرستاده
+              نمی‌شود.
             </p>
             <ul>
-              <li>اسکن پوشه و زیرپوشه‌ها</li>
-              <li>جست‌وجوی فایل‌های <code>.md</code> و <code>.ravi</code></li>
-              <li>سنجاق فایل‌های پراستفاده</li>
+              <li>فایل‌های اخیر در نسخهٔ وب</li>
+              <li>اتصال پوشه و زیرپوشه در نسخهٔ دسکتاپ</li>
+              <li>جست‌وجو و سنجاق فایل‌های پراستفاده</li>
             </ul>
           </div>
           <figure>
@@ -364,7 +384,7 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
             <p>
               فایل <code>.ravi</code> علاوه بر متن اصلی، تصویرهای استفاده‌شده،
               یادداشت‌ها، برجسته‌سازی‌ها و حاشیه‌نویسی‌ها را نیز همراه خود نگه
-              می‌دارد. این قالب اختصاصی راوی است و فقط با نرم‌افزار راوی باز
+              می‌دارد. این قالب اختصاصی راوی است و فقط با راوی باز
               می‌شود؛ برای نوشته‌های معمولی همچنان می‌توانید از <code>.md</code>
               استفاده کنید.
             </p>
@@ -381,21 +401,21 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
         <ul>
           <li>بدون حساب کاربری</li>
           <li>بدون آپلود محتوای سند</li>
-          <li>دسترسی به پوشه فقط با اجازهٔ شما</li>
-          <li>تنظیمات و آخرین نوشته به‌صورت محلی</li>
+          <li>اتصال پوشه در دسکتاپ، فقط با اجازهٔ شما</li>
+          <li>تنظیمات و آخرین نوشته روی همان دستگاه</li>
         </ul>
       </section>
 
       <section class="download-section" id="download" aria-labelledby="download-title">
         <div class="section-heading download-heading">
           <div>
-            <p class="section-kicker">دریافت راوی</p>
-            <h2 id="download-title">رایگان برای دسکتاپ.</h2>
+            <p class="section-kicker">راه‌های استفاده</p>
+            <h2 id="download-title">در مرورگر یا روی دسکتاپ.</h2>
           </div>
           <div class="download-heading-copy">
             <p>
-              نسخه‌های Windows و Linux همین حالا آماده‌اند. نسخهٔ macOS پس از
-              آماده‌شدن در همین بخش قرار می‌گیرد.
+              نسخهٔ وب بدون نصب آماده است. برای اتصال پوشه‌ها و باز کردن مستقیم
+              فایل‌ها از سیستم‌عامل، نسخهٔ Windows یا Linux را دریافت کنید.
             </p>
             <button
               class="button button-secondary changelog-trigger"
@@ -410,12 +430,30 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
           </div>
         </div>
 
-        <div class="download-ledger" aria-label="نسخه‌های قابل دریافت">
+        <div class="download-ledger" aria-label="راه‌های استفاده و نسخه‌های قابل دریافت">
+          <article class="download-row download-web">
+            <div class="platform-mark" aria-hidden="true">Web</div>
+            <div>
+              <h3>نسخهٔ وب</h3>
+              <p>بدون نصب · آماده در مرورگر</p>
+            </div>
+            <span class="release-state state-ready">آمادهٔ استفاده</span>
+            <a
+              class="button button-primary"
+              href="https://raviweb.poorsmile.ir/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="باز کردن نسخهٔ وب راوی"
+            >
+              باز کردن نسخهٔ وب
+            </a>
+          </article>
+
           <article class="download-row download-windows">
             <div class="platform-mark" aria-hidden="true">Win</div>
             <div class="release-copy">
               <h3>Windows</h3>
-              <p>نصب آسان · نسخهٔ <bdi dir="ltr">1.0.0</bdi> · ۱۸۳٫۴۰ مگابایت</p>
+              <p>نصب آسان · نسخهٔ <bdi dir="ltr">1.1.0</bdi> · ۳٫۳۱ مگابایت</p>
               <details class="release-details">
                 <summary>جزئیات و بررسی اصالت فایل</summary>
                 <div class="release-details-body">
@@ -428,11 +466,11 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
                     مطمئن شوید فایل دانلودشده دقیقاً همان نسخهٔ رسمی است.
                   </p>
                   <div class="release-hash-row">
-                    <code class="release-hash" dir="ltr">40530BD4ABAB38580F3CF90B1CDF7FE69A3843F2A04FCCC2862A132859832D2A</code>
+                    <code class="release-hash" dir="ltr">3EFC465D27A65D20A2B252915B3CD62B78777DF142D49A710A21503891A02C3D</code>
                     <button
                       class="hash-copy-button"
                       type="button"
-                      data-copy-hash="40530BD4ABAB38580F3CF90B1CDF7FE69A3843F2A04FCCC2862A132859832D2A"
+                      data-copy-hash="3EFC465D27A65D20A2B252915B3CD62B78777DF142D49A710A21503891A02C3D"
                       aria-label="کپی‌کردن کد بررسی فایل Windows"
                     >کپی کد</button>
                   </div>
@@ -442,9 +480,9 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
             <span class="release-state state-ready">آمادهٔ دانلود</span>
             <a
               class="button button-primary"
-              href="./downloads/Raavi-Setup-1.0.0-x64.exe"
+              href="./downloads/Raavi-Setup-1.1.0-x64.exe"
               download
-              aria-label="دانلود راوی 1.0.0 برای Windows، حجم ۱۸۳٫۴۰ مگابایت"
+              aria-label="دانلود راوی 1.1.0 برای Windows، حجم ۳٫۳۱ مگابایت"
             >
               دانلود Windows
             </a>
@@ -509,9 +547,9 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
           <p class="section-kicker">توسعهٔ مستقل</p>
           <h2 id="support-title">راوی رایگان می‌ماند.</h2>
           <p>
-            حمایت داوطلبانهٔ شما برای نگه‌داری، توسعه، ساخت نسخه‌های دسکتاپ
-            و هزینه‌های زیرساخت پروژه صرف می‌شود. مبلغ و متن پیام را خودتان
-            در صفحهٔ امن دارمت انتخاب می‌کنید.
+            حمایت داوطلبانهٔ شما برای نگه‌داری نسخهٔ وب، توسعهٔ راوی، ساخت
+            نسخه‌های دسکتاپ و هزینه‌های زیرساخت پروژه صرف می‌شود. مبلغ و متن
+            پیام را خودتان در صفحهٔ امن دارمت انتخاب می‌کنید.
           </p>
           <div class="support-actions">
             <a
@@ -609,6 +647,7 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
       </div>
       <div class="footer-links">
         <a href="#top">ابتدای صفحه</a>
+        <a href="https://raviweb.poorsmile.ir/">نسخهٔ وب</a>
         <a href="https://ravi.poorsmile.ir">ravi.poorsmile.ir</a>
       </div>
     </footer>
@@ -616,8 +655,9 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
     <noscript>
       <p class="noscript-note">
         برای استفاده از پیش‌نمایش زندهٔ Markdown، جاوااسکریپت مرورگر را فعال
-        کنید. معرفی، تصاویر و لینک‌های دانلود بدون آن نیز در دسترس‌اند.
+        کنید. معرفی، تصاویر، لینک نسخهٔ وب و دانلودها بدون آن نیز در دسترس‌اند.
       </p>
     </noscript>
+    <script id="initial-markdown" type="application/json">null</script>
   </body>
 </html>
