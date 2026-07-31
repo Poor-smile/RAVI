@@ -3,6 +3,7 @@
 import {
   BookOpen,
   FileArchive,
+  Heart,
   History,
   ImagePlus,
   Library,
@@ -60,7 +61,23 @@ const UNIQUE_FEATURES = [
   },
 ] as const;
 
+const SUPPORTERS = [
+  "اندیشکده حکمرانی شریف",
+  "مهدی میرزائی",
+  "امیرمحمد شفیعی",
+] as const;
+
 const RELEASES = [
+  {
+    version: "1.0.0",
+    dateTime: "2026-07-31",
+    dateLabel: "۹ مرداد ۱۴۰۵",
+    changes: [
+      "انتشار نخستین نسخهٔ پایدار راوی برای وب و ویندوز",
+      "افزودن صفحهٔ حمایت با دسترسی مستقیم به دارمت، کانال بروزرسانی‌ها و وب‌سایت رسمی",
+      "افزودن فهرست حامیان در شناسنامهٔ محصول و آماده‌سازی نصب‌کنندهٔ ویندوز نسخهٔ ۱.۰.۰",
+    ],
+  },
   {
     version: "0.20.1",
     dateTime: "2026-07-31",
@@ -400,6 +417,33 @@ export function AboutDialog({
               );
             })}
           </ul>
+        </section>
+
+        <section
+          className="about-section about-supporters"
+          aria-labelledby="about-supporters-title"
+        >
+          <div className="about-section-heading">
+            <Heart size={19} fill="currentColor" aria-hidden="true" />
+            <div>
+              <h3 id="about-supporters-title">حامیان راوی</h3>
+              <p>
+                همراهانی که به ادامهٔ توسعهٔ رایگان و مستقل راوی کمک کرده‌اند.
+              </p>
+            </div>
+          </div>
+          <ul className="about-supporter-list">
+            {SUPPORTERS.map((supporter) => (
+              <li key={supporter}>
+                <span aria-hidden="true">{supporter.slice(0, 1)}</span>
+                <strong>{supporter}</strong>
+              </li>
+            ))}
+          </ul>
+          <p className="about-supporter-note">
+            برای ثبت نامتان در این فهرست، نام دلخواه را در پیام حمایت دارمت
+            بنویسید.
+          </p>
         </section>
 
         <section

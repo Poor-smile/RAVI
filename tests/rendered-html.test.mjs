@@ -49,6 +49,7 @@ test("ships the viewer implementation instead of starter assets", async () => {
     commandResolver,
     shortcutHelp,
     aboutDialog,
+    supportDialog,
     newDocumentDialog,
   ] =
     await Promise.all([
@@ -73,6 +74,10 @@ test("ships the viewer implementation instead of starter assets", async () => {
     ),
     readFile(
       new URL("../app/components/about-dialog.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/components/support-dialog.tsx", import.meta.url),
       "utf8",
     ),
     readFile(
@@ -169,6 +174,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /دربارهٔ راوی و نسخهٔ فعلی/);
   assert.match(page, /packageMetadata\.version/);
   assert.match(page, /topLayer === "about"/);
+  assert.match(page, /supportModalOpen/);
+  assert.match(page, /topLayer === "support"/);
+  assert.match(page, /حمایت از راوی/);
   assert.match(page, /openNewDocumentModal/);
   assert.match(page, /createNewDocument/);
   assert.match(page, /topLayer === "new"/);
@@ -185,6 +193,16 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(aboutDialog, /returnFocusRef/);
   assert.match(aboutDialog, /0\.1\.0/);
   assert.match(aboutDialog, /0\.20\.0/);
+  assert.match(aboutDialog, /1\.0\.0/);
+  assert.match(aboutDialog, /حامیان راوی/);
+  assert.match(aboutDialog, /اندیشکده حکمرانی شریف/);
+  assert.match(aboutDialog, /مهدی میرزائی/);
+  assert.match(aboutDialog, /امیرمحمد شفیعی/);
+  assert.match(supportDialog, /https:\/\/daramet\.com\/poorsmile/);
+  assert.match(supportDialog, /https:\/\/t\.me\/poorsmile_crafts/);
+  assert.match(supportDialog, /https:\/\/ravi\.poorsmile\.ir/);
+  assert.match(supportDialog, /راوی تا همیشه رایگان می‌ماند/);
+  assert.match(supportDialog, /نامتان را در پیام حمایت بنویسید/);
   assert.match(newDocumentDialog, /validateNewDocumentName/);
   assert.match(newDocumentDialog, /WINDOWS_RESERVED_NAMES/);
   assert.match(newDocumentDialog, /ساخت فایل جدید/);
@@ -207,6 +225,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(css, /\.image-insert-modal/);
   assert.match(css, /\.image-source-tabs/);
   assert.match(css, /\.about-modal/);
+  assert.match(css, /\.support-modal/);
+  assert.match(css, /\.button--support/);
+  assert.match(css, /\.about-supporters/);
   assert.match(css, /\.about-feature-list/);
   assert.match(css, /\.about-release-list/);
   assert.match(css, /\.new-document-modal/);

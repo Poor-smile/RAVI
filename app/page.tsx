@@ -24,6 +24,7 @@ import {
   FolderPlus,
   FolderOpen,
   Highlighter,
+  Heart,
   History,
   ImagePlus,
   Italic,
@@ -84,6 +85,7 @@ import {
   NewDocumentSpec,
   titleFromDocumentName,
 } from "./components/new-document-dialog";
+import { SupportDialog } from "./components/support-dialog";
 import { MermaidDiagram } from "./components/mermaid-diagram";
 import {
   MermaidApplyResult,
@@ -938,6 +940,7 @@ export default function Home() {
   const [newDocumentCreating, setNewDocumentCreating] = useState(false);
   const [newDocumentError, setNewDocumentError] = useState("");
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
+  const [supportModalOpen, setSupportModalOpen] = useState(false);
   const [mermaidStudioSession, setMermaidStudioSession] =
     useState<MermaidStudioSession | null>(null);
   const [saveFileType, setSaveFileType] =
@@ -1029,6 +1032,7 @@ export default function Home() {
   const saveModalCloseRef = useRef<HTMLButtonElement>(null);
   const newDocumentButtonRef = useRef<HTMLButtonElement>(null);
   const brandButtonRef = useRef<HTMLButtonElement>(null);
+  const supportButtonRef = useRef<HTMLButtonElement>(null);
   const mermaidReturnFocusRef = useRef<HTMLElement | null>(null);
   const saveFileNameRef = useRef<HTMLInputElement>(null);
   const saveModalRef = useRef<HTMLDivElement>(null);
@@ -2075,6 +2079,10 @@ export default function Home() {
   useEffect(() => {
     syncLayer("about", aboutModalOpen);
   }, [aboutModalOpen, syncLayer]);
+
+  useEffect(() => {
+    syncLayer("support", supportModalOpen);
+  }, [supportModalOpen, syncLayer]);
 
   useEffect(() => {
     syncLayer("mermaid", Boolean(mermaidStudioSession));
@@ -3674,6 +3682,10 @@ export default function Home() {
       setAboutModalOpen(false);
       return;
     }
+    if (topLayer === "support") {
+      setSupportModalOpen(false);
+      return;
+    }
     if (topLayer === "shortcuts") {
       setShortcutHelpOpen(false);
       return;
@@ -3890,6 +3902,7 @@ export default function Home() {
         inert={
           Boolean(mermaidStudioSession) ||
           aboutModalOpen ||
+          supportModalOpen ||
           newDocumentModalOpen ||
           saveModalOpen ||
           shortcutHelpOpen ||
@@ -3992,6 +4005,19 @@ export default function Home() {
             <Check size={15} aria-hidden="true" />
             فایل روی همین دستگاه می‌ماند
           </span>
+          <button
+            ref={supportButtonRef}
+            className="button button--support"
+            type="button"
+            onClick={() => setSupportModalOpen(true)}
+            aria-label="حمایت از راوی"
+            aria-haspopup="dialog"
+            aria-expanded={supportModalOpen}
+            title="حمایت از توسعهٔ رایگان راوی"
+          >
+            <Heart size={18} fill="currentColor" aria-hidden="true" />
+            <span>حمایت</span>
+          </button>
           <button
             ref={libraryTriggerRef}
             className={`button button--quiet library-trigger mobile-library-trigger ${
@@ -4100,6 +4126,7 @@ export default function Home() {
         inert={
           Boolean(mermaidStudioSession) ||
           aboutModalOpen ||
+          supportModalOpen ||
           newDocumentModalOpen ||
           saveModalOpen ||
           shortcutHelpOpen ||
@@ -4178,6 +4205,7 @@ export default function Home() {
           inert={
             Boolean(mermaidStudioSession) ||
             aboutModalOpen ||
+            supportModalOpen ||
             newDocumentModalOpen ||
             saveModalOpen ||
             shortcutHelpOpen ||
@@ -4200,6 +4228,7 @@ export default function Home() {
         inert={
           Boolean(mermaidStudioSession) ||
           aboutModalOpen ||
+          supportModalOpen ||
           newDocumentModalOpen ||
           saveModalOpen ||
           shortcutHelpOpen
@@ -5642,6 +5671,13 @@ export default function Home() {
         version={packageMetadata.version}
         returnFocusRef={brandButtonRef}
         onClose={() => setAboutModalOpen(false)}
+      />
+
+      <SupportDialog
+        open={supportModalOpen}
+        isTopLayer={topLayer === "support"}
+        returnFocusRef={supportButtonRef}
+        onClose={() => setSupportModalOpen(false)}
       />
 
       <AccessibleModal

@@ -660,6 +660,47 @@ test.describe("Electron keyboard integration", () => {
         topbar.getByRole("button", { name: "میان‌برها", exact: true }),
       ).toHaveCount(0);
 
+      const supportTrigger = topbar.getByRole("button", {
+        name: "حمایت از راوی",
+        exact: true,
+      });
+      await expect(supportTrigger).toBeVisible();
+      await supportTrigger.click();
+      const supportDialog = window.getByRole("dialog", {
+        name: "رایگان، همیشه",
+        exact: true,
+      });
+      const supportTitle = supportDialog.locator("#support-modal-title");
+      await expect(supportDialog).toBeVisible();
+      await expect(supportTitle).toBeFocused();
+      await expect(
+        supportDialog.getByRole("link", {
+          name: "حمایت مالی در دارمت",
+          exact: true,
+        }),
+      ).toHaveAttribute("href", "https://daramet.com/poorsmile");
+      await expect(
+        supportDialog.getByRole("link", {
+          name: "کانال بروزرسانی‌های راوی",
+          exact: true,
+        }),
+      ).toHaveAttribute("href", "https://t.me/poorsmile_crafts");
+      await expect(
+        supportDialog.getByRole("link", {
+          name: "ravi.poorsmile.ir",
+          exact: true,
+        }),
+      ).toHaveAttribute("href", "https://ravi.poorsmile.ir");
+      await expect(
+        supportDialog.getByText("نامتان را در پیام حمایت بنویسید.", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(topbar).toHaveAttribute("inert", "");
+      await window.keyboard.press("Escape");
+      await expect(supportDialog).toBeHidden();
+      await expect(supportTrigger).toBeFocused();
+
       const aboutTrigger = topbar.getByRole("button", {
         name: "دربارهٔ راوی و نسخهٔ فعلی",
         exact: true,
@@ -674,7 +715,22 @@ test.describe("Electron keyboard integration", () => {
       await expect(aboutDialog).toBeVisible();
       await expect(aboutTitle).toBeFocused();
       await expect(
-        aboutDialog.getByText("0.20.1", { exact: true }),
+        aboutDialog.getByText("1.0.0", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        aboutDialog.getByRole("heading", {
+          name: "حامیان راوی",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        aboutDialog.getByText("اندیشکده حکمرانی شریف", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        aboutDialog.getByText("مهدی میرزائی", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        aboutDialog.getByText("امیرمحمد شفیعی", { exact: true }),
       ).toBeVisible();
       await expect(
         aboutDialog.getByRole("heading", {

@@ -18,6 +18,7 @@ export type ModalLayerId =
   | "mermaid"
   | "new"
   | "save"
+  | "support"
   | "shortcuts";
 
 export function useModalStack() {
