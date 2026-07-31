@@ -7,6 +7,7 @@ import {
   CircleHelp,
   Code2,
   Eye,
+  Hand,
   Library,
   LoaderCircle,
   Maximize2,
@@ -35,6 +36,7 @@ import {
 } from "../mermaid/samples";
 import { MermaidTheme } from "../mermaid/renderer";
 import { useMermaidRender } from "../mermaid/use-mermaid-render";
+import { useMermaidViewport } from "../mermaid/use-mermaid-viewport";
 import { AccessibleModal } from "./accessible-modal";
 import { MermaidCodeEditor } from "./mermaid-code-editor";
 
@@ -106,12 +108,11 @@ export function MermaidStudio({
   const [samplesOpen, setSamplesOpen] = useState(false);
   const [sampleQuery, setSampleQuery] = useState("");
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
-  const [scale, setScale] = useState(1);
-  const [translate, setTranslate] = useState({ x: 0, y: 0 });
-  const [panning, setPanning] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [applyError, setApplyError] = useState("");
   const renderState = useMermaidRender(code, theme, 320, renderNonce);
+  const viewport = useMermaidViewport();
+  const { resetView: resetViewport, zoomBy: zoomViewportBy } = viewport;
   const dirty = code !== initialCode;
 
   useEffect(() => {
@@ -159,8 +160,7 @@ export function MermaidStudio({
       }
       if (primary && event.code === "Digit0") {
         event.preventDefault();
-        setScale(1);
-        setTranslate({ x: 0, y: 0 });
+        resetViewport();
         return;
       }
       if (
@@ -168,7 +168,7 @@ export function MermaidStudio({
         (event.code === "Equal" || event.code === "NumpadAdd")
       ) {
         event.preventDefault();
-        setScale((current) => Math.min(3, current + 0.15));
+        zoomViewportBy(0.15);
         return;
       }
       if (
@@ -176,13 +176,22 @@ export function MermaidStudio({
         (event.code === "Minus" || event.code === "NumpadSubtract")
       ) {
         event.preventDefault();
-        setScale((current) => Math.max(0.25, current - 0.15));
+        zoomViewportBy(-0.15);
       }
     };
     document.addEventListener("keydown", handleStudioKeys, true);
     return () =>
       document.removeEventListener("keydown", handleStudioKeys, true);
-  }, [confirmClose, dirty, fileName, onClose, open, session]);
+  }, [
+    confirmClose,
+    dirty,
+    fileName,
+    onClose,
+    open,
+    session,
+    resetViewport,
+    zoomViewportBy,
+  ]);
 
   const clearDraft = () => {
     try {
@@ -243,40 +252,6 @@ export function MermaidStudio({
     window.addEventListener("pointercancel", finish);
   };
 
-  const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !event.currentTarget.closest(".mermaid-studio-svg"))
-      return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const origin = {
-      x: event.clientX - translate.x,
-      y: event.clientY - translate.y,
-    };
-    setPanning(true);
-    const move = (pointerEvent: PointerEvent) => {
-      setTranslate({
-        x: pointerEvent.clientX - origin.x,
-        y: pointerEvent.clientY - origin.y,
-      });
-    };
-    const finish = () => {
-      setPanning(false);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", finish);
-      window.removeEventListener("pointercancel", finish);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", finish);
-    window.addEventListener("pointercancel", finish);
-  };
-
-  const resetView = () => {
-    setScale(1);
-    setTranslate({ x: 0, y: 0 });
-  };
-
-  const zoom = (delta: number) =>
-    setScale((current) => Math.max(0.25, Math.min(3, current + delta)));
-
   const status =
     renderState.status === "valid"
       ? { label: "معتبر", icon: Check }
@@ -285,6 +260,12 @@ export function MermaidStudio({
         : { label: "نیاز به اصلاح", icon: AlertTriangle };
   const StatusIcon = status.icon;
   const activeSvg = renderState.svg || renderState.lastValidSvg;
+  const fitPreview = () =>
+    viewport.fitView(
+      previewRef.current,
+      previewRef.current?.querySelector<HTMLElement>(".mermaid-studio-svg") ??
+        null,
+    );
 
   return (
     <AccessibleModal
@@ -435,16 +416,18 @@ export function MermaidStudio({
             <div className="mermaid-preview-tools">
               <button
                 type="button"
-                onClick={() => zoom(-0.15)}
+                onClick={() => viewport.zoomBy(-0.15)}
                 aria-label="کوچک‌نمایی"
                 title="کوچک‌نمایی"
               >
                 <ZoomOut size={15} aria-hidden="true" />
               </button>
-              <output>{Math.round(scale * 100).toLocaleString("fa-IR")}٪</output>
+              <output aria-label={`بزرگ‌نمایی ${viewport.scalePercent} درصد`}>
+                {viewport.scalePercent.toLocaleString("fa-IR")}٪
+              </output>
               <button
                 type="button"
-                onClick={() => zoom(0.15)}
+                onClick={() => viewport.zoomBy(0.15)}
                 aria-label="بزرگ‌نمایی"
                 title="بزرگ‌نمایی"
               >
@@ -452,12 +435,21 @@ export function MermaidStudio({
               </button>
               <button
                 type="button"
-                onClick={resetView}
-                aria-label="جا دادن نمودار در نما"
-                title="جا دادن در نما (Ctrl+0)"
+                onClick={fitPreview}
+                aria-label="جا دادن کامل نمودار در نما"
+                title="جا دادن کامل نمودار در نما"
               >
-                <Scan size={15} aria-hidden="true" />
-              </button>
+                  <Scan size={15} aria-hidden="true" />
+                </button>
+              <span
+                className="mermaid-pan-indicator"
+                title="برای جابه‌جایی، نمودار یا فضای خالی را بکشید"
+              >
+                <Hand size={14} aria-hidden="true" />
+                <span className="visually-hidden">
+                  ابزار دست فعال است؛ برای جابه‌جایی بکشید
+                </span>
+              </span>
               <button
                 type="button"
                 onClick={() =>
@@ -484,20 +476,17 @@ export function MermaidStudio({
           </div>
           <div
             ref={previewRef}
-            className={`mermaid-studio-canvas ${panning ? "is-panning" : ""}`}
-            onPointerDown={startPan}
-            onWheel={(event) => {
-              if (!event.ctrlKey) return;
-              event.preventDefault();
-              zoom(event.deltaY > 0 ? -0.1 : 0.1);
-            }}
+            className={`mermaid-studio-canvas ${
+              viewport.panning ? "is-panning" : ""
+            }`}
+            {...viewport.viewportHandlers}
           >
             {activeSvg ? (
               <div
                 className="mermaid-studio-svg mermaid-render-surface"
                 data-mermaid-render-key={renderState.renderKey}
                 style={{
-                  transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+                  transform: viewport.transform,
                 }}
                 // Mermaid runs in strict mode and the SVG is sanitized again locally.
                 dangerouslySetInnerHTML={{ __html: activeSvg }}

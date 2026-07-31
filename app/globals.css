@@ -5180,6 +5180,7 @@ html.theme-is-changing .save-type-options label {
 
 .mermaid-diagram-action {
   position: absolute;
+  z-index: 4;
   top: 10px;
   inset-inline-end: 10px;
   min-height: 32px;
@@ -5232,11 +5233,87 @@ html.theme-is-changing .save-type-options label {
   .mermaid-diagram-canvas {
   min-height: 0;
   padding: clamp(52px, 7vw, 96px);
-  overflow: auto;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--rule) 68%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--rule) 68%, transparent) 1px,
+      transparent 1px
+    ),
+    var(--paper-100);
+  background-size: 24px 24px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.mermaid-diagram:is(:fullscreen, .is-detail-open)
+  .mermaid-diagram-canvas.is-panning {
+  cursor: grabbing;
 }
 
 .mermaid-diagram:is(:fullscreen, .is-detail-open) .mermaid-svg {
   width: min(100%, 1480px);
+  transform-origin: center;
+  transition: transform 120ms ease-out;
+  user-select: none;
+}
+
+.mermaid-diagram:is(:fullscreen, .is-detail-open)
+  .mermaid-diagram-canvas.is-panning
+  .mermaid-svg {
+  transition: none;
+}
+
+.mermaid-diagram-viewport-tools {
+  position: absolute;
+  z-index: 4;
+  top: 10px;
+  inset-inline-start: 10px;
+  padding: 5px;
+  color: var(--ink-700);
+  background: color-mix(in srgb, var(--paper-50) 94%, transparent);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow-color) 52%, transparent);
+}
+
+.mermaid-diagram-viewport-tools.mermaid-preview-tools {
+  gap: 5px;
+}
+
+.mermaid-diagram-viewport-tools.mermaid-preview-tools button {
+  min-width: 36px;
+  height: 36px;
+  padding: 6px 9px;
+}
+
+.mermaid-diagram-viewport-tools.mermaid-preview-tools output {
+  min-width: 46px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.mermaid-diagram-viewport-tools .mermaid-pan-indicator {
+  width: 36px;
+  height: 36px;
+}
+
+.mermaid-diagram:is(:fullscreen, .is-detail-open)
+  .mermaid-diagram-action {
+  min-height: 38px;
+  padding: 7px 11px;
+  font-size: 11px;
+}
+
+.mermaid-diagram:is(:fullscreen, .is-detail-open)
+  .mermaid-diagram-action
+  svg {
+  width: 17px;
+  height: 17px;
 }
 
 .mermaid-diagram:is(:fullscreen, .is-detail-open) .mermaid-diagram-hint {
@@ -5532,6 +5609,18 @@ html.theme-is-changing .save-type-options label {
   color: var(--ink-500);
   font-size: 8px;
   text-align: center;
+}
+
+.mermaid-pan-indicator {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  border: 1px solid color-mix(in srgb, var(--proof-blue) 48%, var(--rule));
+  border-radius: 4px;
 }
 
 .mermaid-code-editor,
@@ -5962,6 +6051,7 @@ html.theme-is-changing .save-type-options label {
     .annotation-panel,
     .pane-footer,
     .mermaid-diagram-action,
+    .mermaid-diagram-viewport-tools,
     .mermaid-diagram-hint,
     .toast {
     display: none !important;

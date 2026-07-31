@@ -296,6 +296,57 @@ test.describe("Electron Mermaid parity", () => {
           "data-mermaid-render-key",
           expectedKey,
         );
+
+        if (sample.id === MERMAID_SAMPLES[0]?.id) {
+          await sampleLibrary
+            .getByRole("button", { name: "بستن نمونه‌ها", exact: true })
+            .click();
+          const studioCanvas = studio.locator(".mermaid-studio-canvas");
+          const canvasBox = await studioCanvas.boundingBox();
+          expect(canvasBox).not.toBeNull();
+          const initialTransform = await studioSurface.evaluate(
+            (surface) => (surface as HTMLElement).style.transform,
+          );
+          await window.mouse.move(
+            canvasBox!.x + canvasBox!.width / 2,
+            canvasBox!.y + canvasBox!.height / 2,
+          );
+          await window.mouse.down();
+          await window.mouse.move(
+            canvasBox!.x + canvasBox!.width / 2 + 72,
+            canvasBox!.y + canvasBox!.height / 2 + 44,
+            { steps: 5 },
+          );
+          await window.mouse.up();
+          await expect
+            .poll(() =>
+              studioSurface.evaluate(
+                (surface) => (surface as HTMLElement).style.transform,
+              ),
+            )
+            .not.toBe(initialTransform);
+
+          await studio
+            .getByRole("button", { name: "بزرگ‌نمایی", exact: true })
+            .click();
+          await expect(studio.locator(".mermaid-preview-tools output")).not.toHaveText(
+            "۱۰۰٪",
+          );
+          await studio
+            .getByRole("button", {
+              name: "جا دادن کامل نمودار در نما",
+              exact: true,
+            })
+            .click();
+          await expect
+            .poll(() =>
+              studioSurface.evaluate(
+                (surface) => (surface as HTMLElement).style.transform,
+              ),
+            )
+            .toBe("translate(0px, 0px) scale(1)");
+        }
+
         const studioRender = await studioSurface.evaluate((surface) => {
           const svg = surface.querySelector(":scope > svg");
           return {
@@ -358,6 +409,92 @@ test.describe("Electron Mermaid parity", () => {
         exact: true,
       });
       await expect(closeFullscreenButton).toBeVisible();
+
+      const fullscreenCanvas = detailedDiagram.locator(
+        ".mermaid-diagram-canvas",
+      );
+      const fullscreenSurface = detailedDiagram.locator(
+        ".mermaid-render-surface",
+      );
+      const fullscreenOutput = detailedDiagram.locator(
+        ".mermaid-diagram-viewport-tools output",
+      );
+      await expect(
+        detailedDiagram.getByRole("toolbar", {
+          name: "کنترل نمای نمودار",
+          exact: true,
+        }),
+      ).toBeVisible();
+      const fullscreenBox = await fullscreenCanvas.boundingBox();
+      expect(fullscreenBox).not.toBeNull();
+      await window.mouse.move(
+        fullscreenBox!.x + fullscreenBox!.width / 2,
+        fullscreenBox!.y + fullscreenBox!.height / 2,
+      );
+      await window.mouse.wheel(0, -180);
+      await expect(fullscreenOutput).not.toHaveText("۱۰۰٪");
+
+      const zoomedTransform = await fullscreenSurface.evaluate(
+        (surface) => (surface as HTMLElement).style.transform,
+      );
+      await window.mouse.down();
+      await window.mouse.move(
+        fullscreenBox!.x + fullscreenBox!.width / 2 + 86,
+        fullscreenBox!.y + fullscreenBox!.height / 2 + 52,
+        { steps: 5 },
+      );
+      await window.mouse.up();
+      await expect
+        .poll(() =>
+          fullscreenSurface.evaluate(
+            (surface) => (surface as HTMLElement).style.transform,
+          ),
+        )
+        .not.toBe(zoomedTransform);
+
+      await detailedDiagram
+        .getByRole("button", {
+          name: "جا دادن کامل نمودار در کادر",
+          exact: true,
+        })
+        .click();
+      await expect
+        .poll(() =>
+          detailedDiagram.evaluate((diagram) => {
+            const canvas = diagram.querySelector(
+              ".mermaid-diagram-canvas",
+            );
+            const surface = diagram.querySelector(
+              ".mermaid-render-surface",
+            );
+            if (
+              !(canvas instanceof HTMLElement) ||
+              !(surface instanceof HTMLElement)
+            ) {
+              return false;
+            }
+            const canvasRect = canvas.getBoundingClientRect();
+            const surfaceRect = surface.getBoundingClientRect();
+            return (
+              surfaceRect.left >= canvasRect.left - 1 &&
+              surfaceRect.right <= canvasRect.right + 1 &&
+              surfaceRect.top >= canvasRect.top - 1 &&
+              surfaceRect.bottom <= canvasRect.bottom + 1
+            );
+          }),
+        )
+        .toBe(true);
+      const fittedTransform = await fullscreenSurface.evaluate(
+        (surface) => (surface as HTMLElement).style.transform,
+      );
+      expect(fittedTransform).toMatch(
+        /^translate\(-?\d+(?:\.\d+)?px, -?\d+(?:\.\d+)?px\) scale\((?:0?\.\d+|1)\)$/,
+      );
+      await expect(fullscreenOutput).toHaveAttribute(
+        "aria-label",
+        /بزرگ‌نمایی \d+ درصد/u,
+      );
+
       await closeFullscreenButton.click();
       await expect(detailedDiagram).toHaveCount(0);
     } finally {
@@ -442,7 +579,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(aboutDialog).toBeVisible();
       await expect(aboutTitle).toBeFocused();
       await expect(
-        aboutDialog.getByText("0.18.1", { exact: true }),
+        aboutDialog.getByText("0.19.0", { exact: true }),
       ).toBeVisible();
       await expect(
         aboutDialog.getByRole("heading", {

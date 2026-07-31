@@ -2,15 +2,20 @@
 
 import {
   AlertTriangle,
+  Hand,
   LoaderCircle,
   Maximize2,
   Minimize2,
   PencilLine,
+  Scan,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { MermaidBlock } from "../mermaid/blocks";
 import { MermaidTheme } from "../mermaid/renderer";
 import { useMermaidRender } from "../mermaid/use-mermaid-render";
+import { useMermaidViewport } from "../mermaid/use-mermaid-viewport";
 
 export function MermaidDiagram({
   block,
@@ -24,11 +29,15 @@ export function MermaidDiagram({
   readingMode?: boolean;
 }) {
   const figureRef = useRef<HTMLElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
   const [fallbackFullscreen, setFallbackFullscreen] = useState(false);
   const renderState = useMermaidRender(block.code, theme);
   const svg = renderState.svg || renderState.lastValidSvg;
   const fullscreen = nativeFullscreen || fallbackFullscreen;
+  const viewport = useMermaidViewport({ enabled: fullscreen });
+  const { resetView: resetViewport } = viewport;
   const statusLabel = useMemo(() => {
     if (renderState.status === "loading") return "در حال ساخت نمودار";
     if (renderState.status === "invalid") return "نمودار نیاز به اصلاح دارد";
@@ -70,6 +79,10 @@ export function MermaidDiagram({
     return () => window.clearTimeout(resetFallback);
   }, [readingMode]);
 
+  useEffect(() => {
+    if (!fullscreen) resetViewport();
+  }, [fullscreen, resetViewport]);
+
   const toggleFullscreen = async () => {
     const figure = figureRef.current;
     if (!figure) return;
@@ -88,6 +101,9 @@ export function MermaidDiagram({
     }
   };
 
+  const fitDiagram = () =>
+    viewport.fitView(canvasRef.current, surfaceRef.current);
+
   const editFromDoubleClick = (event: MouseEvent<HTMLElement>) => {
     if (
       event.target instanceof Element &&
@@ -96,7 +112,7 @@ export function MermaidDiagram({
       return;
     }
     if (readingMode) {
-      void toggleFullscreen();
+      if (!fullscreen) void toggleFullscreen();
     } else {
       onEdit(block);
     }
@@ -113,14 +129,20 @@ export function MermaidDiagram({
       onDoubleClick={editFromDoubleClick}
     >
       <div
-        className="mermaid-diagram-canvas"
+        ref={canvasRef}
+        className={`mermaid-diagram-canvas ${
+          fullscreen ? "is-viewport-active" : ""
+        } ${viewport.panning ? "is-panning" : ""}`}
         aria-label={statusLabel}
         aria-busy={renderState.status === "loading"}
+        {...(fullscreen ? viewport.viewportHandlers : {})}
       >
         {svg ? (
           <div
+            ref={surfaceRef}
             className="mermaid-svg mermaid-render-surface"
             data-mermaid-render-key={renderState.renderKey}
+            style={fullscreen ? { transform: viewport.transform } : undefined}
             // Mermaid runs in strict mode and the SVG is sanitized again locally.
             dangerouslySetInnerHTML={{ __html: svg }}
           />
@@ -130,6 +152,52 @@ export function MermaidDiagram({
             <span>در حال ساخت نمودار…</span>
           </div>
         ) : null}
+        {readingMode && fullscreen && svg && (
+          <div
+            className="mermaid-diagram-viewport-tools mermaid-preview-tools"
+            role="toolbar"
+            aria-label="کنترل نمای نمودار"
+          >
+            <span
+              className="mermaid-pan-indicator"
+              title="برای جابه‌جایی، نمودار یا فضای خالی را بکشید"
+            >
+              <Hand size={17} aria-hidden="true" />
+              <span className="visually-hidden">
+                ابزار دست فعال است؛ برای جابه‌جایی بکشید
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => viewport.zoomBy(-0.15)}
+              aria-label="کوچک‌نمایی نمودار"
+              title="کوچک‌نمایی"
+            >
+              <ZoomOut size={17} aria-hidden="true" />
+            </button>
+            <output
+              aria-label={`بزرگ‌نمایی ${viewport.scalePercent} درصد`}
+            >
+              {viewport.scalePercent.toLocaleString("fa-IR")}٪
+            </output>
+            <button
+              type="button"
+              onClick={() => viewport.zoomBy(0.15)}
+              aria-label="بزرگ‌نمایی نمودار"
+              title="بزرگ‌نمایی"
+            >
+              <ZoomIn size={17} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={fitDiagram}
+              aria-label="جا دادن کامل نمودار در کادر"
+              title="نمایش کامل طول و عرض نمودار در کادر"
+            >
+              <Scan size={17} aria-hidden="true" />
+            </button>
+          </div>
+        )}
         <button
           className="mermaid-diagram-action"
           type="button"
@@ -181,7 +249,7 @@ export function MermaidDiagram({
       <figcaption className="mermaid-diagram-hint">
         {readingMode
           ? fullscreen
-            ? "برای بازگشت به متن، Escape را بزنید یا نمای تمام‌صفحه را ببندید."
+            ? "با چرخ ماوس زوم کنید، برای جابه‌جایی بکشید و با Escape به متن برگردید."
             : "برای بررسی دقیق نمودار، دکمهٔ تمام‌صفحه را بزنید."
           : "برای ویرایش همین نمودار، دوبار کلیک کنید."}
       </figcaption>
