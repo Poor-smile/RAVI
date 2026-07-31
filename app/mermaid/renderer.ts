@@ -32,6 +32,10 @@ function hashText(value: string) {
   return (hash >>> 0).toString(36);
 }
 
+export function mermaidRenderKey(code: string, theme: MermaidTheme) {
+  return `${theme}:${hashText(code)}`;
+}
+
 function parseError(error: unknown): MermaidRenderError {
   const technical =
     error instanceof Error ? error.message : String(error || "Unknown error");
@@ -72,15 +76,21 @@ function limitError(code: string): MermaidRenderError | null {
   return null;
 }
 
-function sanitizeSvg(svg: string) {
-  const documentNode = new DOMParser().parseFromString(svg, "image/svg+xml");
+export function sanitizeMermaidSvg(svg: string) {
+  const parser = new DOMParser();
+  let documentNode = parser.parseFromString(svg, "image/svg+xml");
+  let root = documentNode.documentElement;
   if (documentNode.querySelector("parsererror")) {
-    throw new Error("خروجی SVG قابل پردازش نبود.");
+    const htmlDocument = parser.parseFromString(svg, "text/html");
+    const htmlSvg = htmlDocument.querySelector("svg");
+    if (!htmlSvg) throw new Error("خروجی SVG قابل پردازش نبود.");
+    documentNode = htmlDocument;
+    root = htmlSvg;
   }
 
   documentNode
     .querySelectorAll(
-      "script, foreignObject, iframe, object, embed, audio, video, image, use",
+      "script, iframe, object, embed, audio, video, image, img",
     )
     .forEach((node) => node.remove());
 
@@ -98,11 +108,16 @@ function sanitizeSvg(svg: string) {
         name === "src" ||
         name === "style"
       ) {
+        const isSafeLocalUse =
+          element.localName === "use" &&
+          (name === "href" || name === "xlink:href") &&
+          /^#[A-Za-z_][\w:.-]*$/u.test(value);
+        const hasExternalOrExecutableValue =
+          /(?:javascript:|data:|https?:|file:|\/\/)/iu.test(value);
         if (
-          /(?:javascript:|data:|https?:|file:|\/\/)/iu.test(value) ||
-          name === "href" ||
-          name === "xlink:href" ||
-          name === "src"
+          hasExternalOrExecutableValue ||
+          name === "src" ||
+          ((name === "href" || name === "xlink:href") && !isSafeLocalUse)
         ) {
           element.removeAttribute(attribute.name);
         }
@@ -110,7 +125,6 @@ function sanitizeSvg(svg: string) {
     }
   });
 
-  const root = documentNode.documentElement;
   root.setAttribute("role", "img");
   root.setAttribute("focusable", "false");
   root.setAttribute("preserveAspectRatio", "xMidYMid meet");
@@ -131,6 +145,7 @@ async function renderUncached(code: string, theme: MermaidTheme) {
     securityLevel: "strict",
     theme: theme === "dark" ? "dark" : "default",
     fontFamily: "IRANSansX, IRANSans, Tahoma, Arial, sans-serif",
+    htmlLabels: false,
     suppressErrorRendering: true,
     deterministicIds: true,
     deterministicIDSeed: hashText(`${theme}:${code}`),
@@ -142,7 +157,7 @@ async function renderUncached(code: string, theme: MermaidTheme) {
     `raavi-mermaid-${hashText(code)}-${renderSequence}`,
     code,
   );
-  return sanitizeSvg(svg);
+  return sanitizeMermaidSvg(svg);
 }
 
 export async function renderMermaid(
@@ -151,7 +166,7 @@ export async function renderMermaid(
 ): Promise<MermaidRenderResult> {
   const limited = limitError(code);
   if (limited) return { ok: false, error: limited };
-  const key = `${theme}:${hashText(code)}`;
+  const key = mermaidRenderKey(code, theme);
   const cached = renderCache.get(key);
   if (cached) return { ok: true, svg: cached, fromCache: true };
 

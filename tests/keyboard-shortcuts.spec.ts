@@ -16,6 +16,8 @@ import {
   registryConflicts,
   resolveCommand,
 } from "../app/keyboard/command-resolver";
+import { mermaidRenderKey } from "../app/mermaid/renderer";
+import { MERMAID_SAMPLES } from "../app/mermaid/samples";
 
 const windowsWeb: CommandEnvironment = {
   platform: "windows",
@@ -212,6 +214,159 @@ test.describe("command resolver", () => {
   });
 });
 
+const expectedMermaidLabels: Record<string, string[]> = {
+  flowchart: ["شروع", "نیاز به بازبینی؟", "ویرایش سند", "انتشار"],
+  sequence: ["کاربر", "راوی", "فایل را باز کن"],
+  class: ["سند", "نمودار", "ذخیره"],
+  state: ["پیش_نویس", "بازبینی", "منتشر_شده"],
+  er: ["DOCUMENT", "DIAGRAM", "contains"],
+  requirement: ["readability", "متن و نمودار خوانا باشند", "preview"],
+  architecture: ["راوی", "ویرایشگر", "پیش نمایش"],
+  c4: ["زمینه سامانه راوی", "خواننده", "راوی"],
+  gantt: ["برنامه انتشار", "نمونه اولیه", "پیاده سازی"],
+  timeline: ["مسیر سند", "پیش نویس", "انتشار"],
+  kanban: ["برای انجام", "طراحی نمودار", "انجام شده"],
+  gitgraph: ["شروع", "نمودار", "انتشار"],
+  pie: ["زمان مطالعه", "مطالعه", "یادداشت"],
+  xychart: ["رشد نسخه ها", "تغییرات"],
+  sankey: ["Input", "Reading", "Publish"],
+  mindmap: ["راوی", "مطالعه", "Markdown"],
+  journey: ["ساخت یک سند", "باز کردن فایل", "ذخیره نسخه"],
+  quadrant: ["اولویت قابلیت ها", "جستجو", "نمودار"],
+};
+
+test.describe("Electron Mermaid parity", () => {
+  test.skip(process.platform !== "win32", "The packaged desktop target is Windows.");
+
+  test("keeps every sample identical from Studio to document", async () => {
+    test.slow();
+    test.setTimeout(150_000);
+    const projectRoot = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+    );
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "raavi-mermaid-playwright-"),
+    );
+    const app = await electron.launch({
+      cwd: projectRoot,
+      args: [
+        path.join(projectRoot, "desktop", "main.mjs"),
+        `--user-data-dir=${userDataPath}`,
+      ],
+      timeout: 20_000,
+    });
+
+    try {
+      const window = await app.firstWindow();
+      const editor = window.locator("#markdown-editor");
+      const openStudio = window.getByRole("button", {
+        name: "ساخت نمودار Mermaid",
+        exact: true,
+      });
+      await expect(editor).toBeVisible();
+      await expect(openStudio).toBeVisible();
+      const theme = ((await window
+        .locator("html")
+        .getAttribute("data-theme")) || "light") as "light" | "dark";
+
+      for (const sample of MERMAID_SAMPLES) {
+        await editor.fill("");
+        await editor.focus();
+        await openStudio.click();
+
+        const studio = window.getByRole("dialog", {
+          name: "استودیوی نمودار",
+          exact: true,
+        });
+        await expect(studio).toBeVisible();
+        await studio
+          .getByRole("button", { name: "نمونه‌ها", exact: true })
+          .click();
+        const sampleLibrary = studio.locator("#mermaid-sample-library");
+        const sampleButton = sampleLibrary
+          .getByRole("button")
+          .filter({ hasText: sample.title });
+        await expect(sampleButton).toHaveCount(1);
+        await sampleButton.click();
+
+        const expectedKey = mermaidRenderKey(sample.code, theme);
+        const studioSurface = studio.locator(".mermaid-render-surface");
+        await expect(studioSurface).toHaveAttribute(
+          "data-mermaid-render-key",
+          expectedKey,
+        );
+        const studioRender = await studioSurface.evaluate((surface) => {
+          const svg = surface.querySelector(":scope > svg");
+          return {
+            svg: svg?.outerHTML ?? "",
+            text: svg?.textContent ?? "",
+          };
+        });
+        const normalizedStudioText = studioRender.text.replace(/\s+/gu, " ");
+        for (const label of expectedMermaidLabels[sample.id] ?? []) {
+          expect(
+            normalizedStudioText,
+            `${sample.id} Studio should show "${label}"`,
+          ).toContain(label.replace(/\s+/gu, " "));
+        }
+
+        await studio
+          .getByRole("button", { name: "اعمال در سند", exact: true })
+          .click();
+        const documentSurface = window.locator(
+          `.mermaid-render-surface[data-mermaid-render-key="${expectedKey}"]`,
+        );
+        await expect(documentSurface).toBeVisible();
+        const documentRender = await documentSurface.evaluate((surface) => {
+          const svg = surface.querySelector(":scope > svg");
+          return {
+            svg: svg?.outerHTML ?? "",
+            text: svg?.textContent ?? "",
+          };
+        });
+
+        expect(documentRender.svg, `${sample.id} SVG parity`).toBe(
+          studioRender.svg,
+        );
+        expect(documentRender.text, `${sample.id} label parity`).toBe(
+          studioRender.text,
+        );
+      }
+
+      await window
+        .getByRole("button", { name: "حالت مطالعه", exact: true })
+        .click();
+      const fullscreenButton = window.getByRole("button", {
+        name: "نمایش تمام‌صفحهٔ نمودار",
+        exact: true,
+      });
+      await expect(fullscreenButton).toBeVisible();
+      await expect(
+        window.getByRole("button", {
+          name: "ویرایش این نمودار",
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      await fullscreenButton.click();
+      const detailedDiagram = window.locator(
+        ".mermaid-diagram:fullscreen, .mermaid-diagram.is-detail-open",
+      );
+      await expect(detailedDiagram).toBeVisible();
+      const closeFullscreenButton = window.getByRole("button", {
+        name: "بستن نمای تمام‌صفحهٔ نمودار",
+        exact: true,
+      });
+      await expect(closeFullscreenButton).toBeVisible();
+      await closeFullscreenButton.click();
+      await expect(detailedDiagram).toHaveCount(0);
+    } finally {
+      await app.close();
+      await rm(userDataPath, { recursive: true, force: true });
+    }
+  });
+});
+
 test.describe("Electron keyboard integration", () => {
   test.skip(process.platform !== "win32", "The packaged desktop target is Windows.");
 
@@ -287,7 +442,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(aboutDialog).toBeVisible();
       await expect(aboutTitle).toBeFocused();
       await expect(
-        aboutDialog.getByText("0.18.0", { exact: true }),
+        aboutDialog.getByText("0.18.1", { exact: true }),
       ).toBeVisible();
       await expect(
         aboutDialog.getByRole("heading", {
@@ -302,10 +457,11 @@ test.describe("Electron keyboard integration", () => {
         }),
       ).toBeVisible();
       await expect(
-        aboutDialog.getByText(
-          "پشتیبانی امن و lazy از بلوک‌های استاندارد Mermaid",
-          { exact: true },
-        ),
+        aboutDialog
+          .getByRole("listitem")
+          .filter({
+            hasText: "پشتیبانی امن و lazy از بلوک‌های استاندارد Mermaid",
+          }),
       ).toBeVisible();
       await expect(topbar).toHaveAttribute("inert", "");
       await window.keyboard.press("Escape");

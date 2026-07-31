@@ -494,7 +494,8 @@ export function MermaidStudio({
           >
             {activeSvg ? (
               <div
-                className="mermaid-studio-svg"
+                className="mermaid-studio-svg mermaid-render-surface"
+                data-mermaid-render-key={renderState.renderKey}
                 style={{
                   transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
                 }}

@@ -4845,6 +4845,7 @@ export default function Home() {
                             block={block}
                             theme={themeMode}
                             onEdit={openMermaidStudio}
+                            readingMode={readingMode}
                           />
                         );
                       }

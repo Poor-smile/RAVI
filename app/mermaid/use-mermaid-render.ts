@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   MermaidRenderError,
   MermaidTheme,
+  mermaidRenderKey,
   renderMermaid,
 } from "./renderer";
 
@@ -11,6 +12,7 @@ export type MermaidRenderState = {
   status: "idle" | "loading" | "valid" | "invalid";
   svg: string;
   lastValidSvg: string;
+  renderKey: string;
   error: MermaidRenderError | null;
 };
 
@@ -18,6 +20,7 @@ const INITIAL_STATE: MermaidRenderState = {
   status: "idle",
   svg: "",
   lastValidSvg: "",
+  renderKey: "",
   error: null,
 };
 
@@ -54,6 +57,7 @@ export function useMermaidRender(
             status: "valid",
             svg: result.svg,
             lastValidSvg: result.svg,
+            renderKey: mermaidRenderKey(code, theme),
             error: null,
           });
           return;
