@@ -14,6 +14,7 @@
   "scripts": {
     "dev": "cross-env WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "cross-env WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
+    "deploy:worker": "npm run build && wrangler deploy --config dist/server/wrangler.json",
     "start": "node desktop/serve.mjs",
     "test": "npm run build && node --import tsx --test tests/mermaid-blocks.test.ts tests/mermaid-samples.test.ts tests/mermaid-viewport.test.ts tests/raavi-assets.test.ts && node --test tests/rendered-html.test.mjs tests/desktop-server.test.mjs && playwright test",
     "test:keyboard": "playwright test tests/keyboard-shortcuts.spec.ts",

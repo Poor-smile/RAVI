@@ -12,8 +12,15 @@ const { d1, r2 } = hostingConfig;
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
 const localBindingConfig = {
+  name: "raavi-markdown-viewer",
   main: "./worker/index.ts",
   compatibility_flags: ["nodejs_compat"],
+  routes: [
+    {
+      pattern: "raviweb.poorsmile.ir",
+      custom_domain: true,
+    },
+  ],
   d1_databases: d1
     ? [
         {
