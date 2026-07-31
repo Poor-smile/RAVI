@@ -1,0 +1,626 @@
+<!--
+THESIS: خودِ معرفی راوی یک سند Markdown زنده است؛ صفحه از هیروی عمومی نرم‌افزار و ردیف کارت‌های تکراری دوری می‌کند.
+OWN-WORLD: کاغذ سرد، مرکب زغالی، آبی نمونه‌خوان، خط صحافی و کنترل‌های کم‌گردِ میز راوی.
+STORY: بازدیدکننده در چند ثانیه می‌فهمد راوی چیست، همان‌جا Markdown را تغییر می‌دهد، شواهد واقعی را می‌بیند و برای استفاده یا حمایت تصمیم می‌گیرد.
+FIRST VIEWPORT: پیام اصلی و تصویر واقعی محصول روبه‌روی هم‌اند؛ CTA دانلود و ورود به تجربهٔ زنده بدون جست‌وجو دیده می‌شوند.
+FORM: متن و نتیجه در دو برگ موازی، با اتصال مستقیم هر ادعا به نمای واقعی محصول؛ ساختار منتخب «سند زنده» با staging متن/ساخت کنار هم.
+-->
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="راوی؛ راه ساده و رایگان برای یادگیری، خواندن، نوشتن و مدیریت فایل‌های Markdown فارسی، مناسب کار با محتوای هوش مصنوعی."
+    />
+    <meta name="theme-color" content="#171b18" />
+    <meta name="color-scheme" content="light" />
+    <title>راوی — Markdown فارسی، ساده و خوانا</title>
+    <link
+      rel="preload"
+      href="./assets/fonts/IRANSansX-Regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="./assets/fonts/IRANSansX-Bold.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="./style.css?v=1.0.0-7" />
+    <script src="./app.js?v=1.0.0-5" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">رفتن به محتوای اصلی</a>
+
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="راوی؛ بازگشت به ابتدای صفحه">
+        <span class="brand-mark" aria-hidden="true">ر</span>
+        <span class="brand-copy">
+          <strong>راوی</strong>
+          <small>میز Markdown فارسی</small>
+        </span>
+      </a>
+
+      <nav class="site-nav" aria-label="راهنمای صفحه">
+        <a href="#what-is-markdown">Markdown چیست؟</a>
+        <a href="#live-demo">تجربهٔ زنده</a>
+        <a href="#features">ویژگی‌ها</a>
+      </nav>
+
+      <a class="header-action" href="#download">دریافت راوی</a>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="hero-kicker">
+            <span aria-hidden="true"></span>
+            نسخهٔ پایدار <bdi dir="ltr">1.0.0</bdi>
+          </p>
+          <h1 id="hero-title">Markdown؛ ساده و مرتب.</h1>
+          <p class="hero-lead">
+            Markdown روشی ساده برای نوشتن متن‌های مرتب است؛ از یادداشت و محتوای
+            هوش مصنوعی تا مستندات کاری. راوی خواندن و نوشتن آن را برای فارسی
+            روان و بی‌دردسر می‌کند.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#download">
+              دانلود رایگان
+              <span aria-hidden="true">←</span>
+            </a>
+            <a class="button button-secondary" href="#live-demo">
+              Markdown را امتحان کنید
+            </a>
+          </div>
+          <ul class="hero-trust" aria-label="ویژگی‌های اصلی">
+            <li><span aria-hidden="true">✓</span> فارسی و انگلیسی در جهت درست</li>
+            <li><span aria-hidden="true">✓</span> نگه‌داری محلی فایل‌ها</li>
+            <li><span aria-hidden="true">✓</span> رایگان، همیشه</li>
+          </ul>
+        </div>
+
+        <figure class="hero-visual">
+          <div class="proof-corner" aria-hidden="true"></div>
+          <img
+            src="./assets/screens/raavi-workspace.webp"
+            alt="نمای اصلی راوی با ویرایشگر Markdown، پیش‌نمایش زنده و کتابخانهٔ محلی"
+            width="1207"
+            height="699"
+            fetchpriority="high"
+          />
+          <figcaption>
+            <span>میز واقعی راوی</span>
+            ویرایش، پیش‌نمایش و کتابخانه در یک قاب
+          </figcaption>
+        </figure>
+      </section>
+
+      <section
+        class="markdown-primer"
+        id="what-is-markdown"
+        aria-labelledby="markdown-primer-title"
+      >
+        <div class="markdown-primer-heading">
+          <p class="section-kicker">پیش از راوی</p>
+          <h2 id="markdown-primer-title">Markdown چیست؟</h2>
+          <p>
+            Markdown یک روش ساده برای مرتب‌کردن متن با نشانه‌هایی مثل
+            <code>#</code> برای تیتر و <code>-</code> برای فهرست است. نتیجه هم
+            برای انسان خواناست و هم ابزارهای دیجیتال به‌خوبی آن را می‌فهمند.
+          </p>
+        </div>
+
+        <div class="markdown-primer-body">
+          <div class="markdown-example" aria-label="نمونهٔ سادهٔ Markdown">
+            <span>متن ساده</span>
+            <code dir="rtl"># عنوان<br />- مورد اول<br />- مورد دوم</code>
+            <span aria-hidden="true">←</span>
+            <strong>یک عنوان و فهرست مرتب</strong>
+          </div>
+          <ol class="markdown-benefits">
+            <li>
+              <strong>یادگیری سریع</strong>
+              <span>برای شروع فقط چند نشانهٔ ساده کافی است.</span>
+            </li>
+            <li>
+              <strong>فایل سبک و ماندگار</strong>
+              <span>فایل <code>.md</code> متن ساده است و در ابزارهای مختلف باز می‌شود.</span>
+            </li>
+            <li>
+              <strong>مناسب کار با هوش مصنوعی</strong>
+              <span>بسیاری از ابزارهای هوش مصنوعی پاسخ‌ها و مستندات را با همین ساختار می‌سازند.</span>
+            </li>
+          </ol>
+        </div>
+
+        <aside class="markdown-bridge">
+          <strong>پس راوی چه کاری انجام می‌دهد؟</strong>
+          <p>
+            بیشتر ابزارهای Markdown برای متن انگلیسی ساخته شده‌اند. راوی فایل
+            را با جهت درست فارسی، پیش‌نمایش زنده و کتابخانهٔ محلی در اختیارتان
+            می‌گذارد تا به‌جای درگیری با تنظیمات، روی نوشته تمرکز کنید.
+          </p>
+        </aside>
+      </section>
+
+      <section
+        class="live-section"
+        id="live-demo"
+        aria-labelledby="live-title"
+      >
+        <div class="section-heading live-heading">
+          <div>
+            <p class="section-kicker">یک فایل واقعی، نه تصویر نمایشی</p>
+            <h2 id="live-title">متن این معرفی را تغییر دهید.</h2>
+          </div>
+          <p>
+            منبع این بخش یک فایل <code>landing.md</code> است. هر تغییری فقط
+            در همین مرورگر پیش‌نمایش می‌شود و به جایی فرستاده نمی‌شود.
+          </p>
+        </div>
+
+        <div class="workbench" data-view="source">
+          <header class="workbench-header">
+            <div class="workbench-title">
+              <span class="sheet-mark" aria-hidden="true">ر</span>
+              <span>
+                <strong>برگهٔ زنده</strong>
+                <small id="editor-stats">در حال بارگذاری متن…</small>
+              </span>
+            </div>
+
+            <div class="mobile-tabs" role="tablist" aria-label="نمای نمونه">
+              <button
+                id="source-tab"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="source-pane"
+              >
+                متن Markdown
+              </button>
+              <button
+                id="preview-tab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="preview-pane"
+              >
+                پیش‌نمایش
+              </button>
+            </div>
+
+            <button
+              class="reset-button"
+              id="reset-content"
+              type="button"
+              disabled
+            >
+              بازگرداندن متن اصلی
+            </button>
+          </header>
+
+          <div class="workbench-body">
+            <section
+              class="editor-pane is-active"
+              id="source-pane"
+              role="tabpanel"
+              aria-labelledby="source-tab"
+              tabindex="-1"
+            >
+              <header class="pane-heading">
+                <span>برگهٔ ۱</span>
+                <strong>متن Markdown</strong>
+              </header>
+              <label class="visually-hidden" for="markdown-source">
+                متن Markdown قابل ویرایش
+              </label>
+              <textarea
+                id="markdown-source"
+                dir="auto"
+                spellcheck="false"
+                autocomplete="off"
+                aria-describedby="editor-privacy"
+              ></textarea>
+              <p id="editor-privacy">
+                ویرایش محلی است؛ محتوای این کادر ارسال یا ذخیره نمی‌شود.
+              </p>
+            </section>
+
+            <div class="registration-spine" aria-hidden="true">
+              <span></span>
+              <small>متن / نتیجه</small>
+              <span></span>
+            </div>
+
+            <section
+              class="preview-pane"
+              id="preview-pane"
+              role="tabpanel"
+              aria-labelledby="preview-tab"
+              tabindex="-1"
+            >
+              <header class="pane-heading">
+                <span>برگهٔ ۲</span>
+                <strong>پیش‌نمایش زنده</strong>
+              </header>
+              <article
+                class="markdown-preview"
+                id="markdown-preview"
+              >
+                <p class="loading-copy">در حال آماده‌کردن فایل معرفی…</p>
+              </article>
+            </section>
+          </div>
+
+          <p class="workbench-status" id="editor-status" aria-live="polite">
+            متن اصلی بدون تغییر است.
+          </p>
+        </div>
+      </section>
+
+      <section class="proof-section" id="features" aria-labelledby="proof-title">
+        <div class="section-heading proof-heading">
+          <div>
+            <p class="section-kicker">فراتر از یک نمایشگر ساده</p>
+            <h2 id="proof-title">یک میز کامل برای فایل‌های متنی شما.</h2>
+          </div>
+          <p>
+            راوی برای کاربر فارسی‌زبان ساخته شده است؛ نه با برگرداندن یک رابط
+            انگلیسی، بلکه با رفتار درست متن، مطالعه و فایل از ابتدا.
+          </p>
+        </div>
+
+        <article class="feature-band feature-library">
+          <div class="feature-copy">
+            <span class="feature-index" aria-hidden="true">قفسه</span>
+            <h3>کتابخانه‌ای که روی دستگاه می‌ماند</h3>
+            <p>
+              پوشه‌های Markdown را با اجازهٔ خودتان اضافه کنید، میان فایل‌ها
+              جست‌وجو کنید و نوشته‌های مهم را سنجاق بزنید. مسیر و محتوای فایل
+              برای ساخت کتابخانه به اینترنت فرستاده نمی‌شود.
+            </p>
+            <ul>
+              <li>اسکن پوشه و زیرپوشه‌ها</li>
+              <li>جست‌وجوی فایل‌های <code>.md</code> و <code>.ravi</code></li>
+              <li>سنجاق فایل‌های پراستفاده</li>
+            </ul>
+          </div>
+          <figure>
+            <img
+              src="./assets/screens/raavi-library.webp"
+              alt="نمای کتابخانهٔ محلی راوی با جست‌وجو، پوشه‌ها و سنجاق‌شده‌ها"
+              width="600"
+              height="600"
+              loading="lazy"
+            />
+          </figure>
+        </article>
+
+        <article class="feature-band feature-reading">
+          <figure>
+            <img
+              src="./assets/screens/raavi-reading.webp"
+              alt="نمای آرام حالت مطالعهٔ راوی برای خواندن یک فایل Markdown فارسی"
+              width="1207"
+              height="699"
+              loading="lazy"
+            />
+          </figure>
+          <div class="feature-copy">
+            <span class="feature-index" aria-hidden="true">مطالعه</span>
+            <h3>متن، وقتی باید فقط خوانده شود</h3>
+            <p>
+              حالت مطالعه ابزارهای اضافی را کنار می‌زند، نوشته را روی یک برگهٔ
+              خوانا می‌نشاند و فهرست فصل‌ها را از تیترهای Markdown می‌سازد.
+            </p>
+            <ul>
+              <li>فهرست خودکار فصل‌ها</li>
+              <li>تنظیم اندازهٔ نوشته</li>
+              <li>نمای مناسب متن‌های طولانی</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="feature-band feature-mermaid">
+          <div class="feature-copy">
+            <span class="feature-index" aria-hidden="true">نمودار</span>
+            <h3>Mermaid، بخشی از خود سند</h3>
+            <p>
+              نمودار را به‌صورت بلوک استاندارد Mermaid نگه دارید و در
+              استودیوی فارسی با پیش‌نمایش زنده، بزرگ‌نمایی، جابه‌جایی و نمونه‌های
+              آماده ویرایش کنید.
+            </p>
+            <ul>
+              <li>منبع استاندارد و قابل‌حمل</li>
+              <li>نمایش امن و محلی</li>
+              <li>نمای تمام‌صفحه برای بررسی جزئیات</li>
+            </ul>
+          </div>
+          <figure>
+            <img
+              src="./assets/screens/raavi-mermaid.webp"
+              alt="استودیوی Mermaid راوی با کد نمودار و پیش‌نمایش زندهٔ فارسی"
+              width="1207"
+              height="699"
+              loading="lazy"
+            />
+          </figure>
+        </article>
+
+        <aside class="ravi-explainer" aria-labelledby="ravi-format-title">
+          <div>
+            <p class="section-kicker">برای کار روی نوشته‌های مشترک</p>
+            <h3 id="ravi-format-title">یادداشت‌ها را همراه خود فایل بفرستید.</h3>
+          </div>
+          <div>
+            <p>
+              می‌توانید روی فایل یکدیگر یادداشت بگذارید، بخش‌های مهم را برجسته
+              کنید یا حاشیه بنویسید و سپس آن را با پسوند <code>.ravi</code>
+              برای هم بفرستید.
+            </p>
+            <p>
+              فایل <code>.ravi</code> علاوه بر متن اصلی، تصویرهای استفاده‌شده،
+              یادداشت‌ها، برجسته‌سازی‌ها و حاشیه‌نویسی‌ها را نیز همراه خود نگه
+              می‌دارد. این قالب اختصاصی راوی است و فقط با نرم‌افزار راوی باز
+              می‌شود؛ برای نوشته‌های معمولی همچنان می‌توانید از <code>.md</code>
+              استفاده کنید.
+            </p>
+          </div>
+        </aside>
+      </section>
+
+      <section class="local-first" aria-labelledby="local-title">
+        <div class="local-mark" aria-hidden="true">✓</div>
+        <div>
+          <p class="section-kicker">حریم خصوصی، نه یک گزینهٔ اضافه</p>
+          <h2 id="local-title">فایل روی همان دستگاه می‌ماند.</h2>
+        </div>
+        <ul>
+          <li>بدون حساب کاربری</li>
+          <li>بدون آپلود محتوای سند</li>
+          <li>دسترسی به پوشه فقط با اجازهٔ شما</li>
+          <li>تنظیمات و آخرین نوشته به‌صورت محلی</li>
+        </ul>
+      </section>
+
+      <section class="download-section" id="download" aria-labelledby="download-title">
+        <div class="section-heading download-heading">
+          <div>
+            <p class="section-kicker">دریافت راوی</p>
+            <h2 id="download-title">رایگان برای دسکتاپ.</h2>
+          </div>
+          <div class="download-heading-copy">
+            <p>
+              نسخه‌های Windows و Linux همین حالا آماده‌اند. نسخهٔ macOS پس از
+              آماده‌شدن در همین بخش قرار می‌گیرد.
+            </p>
+            <button
+              class="button button-secondary changelog-trigger"
+              id="open-changelog"
+              type="button"
+              aria-haspopup="dialog"
+              aria-controls="changelog-dialog"
+            >
+              <span aria-hidden="true">☷</span>
+              دفتر تغییرات
+            </button>
+          </div>
+        </div>
+
+        <div class="download-ledger" aria-label="نسخه‌های قابل دریافت">
+          <article class="download-row download-windows">
+            <div class="platform-mark" aria-hidden="true">Win</div>
+            <div class="release-copy">
+              <h3>Windows</h3>
+              <p>نصب آسان · نسخهٔ <bdi dir="ltr">1.0.0</bdi> · ۱۸۳٫۴۰ مگابایت</p>
+              <details class="release-details">
+                <summary>جزئیات و بررسی اصالت فایل</summary>
+                <div class="release-details-body">
+                  <dl>
+                    <div><dt>معماری</dt><dd><bdi dir="ltr">x64</bdi></dd></div>
+                    <div><dt>نوع فایل</dt><dd><bdi dir="ltr">EXE</bdi></dd></div>
+                  </dl>
+                  <p>
+                    x64 برای بیشتر رایانه‌های امروزی است. کد SHA256 کمک می‌کند
+                    مطمئن شوید فایل دانلودشده دقیقاً همان نسخهٔ رسمی است.
+                  </p>
+                  <div class="release-hash-row">
+                    <code class="release-hash" dir="ltr">40530BD4ABAB38580F3CF90B1CDF7FE69A3843F2A04FCCC2862A132859832D2A</code>
+                    <button
+                      class="hash-copy-button"
+                      type="button"
+                      data-copy-hash="40530BD4ABAB38580F3CF90B1CDF7FE69A3843F2A04FCCC2862A132859832D2A"
+                      aria-label="کپی‌کردن کد بررسی فایل Windows"
+                    >کپی کد</button>
+                  </div>
+                </div>
+              </details>
+            </div>
+            <span class="release-state state-ready">آمادهٔ دانلود</span>
+            <a
+              class="button button-primary"
+              href="./downloads/Raavi-Setup-1.0.0-x64.exe"
+              download
+              aria-label="دانلود راوی 1.0.0 برای Windows، حجم ۱۸۳٫۴۰ مگابایت"
+            >
+              دانلود Windows
+            </a>
+          </article>
+
+          <article class="download-row">
+            <div class="platform-mark" aria-hidden="true">mac</div>
+            <div>
+              <h3>macOS</h3>
+              <p>برای رایانه‌های Apple silicon و Intel</p>
+            </div>
+            <span class="release-state">هنوز منتشر نشده</span>
+            <span class="button button-disabled" aria-disabled="true">
+              به‌زودی
+            </span>
+          </article>
+
+          <article class="download-row download-linux">
+            <div class="platform-mark" aria-hidden="true">Linux</div>
+            <div class="release-copy">
+              <h3>Linux</h3>
+              <p>بستهٔ قابل‌حمل · نسخهٔ <bdi dir="ltr">1.0.0</bdi> · ۲۳۳٫۶۲ مگابایت</p>
+              <details class="release-details">
+                <summary>جزئیات و بررسی اصالت فایل</summary>
+                <div class="release-details-body">
+                  <dl>
+                    <div><dt>معماری</dt><dd><bdi dir="ltr">x64</bdi></dd></div>
+                    <div><dt>نوع فایل</dt><dd><bdi dir="ltr">tar.gz</bdi></dd></div>
+                  </dl>
+                  <p>
+                    x64 برای بیشتر رایانه‌های امروزی است. کد SHA256 کمک می‌کند
+                    مطمئن شوید فایل دانلودشده دقیقاً همان نسخهٔ رسمی است.
+                  </p>
+                  <div class="release-hash-row">
+                    <code class="release-hash" dir="ltr">0C363E8F39D479F4B983A7C5DFA8B43D40DE3039B8F0FA98FBF7D168AA59BCA2</code>
+                    <button
+                      class="hash-copy-button"
+                      type="button"
+                      data-copy-hash="0C363E8F39D479F4B983A7C5DFA8B43D40DE3039B8F0FA98FBF7D168AA59BCA2"
+                      aria-label="کپی‌کردن کد بررسی فایل Linux"
+                    >کپی کد</button>
+                  </div>
+                </div>
+              </details>
+            </div>
+            <span class="release-state state-ready">آمادهٔ دانلود</span>
+            <a
+              class="button button-primary"
+              href="./downloads/Raavi-1.0.0-linux-x64-portable.tar.gz"
+              download
+              aria-label="دانلود راوی 1.0.0 برای Linux، حجم ۲۳۳٫۶۲ مگابایت"
+            >
+              دانلود Linux
+            </a>
+          </article>
+        </div>
+        <p class="visually-hidden" id="hash-copy-status" aria-live="polite"></p>
+      </section>
+
+      <section class="support-section" id="support" aria-labelledby="support-title">
+        <div class="support-copy">
+          <p class="section-kicker">توسعهٔ مستقل</p>
+          <h2 id="support-title">راوی رایگان می‌ماند.</h2>
+          <p>
+            حمایت داوطلبانهٔ شما برای نگه‌داری، توسعه، ساخت نسخه‌های دسکتاپ
+            و هزینه‌های زیرساخت پروژه صرف می‌شود. مبلغ و متن پیام را خودتان
+            در صفحهٔ امن دارمت انتخاب می‌کنید.
+          </p>
+          <div class="support-actions">
+            <a
+              class="button button-support"
+              href="https://daramet.com/poorsmile"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span aria-hidden="true">♥</span>
+              حمایت در دارمت
+            </a>
+            <a
+              class="text-link"
+              href="https://t.me/poorsmile_crafts"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              کانال به‌روزرسانی‌ها
+              <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+
+        <aside class="support-note" aria-label="یادداشت حمایت">
+          <span class="note-pin" aria-hidden="true"></span>
+          <strong>نامتان کنار راوی می‌ماند</strong>
+          <p>
+            اگر دوست دارید نامتان در شناسنامهٔ داخل برنامه و بخش «حامیان راوی»
+            نمایش داده شود، نام دلخواه را در پیام حمایت بنویسید.
+          </p>
+        </aside>
+      </section>
+    </main>
+
+    <dialog
+      class="changelog-dialog"
+      id="changelog-dialog"
+      aria-labelledby="changelog-title"
+      aria-describedby="changelog-source-note"
+    >
+      <div class="changelog-sheet">
+        <header class="changelog-header">
+          <div class="changelog-heading">
+            <span class="sheet-mark" aria-hidden="true">ر</span>
+            <div>
+              <p>سند انتشار راوی</p>
+              <h1 id="changelog-title">دفتر تغییرات</h1>
+            </div>
+          </div>
+          <button
+            class="changelog-close"
+            id="close-changelog"
+            type="button"
+            aria-label="بستن دفتر تغییرات"
+          >
+            ×
+          </button>
+        </header>
+
+        <div class="changelog-source" id="changelog-source-note">
+          <span>منبع به‌روز این دفتر</span>
+          <code>CHANGELOG.md</code>
+        </div>
+
+        <div
+          class="changelog-content"
+          id="changelog-content"
+          tabindex="0"
+        >
+          <p class="changelog-loading" role="status">
+            در حال خواندن دفتر تغییرات…
+          </p>
+        </div>
+
+        <footer class="changelog-footer">
+          <span>هر بار که دفتر باز می‌شود، فایل منبع دوباره خوانده می‌شود.</span>
+          <button
+            class="button button-secondary"
+            id="dismiss-changelog"
+            type="button"
+          >
+            بستن
+          </button>
+        </footer>
+      </div>
+    </dialog>
+
+    <footer class="site-footer">
+      <div class="footer-brand">
+        <span class="brand-mark" aria-hidden="true">ر</span>
+        <span>
+          <strong>راوی</strong>
+          <small>ساخته‌شده برای متن فارسی</small>
+        </span>
+      </div>
+      <div class="footer-links">
+        <a href="#top">ابتدای صفحه</a>
+        <a href="https://ravi.poorsmile.ir">ravi.poorsmile.ir</a>
+      </div>
+    </footer>
+
+    <noscript>
+      <p class="noscript-note">
+        برای استفاده از پیش‌نمایش زندهٔ Markdown، جاوااسکریپت مرورگر را فعال
+        کنید. معرفی، تصاویر و لینک‌های دانلود بدون آن نیز در دسترس‌اند.
+      </p>
+    </noscript>
+  </body>
+</html>
