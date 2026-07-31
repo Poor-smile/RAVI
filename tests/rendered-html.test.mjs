@@ -86,9 +86,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /edit\.image/);
   assert.match(page, /imageModalOpen/);
   assert.match(page, /imageSourceMode/);
-  assert.match(page, /insertImageFromUrl/);
-  assert.match(page, /credentials: "omit"/);
-  assert.match(page, /referrerPolicy: "no-referrer"/);
+  assert.match(page, /insertImageUrl/);
+  assert.match(page, /در فایل \.ravi فقط URL ذخیره می‌شود/);
+  assert.match(page, /referrerPolicy=\{isRemoteImage \? "no-referrer"/);
   assert.match(page, /raaviImageUrl/);
   assert.match(page, /markdownWithEmbeddedRaaviImages/);
   assert.match(page, /localStorage/);
@@ -97,7 +97,7 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /scanMarkdownDirectory/);
   assert.match(page, /raaviDesktop/);
   assert.match(page, /کتابخانه/);
-  assert.match(page, /تصویر خارجی بارگذاری نشد/);
+  assert.match(page, /فقط خود نشانی در Markdown می‌ماند/);
   assert.match(page, /برای اشتراک سند همراه با هایلایت، کامنت و تصویرهای درج‌شده/);
   assert.match(page, /\.ravi/);
   assert.match(page, /capturePreviewSelection/);

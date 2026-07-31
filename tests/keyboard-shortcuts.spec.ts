@@ -630,8 +630,15 @@ test.describe("Electron keyboard integration", () => {
       await expect(
         imageDialog.locator('[data-editable-kind="imageUrl"]'),
       ).toBeVisible();
-      await imageDialog.press("Escape");
+      const remoteImageUrl = "https://example.com/reference-image.png";
+      await imageDialog
+        .locator('[data-editable-kind="imageUrl"]')
+        .fill(remoteImageUrl);
+      await imageDialog
+        .getByRole("button", { name: "درج نشانی", exact: true })
+        .click();
       await expect(imageDialog).toBeHidden();
+      await expect.poll(() => editor.inputValue()).toContain(remoteImageUrl);
       const selectAllEditorText = async () => {
         await editor.focus();
         await editor.press("Control+A");
@@ -667,7 +674,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(aboutDialog).toBeVisible();
       await expect(aboutTitle).toBeFocused();
       await expect(
-        aboutDialog.getByText("0.20.0", { exact: true }),
+        aboutDialog.getByText("0.20.1", { exact: true }),
       ).toBeVisible();
       await expect(
         aboutDialog.getByRole("heading", {

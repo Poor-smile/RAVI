@@ -903,27 +903,6 @@ function imageAltFromFileName(fileName: string) {
   );
 }
 
-function imageNameFromUrl(url: URL, mimeType: string) {
-  const extensionByMime: Record<string, string> = {
-    "image/gif": "gif",
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-  };
-  const fallback = `تصویر-دریافتی.${extensionByMime[mimeType] ?? "png"}`;
-  const lastPathPart = url.pathname.split("/").filter(Boolean).at(-1);
-  if (!lastPathPart) return fallback;
-
-  try {
-    const decoded = decodeURIComponent(lastPathPart)
-      .replace(/[\\/\r\n]/gu, "-")
-      .trim();
-    return decoded.slice(0, 240) || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function raaviMarkdownUrlTransform(url: string) {
   if (
     raaviImageAssetId(url) ||
@@ -954,7 +933,6 @@ export default function Home() {
   const [imageSourceMode, setImageSourceMode] =
     useState<ImageSourceMode>("local");
   const [imageUrl, setImageUrl] = useState("");
-  const [imageUrlLoading, setImageUrlLoading] = useState(false);
   const [imageInsertError, setImageInsertError] = useState("");
   const [newDocumentModalOpen, setNewDocumentModalOpen] = useState(false);
   const [newDocumentCreating, setNewDocumentCreating] = useState(false);
@@ -3422,7 +3400,10 @@ export default function Home() {
     setImageModalOpen(true);
   }, []);
 
-  const insertImageFromUrl = async () => {
+  const insertImageUrl = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
     let imageUrlValue: URL;
     try {
       imageUrlValue = new URL(imageUrl.trim());
@@ -3440,52 +3421,48 @@ export default function Home() {
       return;
     }
 
-    setImageUrlLoading(true);
     setImageInsertError("");
     setError("");
-    try {
-      const response = await fetch(imageUrlValue.toString(), {
-        credentials: "omit",
-        mode: "cors",
-        redirect: "error",
-        referrerPolicy: "no-referrer",
-      });
-      if (!response.ok) {
-        throw new Error("IMAGE_URL_HTTP_ERROR");
+
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    const editorContent = editor.value;
+    const selectedAlt = editorContent
+      .slice(start, end)
+      .replace(/[\[\]\r\n]/gu, " ")
+      .trim();
+    const pathName = imageUrlValue.pathname.split("/").filter(Boolean).at(-1);
+    let fallbackAlt = "تصویر اینترنتی";
+    if (pathName) {
+      try {
+        fallbackAlt = imageAltFromFileName(decodeURIComponent(pathName));
+      } catch {
+        // Keep the readable fallback when the path contains malformed escapes.
       }
-      const mimeType = response.headers
-        .get("content-type")
-        ?.split(";", 1)[0]
-        ?.trim()
-        .toLowerCase();
-      if (
-        !mimeType ||
-        !["image/gif", "image/jpeg", "image/png", "image/webp"].includes(
-          mimeType,
-        )
-      ) {
-        throw new Error("IMAGE_URL_TYPE_ERROR");
-      }
-      const blob = await response.blob();
-      const inserted = await insertImageAsset(
-        new File([blob], imageNameFromUrl(imageUrlValue, mimeType), {
-          type: mimeType,
-        }),
-      );
-      if (inserted) setImageModalOpen(false);
-    } catch (caughtError) {
-      const message =
-        caughtError instanceof Error && caughtError.message === "IMAGE_URL_HTTP_ERROR"
-          ? "تصویر از این نشانی دریافت نشد؛ نشانی را بررسی کنید."
-          : caughtError instanceof Error &&
-              caughtError.message === "IMAGE_URL_TYPE_ERROR"
-            ? "فقط تصویرهای PNG، JPEG، WebP و GIF قابل دریافت هستند."
-            : "این میزبان اجازهٔ دریافت تصویر را نداد؛ فایل را دانلود و از دستگاه انتخاب کنید.";
-      setError(message);
-      setImageInsertError(message);
-    } finally {
-      setImageUrlLoading(false);
     }
+    const imageMarkdown = `![${selectedAlt || fallbackAlt}](<${imageUrlValue.toString()}>)`;
+    const prefix =
+      start > 0 && !/\n$/u.test(editorContent.slice(0, start)) ? "\n\n" : "";
+    const suffix =
+      end < editorContent.length && !/^\n/u.test(editorContent.slice(end))
+        ? "\n\n"
+        : "";
+    const inserted = `${prefix}${imageMarkdown}${suffix}`;
+
+    setContent(
+      editorContent.slice(0, start) + inserted + editorContent.slice(end),
+    );
+    setImageModalOpen(false);
+    showNotice(
+      "نشانی تصویر درج شد؛ در فایل .ravi فقط URL ذخیره می‌شود و حجم فایل بالا نمی‌رود.",
+    );
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        editor.focus();
+        const caret = start + prefix.length + imageMarkdown.length;
+        editor.setSelectionRange(caret, caret);
+      }),
+    );
   };
 
   const restoreMermaidWorkspace = useCallback(
@@ -3706,7 +3683,7 @@ export default function Home() {
       return;
     }
     if (topLayer === "image") {
-      if (!imageUrlLoading) setImageModalOpen(false);
+      setImageModalOpen(false);
       return;
     }
     if (topLayer === "new") {
@@ -5242,32 +5219,16 @@ export default function Home() {
                       const isRemoteImage =
                         /^(?:https?:)?\/\//i.test(imageSource);
 
-                      if (isRemoteImage) {
-                        return (
-                          <span className="remote-media-blocked" role="note">
-                            <ShieldCheck size={18} aria-hidden="true" />
-                            <span>
-                              <strong>تصویر خارجی بارگذاری نشد</strong>
-                              <small>
-                                برای حفظ حریم خصوصی، تصویرهای اینترنتی خودکار
-                                دریافت نمی‌شوند.
-                              </small>
-                            </span>
-                            <a
-                              href={imageSource}
-                              target="_blank"
-                              rel="noreferrer noopener"
-                              referrerPolicy="no-referrer"
-                            >
-                              بازکردن تصویر
-                            </a>
-                          </span>
-                        );
-                      }
-
                       // Markdown can reference arbitrary local paths, so Next Image cannot pre-resolve them.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      return <img src={src} alt={alt ?? ""} loading="lazy" />;
+                      return (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={src}
+                          alt={alt ?? ""}
+                          loading="lazy"
+                          referrerPolicy={isRemoteImage ? "no-referrer" : undefined}
+                        />
+                      );
                     },
                   }}
                 >
@@ -5686,9 +5647,7 @@ export default function Home() {
       <AccessibleModal
         open={imageModalOpen}
         isTopLayer={topLayer === "image"}
-        onClose={() => {
-          if (!imageUrlLoading) setImageModalOpen(false);
-        }}
+        onClose={() => setImageModalOpen(false)}
         dialogRef={imageModalRef}
         initialFocusRef={
           imageSourceMode === "url" ? imageUrlInputRef : imageLocalPickerRef
@@ -5712,7 +5671,6 @@ export default function Home() {
             type="button"
             onClick={() => setImageModalOpen(false)}
             aria-label="بستن پنجرهٔ افزودن تصویر"
-            disabled={imageUrlLoading}
           >
             <X size={19} aria-hidden="true" />
           </button>
@@ -5722,12 +5680,12 @@ export default function Home() {
           className="save-modal-body image-insert-modal-body"
           onSubmit={(event) => {
             event.preventDefault();
-            if (imageSourceMode === "url") void insertImageFromUrl();
+            if (imageSourceMode === "url") insertImageUrl();
           }}
         >
           <p id="image-insert-modal-description">
-            تصویر را از دستگاه یا یک نشانی اینترنتی بیاورید. راوی آن را داخل
-            سند نگه می‌دارد تا همراه فایل <code>.ravi</code> قابل اشتراک بماند.
+            تصویر محلی همراه فایل <code>.ravi</code> ذخیره می‌شود؛ برای تصویر
+            اینترنتی فقط خود نشانی در Markdown می‌ماند.
           </p>
 
           <div className="image-source-tabs" role="tablist" aria-label="منبع تصویر">
@@ -5742,7 +5700,6 @@ export default function Home() {
                 setImageSourceMode("local");
                 setImageInsertError("");
               }}
-              disabled={imageUrlLoading}
             >
               <Upload size={16} aria-hidden="true" />
               فایل محلی
@@ -5759,7 +5716,6 @@ export default function Home() {
                 setImageInsertError("");
                 requestAnimationFrame(() => imageUrlInputRef.current?.focus());
               }}
-              disabled={imageUrlLoading}
             >
               <Link2 size={16} aria-hidden="true" />
               نشانی اینترنتی
@@ -5812,19 +5768,18 @@ export default function Home() {
                 />
               </label>
               <p className="image-url-privacy-note">
-                <Lock size={15} aria-hidden="true" />
-                نشانی فقط با زدن «دریافت و درج» خوانده می‌شود؛ سپس تصویر داخل
-                فایل <code>.ravi</code> قرار می‌گیرد و تصویرِ راه‌دور در پیش‌نمایش
-                بارگذاری نمی‌شود.
+                <Link2 size={15} aria-hidden="true" />
+                فقط URL ذخیره می‌شود؛ فایل سبک می‌ماند. نمایش تصویر به اینترنت
+                و در دسترس‌بودن نشانی وابسته است.
               </p>
               <div className="save-modal-actions image-url-actions">
                 <button
                   className="button button--primary"
                   type="submit"
-                  disabled={imageUrlLoading || !imageUrl.trim()}
+                  disabled={!imageUrl.trim()}
                 >
                   <ImagePlus size={17} aria-hidden="true" />
-                  {imageUrlLoading ? "در حال دریافت…" : "دریافت و درج"}
+                  درج نشانی
                 </button>
               </div>
             </section>
