@@ -82,6 +82,15 @@ test("ships the viewer implementation instead of starter assets", async () => {
   ]);
 
   assert.match(page, /ReactMarkdown/);
+  assert.match(page, /ImagePlus/);
+  assert.match(page, /edit\.image/);
+  assert.match(page, /imageModalOpen/);
+  assert.match(page, /imageSourceMode/);
+  assert.match(page, /insertImageFromUrl/);
+  assert.match(page, /credentials: "omit"/);
+  assert.match(page, /referrerPolicy: "no-referrer"/);
+  assert.match(page, /raaviImageUrl/);
+  assert.match(page, /markdownWithEmbeddedRaaviImages/);
   assert.match(page, /localStorage/);
   assert.match(page, /text\/markdown/);
   assert.match(page, /showDirectoryPicker/);
@@ -89,7 +98,7 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /raaviDesktop/);
   assert.match(page, /کتابخانه/);
   assert.match(page, /تصویر خارجی بارگذاری نشد/);
-  assert.match(page, /برای اشتراک سند همراه با هایلایت و کامنت/);
+  assert.match(page, /برای اشتراک سند همراه با هایلایت، کامنت و تصویرهای درج‌شده/);
   assert.match(page, /\.ravi/);
   assert.match(page, /capturePreviewSelection/);
   assert.match(page, /selection-mini-menu/);
@@ -142,6 +151,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(raavi, /RAVI_VERSION = 1/);
   assert.match(raavi, /makeRaaviDocument/);
   assert.match(raavi, /RaaviVersion/);
+  assert.match(raavi, /RAVI_IMAGE_URL_PREFIX/);
+  assert.match(raavi, /RaaviImageAsset/);
+  assert.match(raavi, /MAX_RAVI_IMAGE_BYTES/);
   assert.match(main, /document:save-ravi/);
   assert.match(main, /document:save-current/);
   assert.match(main, /renderer:ready/);
@@ -171,6 +183,8 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(aboutDialog, /دفتر تغییرات/);
   assert.match(aboutDialog, /نسخهٔ جاری/);
   assert.match(aboutDialog, /returnFocusRef/);
+  assert.match(aboutDialog, /0\.1\.0/);
+  assert.match(aboutDialog, /0\.20\.0/);
   assert.match(newDocumentDialog, /validateNewDocumentName/);
   assert.match(newDocumentDialog, /WINDOWS_RESERVED_NAMES/);
   assert.match(newDocumentDialog, /ساخت فایل جدید/);
@@ -190,6 +204,8 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(css, /@keyframes selectionMiniMenuAboveIn/);
   assert.match(css, /\.markdown-body\.has-annotation-hover/);
   assert.match(css, /\.save-modal/);
+  assert.match(css, /\.image-insert-modal/);
+  assert.match(css, /\.image-source-tabs/);
   assert.match(css, /\.about-modal/);
   assert.match(css, /\.about-feature-list/);
   assert.match(css, /\.about-release-list/);

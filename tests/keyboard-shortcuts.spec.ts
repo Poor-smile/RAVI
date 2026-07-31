@@ -110,6 +110,25 @@ test.describe("command resolver", () => {
     ).toBe("diagram.mermaid");
   });
 
+  test("opens image insertion from Persian and English keyboard layouts", () => {
+    expect(
+      resolveOnly(
+        "edit.image",
+        keyboardEvent("KeyI", { key: "i", altKey: true }),
+        windowsWeb,
+        "editor",
+      ),
+    ).toBe("edit.image");
+    expect(
+      resolveOnly(
+        "edit.image",
+        keyboardEvent("KeyI", { key: "ه", altKey: true }),
+        windowsWeb,
+        "editor",
+      ),
+    ).toBe("edit.image");
+  });
+
   test("requires exact modifiers and ignores IME composition", () => {
     expect(
       resolveOnly(
@@ -549,6 +568,7 @@ test.describe("Electron keyboard integration", () => {
       path.join(os.tmpdir(), "raavi-playwright-"),
     );
     const libraryFixturePath = path.join(userDataPath, "pin-library");
+    const imageFixturePath = path.join(userDataPath, "embedded-image.png");
     await mkdir(libraryFixturePath);
     await Promise.all([
       writeFile(
@@ -560,6 +580,13 @@ test.describe("Electron keyboard integration", () => {
         path.join(libraryFixturePath, "ordinary-note.md"),
         "# Ordinary note",
         "utf8",
+      ),
+      writeFile(
+        imageFixturePath,
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9JYxQAAAAASUVORK5CYII=",
+          "base64",
+        ),
       ),
     ]);
     const app = await electron.launch({
@@ -575,6 +602,36 @@ test.describe("Electron keyboard integration", () => {
       const window = await app.firstWindow();
       const editor = window.locator("#markdown-editor");
       await expect(editor).toBeVisible();
+      const imageInput = window.locator(
+        'input[accept="image/png,image/jpeg,image/webp,image/gif"]',
+      );
+      await expect(imageInput).toHaveCount(1);
+      const imageButton = window.getByRole("button", {
+        name: "افزودن تصویر",
+        exact: true,
+      });
+      await imageButton.click();
+      const imageDialog = window.locator(".image-insert-modal");
+      await expect(imageDialog).toBeVisible();
+      await expect(
+        imageDialog.getByRole("tab", { name: "فایل محلی", exact: true }),
+      ).toHaveAttribute("aria-selected", "true");
+      await imageInput.setInputFiles(imageFixturePath);
+      await expect(imageDialog).toBeHidden();
+      await expect.poll(() => editor.inputValue()).toContain("raavi-image://image-");
+      await expect(window.locator(".markdown-body img").last()).toHaveAttribute(
+        "src",
+        /^data:image\/png;base64,/,
+      );
+      await imageButton.click();
+      await imageDialog
+        .getByRole("tab", { name: "نشانی اینترنتی", exact: true })
+        .click();
+      await expect(
+        imageDialog.locator('[data-editable-kind="imageUrl"]'),
+      ).toBeVisible();
+      await imageDialog.press("Escape");
+      await expect(imageDialog).toBeHidden();
       const selectAllEditorText = async () => {
         await editor.focus();
         await editor.press("Control+A");
@@ -610,7 +667,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(aboutDialog).toBeVisible();
       await expect(aboutTitle).toBeFocused();
       await expect(
-        aboutDialog.getByText("0.19.1", { exact: true }),
+        aboutDialog.getByText("0.20.0", { exact: true }),
       ).toBeVisible();
       await expect(
         aboutDialog.getByRole("heading", {

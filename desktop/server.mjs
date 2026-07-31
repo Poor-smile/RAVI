@@ -9,6 +9,15 @@ const clientDirectory = path.resolve(desktopDirectory, "..", "dist", "client");
 const MAX_LIBRARY_FILES = 20_000;
 const MAX_MARKDOWN_SIZE = 2 * 1024 * 1024;
 const MAX_RAVI_SIZE = 64 * 1024 * 1024;
+const MAX_RAVI_IMAGE_ASSETS = 8;
+const MAX_RAVI_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_RAVI_IMAGE_TOTAL_BYTES = 40 * 1024 * 1024;
+const RAVI_IMAGE_TYPES = new Set([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 const CONTENT_TYPES = new Map([
   [".css", "text/css; charset=utf-8"],
@@ -28,7 +37,7 @@ const CONTENT_TYPES = new Map([
 
 const SECURITY_HEADERS = {
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http: https:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
 };
@@ -217,6 +226,47 @@ function sanitizeRaaviAnnotations(value) {
   });
 }
 
+function decodedBase64Length(value) {
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return Math.floor((value.length * 3) / 4) - padding;
+}
+
+function sanitizeRaaviAssets(value) {
+  if (!Array.isArray(value)) return [];
+
+  let totalBytes = 0;
+  const knownIds = new Set();
+  const assets = [];
+  for (const asset of value.slice(0, MAX_RAVI_IMAGE_ASSETS)) {
+    if (!asset || typeof asset !== "object") continue;
+    const id = typeof asset.id === "string" ? asset.id.slice(0, 120) : "";
+    const name = typeof asset.name === "string" ? asset.name.slice(0, 240) : "";
+    const mimeType =
+      typeof asset.mimeType === "string" ? asset.mimeType.toLowerCase() : "";
+    const data = typeof asset.data === "string" ? asset.data : "";
+    const assetBytes = decodedBase64Length(data);
+
+    if (
+      !/^[a-z0-9][a-z0-9-]{0,119}$/iu.test(id) ||
+      !name ||
+      !RAVI_IMAGE_TYPES.has(mimeType) ||
+      !data ||
+      data.length > Math.ceil((MAX_RAVI_IMAGE_BYTES * 4) / 3) + 4 ||
+      !/^[A-Za-z0-9+/]*={0,2}$/u.test(data) ||
+      assetBytes > MAX_RAVI_IMAGE_BYTES ||
+      totalBytes + assetBytes > MAX_RAVI_IMAGE_TOTAL_BYTES ||
+      knownIds.has(id)
+    ) {
+      continue;
+    }
+
+    knownIds.add(id);
+    totalBytes += assetBytes;
+    assets.push({ id, name, mimeType, data });
+  }
+  return assets;
+}
+
 function sanitizeRaaviVersions(value) {
   if (!Array.isArray(value)) return [];
 
@@ -294,6 +344,7 @@ export async function readDocumentPath(filePath) {
         ? value.document.revision
         : 1,
     versions: sanitizeRaaviVersions(value.versions),
+    assets: sanitizeRaaviAssets(value.assets),
   };
 }
 

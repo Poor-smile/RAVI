@@ -25,6 +25,7 @@ import {
   FolderOpen,
   Highlighter,
   History,
+  ImagePlus,
   Italic,
   Keyboard,
   Library,
@@ -69,7 +70,7 @@ import {
   useRef,
   useState,
 } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import packageMetadata from "../package.json";
 import { AboutDialog } from "./components/about-dialog";
@@ -110,10 +111,17 @@ import {
 import { DEFAULT_MERMAID_CODE } from "./mermaid/samples";
 import {
   AnnotationKind,
+  MAX_RAVI_IMAGE_ASSETS,
+  MAX_RAVI_IMAGE_BYTES,
   makeRaaviDocument,
+  markdownWithEmbeddedRaaviImages,
   parseRaaviDocument,
   RaaviAnnotation,
+  RaaviImageAsset,
   RaaviVersion,
+  raaviImageAssetId,
+  raaviImageDataUrl,
+  raaviImageUrl,
 } from "./raavi";
 
 const STORAGE_KEY = "raavi:document:v1";
@@ -202,6 +210,7 @@ type LibraryTab = "history" | "library";
 type LibraryState = "idle" | "scanning" | "ready";
 type DocumentFileType = "markdown" | "ravi";
 type SaveFileType = DocumentFileType;
+type ImageSourceMode = "local" | "url";
 type ReadingHeading = {
   documentIndex: number;
   level: number;
@@ -252,6 +261,7 @@ type DesktopOpenedDocument = {
   documentType: DocumentFileType;
   content: string;
   annotations?: RaaviAnnotation[];
+  assets?: RaaviImageAsset[];
   revision?: number;
   versions?: RaaviVersion[];
   openInReadingMode?: boolean;
@@ -272,6 +282,7 @@ type DesktopLibraryState = {
 type DocumentSavePayload = {
   content: string;
   annotations: RaaviAnnotation[];
+  assets: RaaviImageAsset[];
   revision: number;
   versions: RaaviVersion[];
   raavi: ReturnType<typeof makeRaaviDocument>;
@@ -850,14 +861,79 @@ function LibraryBranch({
   );
 }
 
-function documentSnapshot(content: string, annotations: RaaviAnnotation[]) {
-  return JSON.stringify({ content, annotations });
+function documentSnapshot(
+  content: string,
+  annotations: RaaviAnnotation[],
+  assets: RaaviImageAsset[],
+) {
+  return JSON.stringify({ content, annotations, assets });
 }
 
 function saveNameForType(fileName: string, type: SaveFileType) {
   const baseName =
     fileName.trim().replace(/\.(?:md|markdown|ravi)$/i, "") || "نوشته-راوی";
   return type === "ravi" ? `${baseName}.ravi` : `${baseName}.md`;
+}
+
+function readImageAssetData(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("error", () => reject(new Error("IMAGE_READ_FAILED")));
+    reader.addEventListener("load", () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      const match = /^data:image\/(?:gif|jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/iu.exec(
+        result,
+      );
+      if (!match) {
+        reject(new Error("IMAGE_READ_FAILED"));
+        return;
+      }
+      resolve(match[1]);
+    });
+    reader.readAsDataURL(file);
+  });
+}
+
+function imageAltFromFileName(fileName: string) {
+  return (
+    fileName
+      .replace(/\.[^.]+$/u, "")
+      .replace(/[\[\]\r\n]/gu, " ")
+      .trim() || "تصویر"
+  );
+}
+
+function imageNameFromUrl(url: URL, mimeType: string) {
+  const extensionByMime: Record<string, string> = {
+    "image/gif": "gif",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+  };
+  const fallback = `تصویر-دریافتی.${extensionByMime[mimeType] ?? "png"}`;
+  const lastPathPart = url.pathname.split("/").filter(Boolean).at(-1);
+  if (!lastPathPart) return fallback;
+
+  try {
+    const decoded = decodeURIComponent(lastPathPart)
+      .replace(/[\\/\r\n]/gu, "-")
+      .trim();
+    return decoded.slice(0, 240) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function raaviMarkdownUrlTransform(url: string) {
+  if (
+    raaviImageAssetId(url) ||
+    /^data:image\/(?:gif|jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/iu.test(
+      url,
+    )
+  ) {
+    return url;
+  }
+  return defaultUrlTransform(url);
 }
 
 export default function Home() {
@@ -869,10 +945,17 @@ export default function Home() {
     useState<DocumentFileType>("markdown");
   const [revision, setRevision] = useState(1);
   const [versions, setVersions] = useState<RaaviVersion[]>([]);
+  const [imageAssets, setImageAssets] = useState<RaaviImageAsset[]>([]);
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState(() =>
-    documentSnapshot(SAMPLE_MARKDOWN, []),
+    documentSnapshot(SAMPLE_MARKDOWN, [], []),
   );
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [imageSourceMode, setImageSourceMode] =
+    useState<ImageSourceMode>("local");
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageUrlLoading, setImageUrlLoading] = useState(false);
+  const [imageInsertError, setImageInsertError] = useState("");
   const [newDocumentModalOpen, setNewDocumentModalOpen] = useState(false);
   const [newDocumentCreating, setNewDocumentCreating] = useState(false);
   const [newDocumentError, setNewDocumentError] = useState("");
@@ -947,6 +1030,12 @@ export default function Home() {
   const librarySearchRef = useRef<HTMLInputElement>(null);
   const annotationPanelRef = useRef<HTMLElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const imageInsertButtonRef = useRef<HTMLButtonElement>(null);
+  const imageModalRef = useRef<HTMLDivElement>(null);
+  const imageUrlInputRef = useRef<HTMLInputElement>(null);
+  const imageLocalPickerRef = useRef<HTMLButtonElement>(null);
+  const imageModalCloseRef = useRef<HTMLButtonElement>(null);
   const directoryInputRef = useRef<HTMLInputElement>(null);
   const libraryPanelRef = useRef<HTMLElement>(null);
   const libraryCloseRef = useRef<HTMLButtonElement>(null);
@@ -991,6 +1080,10 @@ export default function Home() {
     [content],
   );
   const mermaidBlocks = useMemo(() => findMermaidBlocks(content), [content]);
+  const imageAssetsById = useMemo(
+    () => new Map(imageAssets.map((asset) => [asset.id, asset])),
+    [imageAssets],
+  );
   const documentTextDirection = useMemo(
     () => detectDocumentTextDirection(content),
     [content],
@@ -1588,8 +1681,8 @@ export default function Home() {
   );
 
   const currentSnapshot = useMemo(
-    () => documentSnapshot(content, annotations),
-    [annotations, content],
+    () => documentSnapshot(content, annotations, imageAssets),
+    [annotations, content, imageAssets],
   );
 
   const effectiveSaveState: SaveState =
@@ -1709,15 +1802,17 @@ export default function Home() {
     (document: DesktopOpenedDocument, message?: string) => {
       openedDocumentRef.current = true;
       const nextAnnotations = document.annotations ?? [];
+      const nextAssets = document.assets ?? [];
       setContent(document.content);
       setFileName(document.name);
       setAnnotations(nextAnnotations);
+      setImageAssets(nextAssets);
       setActiveDocumentPath(document.path ?? "");
       setDocumentType(document.documentType ?? "markdown");
       setRevision(document.revision ?? 1);
       setVersions(document.versions ?? []);
       setLastSavedSnapshot(
-        documentSnapshot(document.content, nextAnnotations),
+        documentSnapshot(document.content, nextAnnotations, nextAssets),
       );
       setSaveState("saved");
       setEditorSelectionMenuPosition(null);
@@ -1776,6 +1871,7 @@ export default function Home() {
             fileName?: string;
             readerSize?: number;
             annotations?: RaaviAnnotation[];
+            assets?: RaaviImageAsset[];
             revision?: number;
             versions?: RaaviVersion[];
             activeDocumentPath?: string;
@@ -1786,6 +1882,9 @@ export default function Home() {
           if (typeof parsed.fileName === "string") setFileName(parsed.fileName);
           if (Array.isArray(parsed.annotations)) {
             setAnnotations(parsed.annotations);
+          }
+          if (Array.isArray(parsed.assets)) {
+            setImageAssets(parsed.assets.slice(0, MAX_RAVI_IMAGE_ASSETS));
           }
           if (typeof parsed.readerSize === "number") {
             setReaderSize(Math.min(22, Math.max(16, parsed.readerSize)));
@@ -1837,6 +1936,7 @@ export default function Home() {
             fileName,
             readerSize,
             annotations,
+            assets: imageAssets,
             revision,
             versions: versions.slice(-MAX_LOCAL_VERSIONS),
             activeDocumentPath,
@@ -1859,6 +1959,7 @@ export default function Home() {
     documentType,
     fileName,
     hydrated,
+    imageAssets,
     lastSavedSnapshot,
     readerSize,
     revision,
@@ -1877,6 +1978,7 @@ export default function Home() {
             fileName,
             readerSize,
             annotations,
+            assets: imageAssets,
             revision,
             versions: versions.slice(-MAX_LOCAL_VERSIONS),
             activeDocumentPath,
@@ -1898,6 +2000,7 @@ export default function Home() {
     documentType,
     fileName,
     hydrated,
+    imageAssets,
     lastSavedSnapshot,
     readerSize,
     revision,
@@ -2002,6 +2105,10 @@ export default function Home() {
   useEffect(() => {
     syncLayer("save", saveModalOpen);
   }, [saveModalOpen, syncLayer]);
+
+  useEffect(() => {
+    syncLayer("image", imageModalOpen);
+  }, [imageModalOpen, syncLayer]);
 
   useEffect(() => {
     syncLayer("new", newDocumentModalOpen);
@@ -2410,19 +2517,22 @@ export default function Home() {
       annotations,
       nextRevision,
       nextVersions,
+      imageAssets,
     );
+    const exportContent = markdownWithEmbeddedRaaviImages(content, imageAssets);
     return {
       nextRevision,
       nextVersions,
       payload: {
-        content,
+        content: exportContent,
         annotations,
+        assets: imageAssets,
         revision: nextRevision,
         versions: nextVersions,
         raavi,
       } satisfies DocumentSavePayload,
     };
-  }, [annotations, content, fileName, revision, versions]);
+  }, [annotations, content, fileName, imageAssets, revision, versions]);
 
   const commitSavedVersion = useCallback(
     (
@@ -2450,14 +2560,14 @@ export default function Home() {
           ].slice(0, 20),
         );
       }
-      setLastSavedSnapshot(documentSnapshot(content, annotations));
+      setLastSavedSnapshot(documentSnapshot(content, annotations, imageAssets));
       setSaveState("saved");
       setSaveModalOpen(false);
       showNotice(
         `نسخه‌ی ${nextRevision.toLocaleString("fa-IR")} ذخیره شد.`,
       );
     },
-    [annotations, content, fileName, showNotice],
+    [annotations, content, fileName, imageAssets, showNotice],
   );
 
   const openSaveFileModal = useCallback(
@@ -2591,16 +2701,19 @@ export default function Home() {
         ? `# ${titleFromDocumentName(spec.baseName)}\n`
         : "";
       const initialAnnotations: RaaviAnnotation[] = [];
+      const initialAssets: RaaviImageAsset[] = [];
       const raavi = makeRaaviDocument(
         saveNameForType(spec.fileName, "markdown"),
         initialContent,
         initialAnnotations,
         1,
         [],
+        initialAssets,
       );
       const payload: DocumentSavePayload = {
         content: initialContent,
         annotations: initialAnnotations,
+        assets: initialAssets,
         revision: 1,
         versions: [],
         raavi,
@@ -2646,6 +2759,7 @@ export default function Home() {
             documentType: spec.fileType,
             content: initialContent,
             annotations: initialAnnotations,
+            assets: initialAssets,
             revision: 1,
             versions: [],
             openInReadingMode: false,
@@ -2725,6 +2839,7 @@ export default function Home() {
             documentType: "ravi",
             content: parsed.content,
             annotations: parsed.annotations,
+            assets: parsed.assets,
             revision: parsed.revision,
             versions: parsed.versions,
             openInReadingMode: false,
@@ -2739,6 +2854,7 @@ export default function Home() {
             documentType: "markdown",
             content: rawContent,
             annotations: [],
+            assets: [],
             revision: 1,
             versions: [],
             openInReadingMode: false,
@@ -3209,6 +3325,169 @@ export default function Home() {
     });
   };
 
+  const insertImageAsset = async (file: File) => {
+    const editor = editorRef.current;
+    const allowedTypes = new Set([
+      "image/gif",
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ]);
+
+    if (!editor) return false;
+    if (!allowedTypes.has(file.type)) {
+      const message = "فقط تصویرهای PNG، JPEG، WebP و GIF قابل افزودن هستند.";
+      setError(message);
+      setImageInsertError(message);
+      return false;
+    }
+    if (file.size > MAX_RAVI_IMAGE_BYTES) {
+      const message = "حجم هر تصویر باید حداکثر ۸ مگابایت باشد.";
+      setError(message);
+      setImageInsertError(message);
+      return false;
+    }
+    if (imageAssets.length >= MAX_RAVI_IMAGE_ASSETS) {
+      const message = "هر سند راوی می‌تواند حداکثر ۸ تصویرِ درج‌شده داشته باشد.";
+      setError(message);
+      setImageInsertError(message);
+      return false;
+    }
+
+    try {
+      const start = editor.selectionStart;
+      const end = editor.selectionEnd;
+      const editorContent = editor.value;
+      const selectedAlt = editorContent
+        .slice(start, end)
+        .replace(/[\[\]\r\n]/gu, " ")
+        .trim();
+      const id = `image-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
+      const asset: RaaviImageAsset = {
+        id,
+        name: file.name.slice(0, 240),
+        mimeType: file.type as RaaviImageAsset["mimeType"],
+        data: await readImageAssetData(file),
+      };
+      const imageMarkdown = `![${selectedAlt || imageAltFromFileName(file.name)}](${raaviImageUrl(id)})`;
+      const prefix = start > 0 && !/\n$/u.test(editorContent.slice(0, start))
+        ? "\n\n"
+        : "";
+      const suffix = end < editorContent.length && !/^\n/u.test(editorContent.slice(end))
+        ? "\n\n"
+        : "";
+      const inserted = `${prefix}${imageMarkdown}${suffix}`;
+      const nextContent =
+        editorContent.slice(0, start) + inserted + editorContent.slice(end);
+
+      setContent(nextContent);
+      setImageAssets((current) => [...current, asset]);
+      setEditorSelectionMenuPosition(null);
+      setError("");
+      setImageInsertError("");
+      showNotice(
+        `«${file.name}» به سند اضافه شد؛ هنگام ذخیرهٔ .ravi همراه سند می‌ماند.`,
+      );
+      requestAnimationFrame(() => {
+        editor.focus();
+        const caret = start + prefix.length + imageMarkdown.length;
+        editor.setSelectionRange(caret, caret);
+      });
+      return true;
+    } catch {
+      const message =
+        "تصویر خوانده نشد؛ فایل سالم و از نوع پشتیبانی‌شده انتخاب کنید.";
+      setError(message);
+      setImageInsertError(message);
+      return false;
+    }
+  };
+
+  const handleImageInputChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    void insertImageAsset(file).then((inserted) => {
+      if (inserted) setImageModalOpen(false);
+    });
+  };
+
+  const openImageModal = useCallback(() => {
+    setImageSourceMode("local");
+    setImageUrl("");
+    setImageInsertError("");
+    setError("");
+    setImageModalOpen(true);
+  }, []);
+
+  const insertImageFromUrl = async () => {
+    let imageUrlValue: URL;
+    try {
+      imageUrlValue = new URL(imageUrl.trim());
+      if (
+        !["http:", "https:"].includes(imageUrlValue.protocol) ||
+        imageUrlValue.username ||
+        imageUrlValue.password
+      ) {
+        throw new Error("INVALID_IMAGE_URL");
+      }
+    } catch {
+      const message = "یک نشانی مستقیم و معتبر با http یا https وارد کنید.";
+      setError(message);
+      setImageInsertError(message);
+      return;
+    }
+
+    setImageUrlLoading(true);
+    setImageInsertError("");
+    setError("");
+    try {
+      const response = await fetch(imageUrlValue.toString(), {
+        credentials: "omit",
+        mode: "cors",
+        redirect: "error",
+        referrerPolicy: "no-referrer",
+      });
+      if (!response.ok) {
+        throw new Error("IMAGE_URL_HTTP_ERROR");
+      }
+      const mimeType = response.headers
+        .get("content-type")
+        ?.split(";", 1)[0]
+        ?.trim()
+        .toLowerCase();
+      if (
+        !mimeType ||
+        !["image/gif", "image/jpeg", "image/png", "image/webp"].includes(
+          mimeType,
+        )
+      ) {
+        throw new Error("IMAGE_URL_TYPE_ERROR");
+      }
+      const blob = await response.blob();
+      const inserted = await insertImageAsset(
+        new File([blob], imageNameFromUrl(imageUrlValue, mimeType), {
+          type: mimeType,
+        }),
+      );
+      if (inserted) setImageModalOpen(false);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error && caughtError.message === "IMAGE_URL_HTTP_ERROR"
+          ? "تصویر از این نشانی دریافت نشد؛ نشانی را بررسی کنید."
+          : caughtError instanceof Error &&
+              caughtError.message === "IMAGE_URL_TYPE_ERROR"
+            ? "فقط تصویرهای PNG، JPEG، WebP و GIF قابل دریافت هستند."
+            : "این میزبان اجازهٔ دریافت تصویر را نداد؛ فایل را دانلود و از دستگاه انتخاب کنید.";
+      setError(message);
+      setImageInsertError(message);
+    } finally {
+      setImageUrlLoading(false);
+    }
+  };
+
   const restoreMermaidWorkspace = useCallback(
     (session: MermaidStudioSession, focus: "editor" | "preview") => {
       requestAnimationFrame(() => {
@@ -3426,6 +3705,10 @@ export default function Home() {
       setSaveModalOpen(false);
       return;
     }
+    if (topLayer === "image") {
+      if (!imageUrlLoading) setImageModalOpen(false);
+      return;
+    }
     if (topLayer === "new") {
       if (!newDocumentCreating) setNewDocumentModalOpen(false);
       return;
@@ -3491,6 +3774,7 @@ export default function Home() {
     "edit.code": () => insertInline("`", "`", "code"),
     "edit.link": () =>
       insertInline("[", "](https://example.com)", "عنوان پیوند"),
+    "edit.image": openImageModal,
     "edit.quote": insertQuote,
     "diagram.mermaid": () => openMermaidStudio(),
     "view.theme": toggleTheme,
@@ -3548,6 +3832,7 @@ export default function Home() {
       case "edit.italic":
       case "edit.code":
       case "edit.link":
+      case "edit.image":
       case "edit.quote":
       case "diagram.mermaid":
         return !modalIsOpen && !composerKind && editorFocused;
@@ -3982,6 +4267,14 @@ export default function Home() {
           }}
           tabIndex={-1}
         />
+        <input
+          ref={imageInputRef}
+          className="visually-hidden"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          onChange={handleImageInputChange}
+          tabIndex={-1}
+        />
 
         {isDragging && (
           <div className="drop-overlay" role="status">
@@ -4158,6 +4451,21 @@ export default function Home() {
                 title={commandTitle("edit.link", commandEnvironment)}
               >
                 <Link2 size={16} aria-hidden="true" />
+              </button>
+              <button
+                ref={imageInsertButtonRef}
+                type="button"
+                onClick={openImageModal}
+                aria-label="افزودن تصویر"
+                aria-haspopup="dialog"
+                aria-expanded={imageModalOpen}
+                aria-keyshortcuts={commandAriaKeyShortcuts(
+                  "edit.image",
+                  commandEnvironment,
+                )}
+                title={commandTitle("edit.image", commandEnvironment)}
+              >
+                <ImagePlus size={16} aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -4833,6 +5141,7 @@ export default function Home() {
               >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
+                  urlTransform={raaviMarkdownUrlTransform}
                   components={{
                     pre: ({ children, node }) => {
                       const block = mermaidBlockAtOffset(
@@ -4902,6 +5211,34 @@ export default function Home() {
                     img: ({ src, alt }) => {
                       const imageSource =
                         typeof src === "string" ? src.trim() : "";
+                      const assetId = raaviImageAssetId(imageSource);
+                      if (assetId) {
+                        const asset = imageAssetsById.get(assetId);
+                        if (!asset) {
+                          return (
+                            <span className="remote-media-blocked" role="note">
+                              <ImagePlus size={18} aria-hidden="true" />
+                              <span>
+                                <strong>تصویرِ همراه سند پیدا نشد</strong>
+                                <small>
+                                  این Markdown به تصویر داخلیِ یک فایل .ravi اشاره
+                                  می‌کند، اما محمولهٔ تصویر در فایل موجود نیست.
+                                </small>
+                              </span>
+                            </span>
+                          );
+                        }
+
+                        return (
+                          // The data URL is a local document asset and cannot use Next image optimization.
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={raaviImageDataUrl(asset)}
+                            alt={alt ?? asset.name}
+                            loading="lazy"
+                          />
+                        );
+                      }
                       const isRemoteImage =
                         /^(?:https?:)?\/\//i.test(imageSource);
 
@@ -4961,7 +5298,7 @@ export default function Home() {
             <span>Markdown استاندارد با پشتیبانی از جدول و چک‌لیست</span>
             <span className="ravi-share-hint">
               <MessageSquareText size={14} aria-hidden="true" />
-              برای اشتراک سند همراه با هایلایت و کامنت، از پسوند
+              برای اشتراک سند همراه با هایلایت، کامنت و تصویرهای درج‌شده، از پسوند
               <code dir="ltr">.ravi</code>
               استفاده کنید.
             </span>
@@ -5345,6 +5682,161 @@ export default function Home() {
         returnFocusRef={brandButtonRef}
         onClose={() => setAboutModalOpen(false)}
       />
+
+      <AccessibleModal
+        open={imageModalOpen}
+        isTopLayer={topLayer === "image"}
+        onClose={() => {
+          if (!imageUrlLoading) setImageModalOpen(false);
+        }}
+        dialogRef={imageModalRef}
+        initialFocusRef={
+          imageSourceMode === "url" ? imageUrlInputRef : imageLocalPickerRef
+        }
+        returnFocusRef={imageInsertButtonRef}
+        backdropClassName="save-modal-backdrop image-insert-modal-backdrop"
+        dialogClassName="save-modal image-insert-modal"
+        labelledBy="image-insert-modal-title"
+        describedBy="image-insert-modal-description"
+      >
+        <div className="save-modal-header">
+          <span className="save-modal-mark" aria-hidden="true">
+            <ImagePlus size={22} />
+          </span>
+          <div>
+            <span>تصویرِ قابل‌حمل در سند</span>
+            <strong id="image-insert-modal-title">افزودن تصویر</strong>
+          </div>
+          <button
+            ref={imageModalCloseRef}
+            type="button"
+            onClick={() => setImageModalOpen(false)}
+            aria-label="بستن پنجرهٔ افزودن تصویر"
+            disabled={imageUrlLoading}
+          >
+            <X size={19} aria-hidden="true" />
+          </button>
+        </div>
+
+        <form
+          className="save-modal-body image-insert-modal-body"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (imageSourceMode === "url") void insertImageFromUrl();
+          }}
+        >
+          <p id="image-insert-modal-description">
+            تصویر را از دستگاه یا یک نشانی اینترنتی بیاورید. راوی آن را داخل
+            سند نگه می‌دارد تا همراه فایل <code>.ravi</code> قابل اشتراک بماند.
+          </p>
+
+          <div className="image-source-tabs" role="tablist" aria-label="منبع تصویر">
+            <button
+              id="image-source-local-tab"
+              type="button"
+              role="tab"
+              aria-controls="image-source-local-panel"
+              aria-selected={imageSourceMode === "local"}
+              className={imageSourceMode === "local" ? "is-selected" : ""}
+              onClick={() => {
+                setImageSourceMode("local");
+                setImageInsertError("");
+              }}
+              disabled={imageUrlLoading}
+            >
+              <Upload size={16} aria-hidden="true" />
+              فایل محلی
+            </button>
+            <button
+              id="image-source-url-tab"
+              type="button"
+              role="tab"
+              aria-controls="image-source-url-panel"
+              aria-selected={imageSourceMode === "url"}
+              className={imageSourceMode === "url" ? "is-selected" : ""}
+              onClick={() => {
+                setImageSourceMode("url");
+                setImageInsertError("");
+                requestAnimationFrame(() => imageUrlInputRef.current?.focus());
+              }}
+              disabled={imageUrlLoading}
+            >
+              <Link2 size={16} aria-hidden="true" />
+              نشانی اینترنتی
+            </button>
+          </div>
+
+          {imageSourceMode === "local" ? (
+            <section
+              id="image-source-local-panel"
+              className="image-source-panel"
+              role="tabpanel"
+              aria-labelledby="image-source-local-tab"
+            >
+              <span className="image-source-panel-icon" aria-hidden="true">
+                <ImagePlus size={22} />
+              </span>
+              <div>
+                <strong>تصویر روی همین دستگاه</strong>
+                <small>PNG، JPEG، WebP یا GIF تا سقف ۸ مگابایت</small>
+              </div>
+              <button
+                ref={imageLocalPickerRef}
+                type="button"
+                className="button button--primary"
+                onClick={() => imageInputRef.current?.click()}
+              >
+                <Upload size={16} aria-hidden="true" />
+                انتخاب فایل
+              </button>
+            </section>
+          ) : (
+            <section
+              id="image-source-url-panel"
+              className="image-source-panel image-url-source"
+              role="tabpanel"
+              aria-labelledby="image-source-url-tab"
+            >
+              <label className="save-name-field image-url-field">
+                <span>نشانی مستقیم تصویر</span>
+                <input
+                  ref={imageUrlInputRef}
+                  type="url"
+                  value={imageUrl}
+                  onChange={(event) => setImageUrl(event.target.value)}
+                  placeholder="https://example.com/photo.png"
+                  inputMode="url"
+                  dir="ltr"
+                  required
+                  data-editable-kind="imageUrl"
+                />
+              </label>
+              <p className="image-url-privacy-note">
+                <Lock size={15} aria-hidden="true" />
+                نشانی فقط با زدن «دریافت و درج» خوانده می‌شود؛ سپس تصویر داخل
+                فایل <code>.ravi</code> قرار می‌گیرد و تصویرِ راه‌دور در پیش‌نمایش
+                بارگذاری نمی‌شود.
+              </p>
+              <div className="save-modal-actions image-url-actions">
+                <button
+                  className="button button--primary"
+                  type="submit"
+                  disabled={imageUrlLoading || !imageUrl.trim()}
+                >
+                  <ImagePlus size={17} aria-hidden="true" />
+                  {imageUrlLoading ? "در حال دریافت…" : "دریافت و درج"}
+                </button>
+              </div>
+            </section>
+          )}
+
+          {imageInsertError && (
+            <p className="image-insert-error" role="alert">
+              {imageInsertError}
+            </p>
+          )}
+        </form>
+      </AccessibleModal>
 
       <AccessibleModal
         open={saveModalOpen}

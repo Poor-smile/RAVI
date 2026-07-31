@@ -25,6 +25,7 @@ export type CommandId =
   | "edit.italic"
   | "edit.code"
   | "edit.link"
+  | "edit.image"
   | "edit.quote"
   | "diagram.mermaid"
   | "view.theme"
@@ -158,6 +159,15 @@ export const COMMAND_REGISTRY: CommandDefinition[] = [
     allowInEditable: ["editor"],
     showInHelp: true,
     contextLabel: "فقط در ویرایشگر",
+  },
+  {
+    id: "edit.image",
+    title: "افزودن تصویر",
+    group: "edit",
+    bindings: [{ code: "KeyI", alt: true }],
+    allowInEditable: ["editor"],
+    showInHelp: true,
+    contextLabel: "در ویرایشگر؛ مستقل از زبان صفحه‌کلید",
   },
   {
     id: "edit.quote",

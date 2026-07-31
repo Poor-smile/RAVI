@@ -62,6 +62,14 @@ test("desktop reads a shared Raavi document with annotations", async () => {
         annotations: [],
       },
     ],
+    assets: [
+      {
+        id: "image-001",
+        name: "review.png",
+        mimeType: "image/png",
+        data: "iVBORw0KGgo=",
+      },
+    ],
   };
 
   try {
@@ -75,6 +83,7 @@ test("desktop reads a shared Raavi document with annotations", async () => {
     assert.equal(document.revision, 3);
     assert.equal(document.versions.length, 1);
     assert.equal(document.versions[0].number, 3);
+    assert.deepEqual(document.assets, documentValue.assets);
   } finally {
     await rm(rootPath, { recursive: true, force: true });
   }
@@ -86,6 +95,10 @@ test("desktop server renders the packaged app and its assets", async () => {
   try {
     const response = await fetch(server.origin);
     assert.equal(response.status, 200);
+    assert.match(
+      response.headers.get("content-security-policy") ?? "",
+      /connect-src 'self' http: https:/,
+    );
     const html = await response.text();
     assert.match(html, /راوی/);
 

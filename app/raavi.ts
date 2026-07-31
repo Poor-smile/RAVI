@@ -1,5 +1,15 @@
 export const RAVI_FORMAT = "ravi";
 export const RAVI_VERSION = 1;
+export const RAVI_IMAGE_URL_PREFIX = "raavi-image://";
+export const MAX_RAVI_IMAGE_ASSETS = 8;
+export const MAX_RAVI_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_RAVI_IMAGE_TOTAL_BYTES = 40 * 1024 * 1024;
+const supportedImageTypes = new Set([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 export type AnnotationKind = "highlight" | "comment" | "margin";
 
@@ -13,6 +23,13 @@ export type RaaviAnnotation = {
   suffix: string;
   body: string;
   createdAt: string;
+};
+
+export type RaaviImageAsset = {
+  id: string;
+  name: string;
+  mimeType: "image/gif" | "image/jpeg" | "image/png" | "image/webp";
+  data: string;
 };
 
 export type RaaviVersion = {
@@ -32,6 +49,7 @@ export type RaaviDocument = {
   };
   annotations: RaaviAnnotation[];
   versions: RaaviVersion[];
+  assets: RaaviImageAsset[];
   updatedAt: string;
 };
 
@@ -48,6 +66,85 @@ function safeText(value: unknown, maxLength: number) {
 function safeFileName(value: unknown, fallbackName: string) {
   const candidate = safeText(value, 240).trim();
   return candidate || fallbackName;
+}
+
+function decodedBase64Length(value: string) {
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  return Math.floor((value.length * 3) / 4) - padding;
+}
+
+function parseImageAsset(value: unknown): RaaviImageAsset | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  const id = safeText(candidate.id, 120).trim();
+  const name = safeText(candidate.name, 240).trim();
+  const mimeType = safeText(candidate.mimeType, 64).toLowerCase();
+  const data = typeof candidate.data === "string" ? candidate.data : "";
+
+  if (
+    !/^[a-z0-9][a-z0-9-]{0,119}$/iu.test(id) ||
+    !name ||
+    !supportedImageTypes.has(mimeType) ||
+    !data ||
+    data.length > Math.ceil((MAX_RAVI_IMAGE_BYTES * 4) / 3) + 4 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/u.test(data) ||
+    decodedBase64Length(data) > MAX_RAVI_IMAGE_BYTES
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    mimeType: mimeType as RaaviImageAsset["mimeType"],
+    data,
+  };
+}
+
+function parseImageAssets(value: unknown) {
+  if (!Array.isArray(value)) return [];
+
+  let totalBytes = 0;
+  const knownIds = new Set<string>();
+  const assets: RaaviImageAsset[] = [];
+  for (const candidate of value.slice(0, MAX_RAVI_IMAGE_ASSETS)) {
+    const asset = parseImageAsset(candidate);
+    if (!asset || knownIds.has(asset.id)) continue;
+    const assetBytes = decodedBase64Length(asset.data);
+    if (totalBytes + assetBytes > MAX_RAVI_IMAGE_TOTAL_BYTES) continue;
+    knownIds.add(asset.id);
+    totalBytes += assetBytes;
+    assets.push(asset);
+  }
+  return assets;
+}
+
+export function raaviImageUrl(id: string) {
+  return `${RAVI_IMAGE_URL_PREFIX}${id}`;
+}
+
+export function raaviImageAssetId(source: string) {
+  if (!source.startsWith(RAVI_IMAGE_URL_PREFIX)) return null;
+  const id = source.slice(RAVI_IMAGE_URL_PREFIX.length);
+  return /^[a-z0-9][a-z0-9-]{0,119}$/iu.test(id) ? id : null;
+}
+
+export function raaviImageDataUrl(asset: RaaviImageAsset) {
+  return `data:${asset.mimeType};base64,${asset.data}`;
+}
+
+export function markdownWithEmbeddedRaaviImages(
+  markdown: string,
+  assets: RaaviImageAsset[],
+) {
+  const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
+  return markdown.replace(
+    /raavi-image:\/\/([a-z0-9][a-z0-9-]{0,119})/giu,
+    (reference, id: string) => {
+      const asset = assetsById.get(id);
+      return asset ? raaviImageDataUrl(asset) : reference;
+    },
+  );
 }
 
 function parseAnnotation(
@@ -157,6 +254,7 @@ export function parseRaaviDocument(
         .map(parseVersion)
         .filter((version): version is RaaviVersion => version !== null)
     : [];
+  const assets = parseImageAssets(candidate.assets);
 
   return {
     fileName: safeFileName(documentValue.name, fallbackName),
@@ -165,6 +263,7 @@ export function parseRaaviDocument(
     revision:
       Number.isSafeInteger(revision) && revision > 0 ? revision : 1,
     versions,
+    assets,
   };
 }
 
@@ -174,6 +273,7 @@ export function makeRaaviDocument(
   annotations: RaaviAnnotation[],
   revision = 1,
   versions: RaaviVersion[] = [],
+  assets: RaaviImageAsset[] = [],
 ): RaaviDocument {
   return {
     format: RAVI_FORMAT,
@@ -185,6 +285,7 @@ export function makeRaaviDocument(
     },
     annotations,
     versions: versions.slice(-30),
+    assets: parseImageAssets(assets),
     updatedAt: new Date().toISOString(),
   };
 }
