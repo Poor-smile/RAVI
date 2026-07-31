@@ -5271,49 +5271,52 @@ html.theme-is-changing .save-type-options label {
 .mermaid-diagram-viewport-tools {
   position: absolute;
   z-index: 4;
-  top: 10px;
-  inset-inline-start: 10px;
-  padding: 5px;
+  bottom: 18px;
+  left: 50%;
+  padding: 6px;
   color: var(--ink-700);
-  background: color-mix(in srgb, var(--paper-50) 94%, transparent);
+  background: color-mix(in srgb, var(--paper-50) 96%, transparent);
   border: 1px solid var(--rule);
-  border-radius: 4px;
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow-color) 52%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--shadow-color) 64%, transparent);
+  transform: translateX(-50%);
 }
 
 .mermaid-diagram-viewport-tools.mermaid-preview-tools {
-  gap: 5px;
+  gap: 6px;
 }
 
 .mermaid-diagram-viewport-tools.mermaid-preview-tools button {
-  min-width: 36px;
-  height: 36px;
-  padding: 6px 9px;
+  min-width: 44px;
+  height: 44px;
+  padding: 8px 11px;
 }
 
 .mermaid-diagram-viewport-tools.mermaid-preview-tools output {
-  min-width: 46px;
-  font-size: 10px;
+  min-width: 52px;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .mermaid-diagram-viewport-tools .mermaid-pan-indicator {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
 }
 
-.mermaid-diagram:is(:fullscreen, .is-detail-open)
-  .mermaid-diagram-action {
-  min-height: 38px;
-  padding: 7px 11px;
-  font-size: 11px;
+.mermaid-fullscreen-dock-separator {
+  width: 1px;
+  height: 28px;
+  margin-inline: 2px;
+  background: var(--rule);
 }
 
-.mermaid-diagram:is(:fullscreen, .is-detail-open)
-  .mermaid-diagram-action
-  svg {
-  width: 17px;
-  height: 17px;
+.mermaid-diagram-viewport-tools.mermaid-preview-tools
+  .mermaid-fullscreen-close {
+  min-width: 72px;
+  gap: 7px;
+  color: var(--ink-950);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .mermaid-diagram:is(:fullscreen, .is-detail-open) .mermaid-diagram-hint {
@@ -5325,6 +5328,33 @@ html.theme-is-changing .save-type-options label {
   background: var(--paper-50);
   border-block-start: 1px solid var(--rule);
   font-size: 11px;
+}
+
+@media (max-width: 560px) {
+  .mermaid-diagram-viewport-tools {
+    bottom: 12px;
+    max-width: calc(100vw - 24px);
+    gap: 3px;
+    padding: 4px;
+  }
+
+  .mermaid-diagram-viewport-tools.mermaid-preview-tools button,
+  .mermaid-diagram-viewport-tools .mermaid-pan-indicator {
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+    padding: 8px;
+  }
+
+  .mermaid-diagram-viewport-tools.mermaid-preview-tools output {
+    min-width: 42px;
+  }
+
+  .mermaid-diagram-viewport-tools
+    .mermaid-fullscreen-close
+    > span {
+    display: none;
+  }
 }
 
 .mermaid-inline-error {

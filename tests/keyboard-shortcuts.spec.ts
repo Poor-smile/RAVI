@@ -419,14 +419,45 @@ test.describe("Electron Mermaid parity", () => {
       const fullscreenOutput = detailedDiagram.locator(
         ".mermaid-diagram-viewport-tools output",
       );
-      await expect(
-        detailedDiagram.getByRole("toolbar", {
+      const fullscreenToolbar = detailedDiagram.getByRole("toolbar", {
           name: "کنترل نمای نمودار",
           exact: true,
-        }),
-      ).toBeVisible();
+        });
+      await expect(fullscreenToolbar).toBeVisible();
       const fullscreenBox = await fullscreenCanvas.boundingBox();
+      const toolbarBox = await fullscreenToolbar.boundingBox();
       expect(fullscreenBox).not.toBeNull();
+      expect(toolbarBox).not.toBeNull();
+      expect(
+        Math.abs(
+          toolbarBox!.x +
+            toolbarBox!.width / 2 -
+            (fullscreenBox!.x + fullscreenBox!.width / 2),
+        ),
+      ).toBeLessThan(2);
+      expect(
+        fullscreenBox!.y +
+          fullscreenBox!.height -
+          (toolbarBox!.y + toolbarBox!.height),
+      ).toBeLessThanOrEqual(20);
+      const fullscreenToolSizes = await fullscreenToolbar
+        .getByRole("button")
+        .evaluateAll((buttons) =>
+          buttons.map((button) => {
+            const rect = button.getBoundingClientRect();
+            return { width: rect.width, height: rect.height };
+          }),
+        );
+      for (const size of fullscreenToolSizes) {
+        expect(size.width).toBeGreaterThanOrEqual(44);
+        expect(size.height).toBeGreaterThanOrEqual(44);
+      }
+      expect(
+        await closeFullscreenButton.evaluate(
+          (button) =>
+            button.closest(".mermaid-diagram-viewport-tools") !== null,
+        ),
+      ).toBe(true);
       await window.mouse.move(
         fullscreenBox!.x + fullscreenBox!.width / 2,
         fullscreenBox!.y + fullscreenBox!.height / 2,
@@ -579,7 +610,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(aboutDialog).toBeVisible();
       await expect(aboutTitle).toBeFocused();
       await expect(
-        aboutDialog.getByText("0.19.0", { exact: true }),
+        aboutDialog.getByText("0.19.1", { exact: true }),
       ).toBeVisible();
       await expect(
         aboutDialog.getByRole("heading", {

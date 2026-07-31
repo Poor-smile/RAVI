@@ -162,7 +162,7 @@ export function MermaidDiagram({
               className="mermaid-pan-indicator"
               title="برای جابه‌جایی، نمودار یا فضای خالی را بکشید"
             >
-              <Hand size={17} aria-hidden="true" />
+              <Hand size={20} aria-hidden="true" />
               <span className="visually-hidden">
                 ابزار دست فعال است؛ برای جابه‌جایی بکشید
               </span>
@@ -173,7 +173,7 @@ export function MermaidDiagram({
               aria-label="کوچک‌نمایی نمودار"
               title="کوچک‌نمایی"
             >
-              <ZoomOut size={17} aria-hidden="true" />
+              <ZoomOut size={20} aria-hidden="true" />
             </button>
             <output
               aria-label={`بزرگ‌نمایی ${viewport.scalePercent} درصد`}
@@ -186,7 +186,7 @@ export function MermaidDiagram({
               aria-label="بزرگ‌نمایی نمودار"
               title="بزرگ‌نمایی"
             >
-              <ZoomIn size={17} aria-hidden="true" />
+              <ZoomIn size={20} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -194,45 +194,51 @@ export function MermaidDiagram({
               aria-label="جا دادن کامل نمودار در کادر"
               title="نمایش کامل طول و عرض نمودار در کادر"
             >
-              <Scan size={17} aria-hidden="true" />
+              <Scan size={20} aria-hidden="true" />
+            </button>
+            <span
+              className="mermaid-fullscreen-dock-separator"
+              aria-hidden="true"
+            />
+            <button
+              className="mermaid-fullscreen-close"
+              type="button"
+              onClick={() => void toggleFullscreen()}
+              aria-label="بستن نمای تمام‌صفحهٔ نمودار"
+              title="بستن نمای تمام‌صفحه (Esc)"
+            >
+              <Minimize2 size={20} aria-hidden="true" />
+              <span>بستن</span>
             </button>
           </div>
         )}
-        <button
-          className="mermaid-diagram-action"
-          type="button"
-          onClick={() =>
-            readingMode ? void toggleFullscreen() : onEdit(block)
-          }
-          aria-label={
-            readingMode
-              ? fullscreen
-                ? "بستن نمای تمام‌صفحهٔ نمودار"
-                : "نمایش تمام‌صفحهٔ نمودار"
-              : "ویرایش این نمودار"
-          }
-          aria-pressed={readingMode ? fullscreen : undefined}
-          title={
-            readingMode
-              ? fullscreen
-                ? "بستن نمای تمام‌صفحه (Esc)"
-                : "نمایش تمام‌صفحهٔ نمودار"
-              : "ویرایش این نمودار"
-          }
-        >
-          {readingMode ? (
-            fullscreen ? (
-              <Minimize2 size={15} aria-hidden="true" />
-            ) : (
+        {(!readingMode || !fullscreen) && (
+          <button
+            className="mermaid-diagram-action"
+            type="button"
+            onClick={() =>
+              readingMode ? void toggleFullscreen() : onEdit(block)
+            }
+            aria-label={
+              readingMode
+                ? "نمایش تمام‌صفحهٔ نمودار"
+                : "ویرایش این نمودار"
+            }
+            aria-pressed={readingMode ? false : undefined}
+            title={
+              readingMode
+                ? "نمایش تمام‌صفحهٔ نمودار"
+                : "ویرایش این نمودار"
+            }
+          >
+            {readingMode ? (
               <Maximize2 size={15} aria-hidden="true" />
-            )
-          ) : (
-            <PencilLine size={15} aria-hidden="true" />
-          )}
-          <span>
-            {readingMode ? (fullscreen ? "بستن" : "تمام‌صفحه") : "ویرایش"}
-          </span>
-        </button>
+            ) : (
+              <PencilLine size={15} aria-hidden="true" />
+            )}
+            <span>{readingMode ? "تمام‌صفحه" : "ویرایش"}</span>
+          </button>
+        )}
       </div>
       {renderState.status === "invalid" && renderState.error && (
         <figcaption className="mermaid-inline-error" role="status">
