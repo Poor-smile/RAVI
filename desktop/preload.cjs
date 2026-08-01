@@ -5,6 +5,16 @@ contextBridge.exposeInMainWorld(
   "raaviDesktop",
   Object.freeze({
     isDesktop: true,
+    getLocalDocumentSnapshot: () => ipcRenderer.invoke("renderer-state:get"),
+    saveLocalDocumentSnapshot: (snapshot) =>
+      ipcRenderer.invoke("renderer-state:save", snapshot),
+    saveReadingPositions: (positions) =>
+      ipcRenderer.invoke("renderer-state:save-reading-positions", positions),
+    saveReadingPositionsSync: (positions) =>
+      ipcRenderer.sendSync(
+        "renderer-state:save-reading-positions-sync",
+        positions,
+      ),
     getLibraryState: () => ipcRenderer.invoke("library:get-state"),
     chooseMarkdownFolder: () => ipcRenderer.invoke("library:choose-folder"),
     scanMarkdownFolder: (rootPath) =>

@@ -11,21 +11,30 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  MouseEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { MermaidBlock } from "../mermaid/blocks";
 import { MermaidTheme } from "../mermaid/renderer";
 import { useMermaidRender } from "../mermaid/use-mermaid-render";
 import { useMermaidViewport } from "../mermaid/use-mermaid-viewport";
 
-export function MermaidDiagram({
+export const MermaidDiagram = memo(function MermaidDiagram({
   block,
   theme,
   onEdit,
+  onFullscreenChange,
   readingMode = false,
 }: {
   block: MermaidBlock;
   theme: MermaidTheme;
   onEdit: (block: MermaidBlock) => void;
+  onFullscreenChange?: (fullscreen: boolean) => void;
   readingMode?: boolean;
 }) {
   const figureRef = useRef<HTMLElement>(null);
@@ -43,29 +52,54 @@ export function MermaidDiagram({
     if (renderState.status === "invalid") return "نمودار نیاز به اصلاح دارد";
     return "نمودار Mermaid";
   }, [renderState.status]);
+  const svgSurface = useMemo(
+    () =>
+      svg ? (
+        <div
+          ref={surfaceRef}
+          className="mermaid-svg mermaid-render-surface"
+          data-mermaid-render-key={renderState.renderKey}
+          style={fullscreen ? { transform: viewport.transform } : undefined}
+          // Mermaid runs in strict mode and the SVG is sanitized again locally.
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      ) : null,
+    [fullscreen, renderState.renderKey, svg, viewport.transform],
+  );
 
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setNativeFullscreen(document.fullscreenElement === figureRef.current);
+      const isOpen = document.fullscreenElement === figureRef.current;
+      setNativeFullscreen(isOpen);
+      onFullscreenChange?.(isOpen);
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () =>
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
+  }, [onFullscreenChange]);
 
   useEffect(() => {
-    if (!fallbackFullscreen) return;
+    if (!fullscreen) return;
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (fallbackFullscreen) document.body.style.overflow = "hidden";
     const closeWithEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setFallbackFullscreen(false);
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      if (fallbackFullscreen) {
+        onFullscreenChange?.(false);
+        setFallbackFullscreen(false);
+      } else if (document.fullscreenElement === figureRef.current) {
+        void document.exitFullscreen();
+      }
     };
-    document.addEventListener("keydown", closeWithEscape);
+    document.addEventListener("keydown", closeWithEscape, true);
     return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", closeWithEscape);
+      if (fallbackFullscreen) document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeWithEscape, true);
     };
-  }, [fallbackFullscreen]);
+  }, [fallbackFullscreen, fullscreen, onFullscreenChange]);
 
   useEffect(() => {
     if (readingMode) return;
@@ -87,13 +121,16 @@ export function MermaidDiagram({
     const figure = figureRef.current;
     if (!figure) return;
     if (fallbackFullscreen) {
+      onFullscreenChange?.(false);
       setFallbackFullscreen(false);
       return;
     }
     if (document.fullscreenElement === figure) {
+      onFullscreenChange?.(false);
       await document.exitFullscreen();
       return;
     }
+    onFullscreenChange?.(true);
     try {
       await figure.requestFullscreen();
     } catch {
@@ -137,21 +174,12 @@ export function MermaidDiagram({
         aria-busy={renderState.status === "loading"}
         {...(fullscreen ? viewport.viewportHandlers : {})}
       >
-        {svg ? (
-          <div
-            ref={surfaceRef}
-            className="mermaid-svg mermaid-render-surface"
-            data-mermaid-render-key={renderState.renderKey}
-            style={fullscreen ? { transform: viewport.transform } : undefined}
-            // Mermaid runs in strict mode and the SVG is sanitized again locally.
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
-        ) : renderState.status === "loading" ? (
+        {svgSurface ?? (renderState.status === "loading" ? (
           <div className="mermaid-diagram-placeholder" role="status">
             <LoaderCircle size={22} aria-hidden="true" />
             <span>در حال ساخت نمودار…</span>
           </div>
-        ) : null}
+        ) : null)}
         {readingMode && fullscreen && svg && (
           <div
             className="mermaid-diagram-viewport-tools mermaid-preview-tools"
@@ -261,4 +289,4 @@ export function MermaidDiagram({
       </figcaption>
     </figure>
   );
-}
+});

@@ -27,9 +27,9 @@
 
 `0C363E8F39D479F4B983A7C5DFA8B43D40DE3039B8F0FA98FBF7D168AA59BCA2`
 
-نسخهٔ Windows x64 در مسیر `downloads/Raavi-Setup-1.1.0-x64.exe` منتشر شده است. SHA256 این فایل:
+نسخهٔ Windows x64 در مسیر `downloads/Raavi-Setup-1.3.0-x64.exe` منتشر شده است. SHA256 این فایل:
 
-`3EFC465D27A65D20A2B252915B3CD62B78777DF142D49A710A21503891A02C3D`
+`88B5A891878AE1F29692C1E291DFB5DE7E31B18ABE52EA1D79E9D0DBD31884C3`
 
 تا زمانی که خروجی رسمی آماده نشده، دکمهٔ macOS عمداً غیرفعال است. پس از آماده‌شدن فایل بعدی:
 

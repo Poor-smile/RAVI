@@ -2,8 +2,13 @@
 
 import { autocompletion, CompletionContext } from "@codemirror/autocomplete";
 import { StreamLanguage } from "@codemirror/language";
-import { EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorState, StateEffect, StateField } from "@codemirror/state";
+import {
+  Decoration,
+  DecorationSet,
+  EditorView,
+  WidgetType,
+} from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
@@ -55,6 +60,62 @@ const mermaidLanguage = StreamLanguage.define({
   },
 });
 
+type EditorError = { line?: number; message?: string };
+
+const setEditorError = StateEffect.define<EditorError>();
+
+class ErrorNoteWidget extends WidgetType {
+  constructor(readonly message: string) {
+    super();
+  }
+
+  eq(other: ErrorNoteWidget) {
+    return other.message === this.message;
+  }
+
+  toDOM() {
+    const note = document.createElement("div");
+    note.className = "cm-mermaid-error-note";
+    note.dir = "rtl";
+    note.setAttribute("role", "note");
+    note.setAttribute("contenteditable", "false");
+    note.textContent = this.message;
+    return note;
+  }
+}
+
+const editorErrorField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(decorations, transaction) {
+    let next = decorations.map(transaction.changes);
+    for (const effect of transaction.effects) {
+      if (!effect.is(setEditorError)) continue;
+      const { line, message } = effect.value;
+      if (!line || !message) {
+        next = Decoration.none;
+        continue;
+      }
+      const lineNumber = Math.max(1, Math.min(line, transaction.state.doc.lines));
+      const documentLine = transaction.state.doc.line(lineNumber);
+      next = Decoration.set([
+        Decoration.line({
+          attributes: {
+            class: "cm-mermaid-error-line",
+            "aria-invalid": "true",
+          },
+        }).range(documentLine.from),
+        Decoration.widget({
+          widget: new ErrorNoteWidget(message),
+          block: true,
+          side: 1,
+        }).range(documentLine.to),
+      ]);
+    }
+    return next;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 function completeMermaid(context: CompletionContext) {
   const word = context.matchBefore(/[\w-]*/u);
   if (!word || (word.from === word.to && !context.explicit)) return null;
@@ -70,12 +131,18 @@ export function MermaidCodeEditor({
   onApply,
   onRenderNow,
   onRequestClose,
+  errorLine,
+  errorMessage,
+  focusErrorRequest = 0,
 }: {
   value: string;
   onChange: (value: string) => void;
   onApply: () => void;
   onRenderNow: () => void;
   onRequestClose: () => void;
+  errorLine?: number;
+  errorMessage?: string;
+  focusErrorRequest?: number;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -101,9 +168,11 @@ export function MermaidCodeEditor({
       doc: initialValueRef.current,
       extensions: [
         basicSetup,
+        editorErrorField,
         mermaidLanguage,
         autocompletion({ override: [completeMermaid] }),
         EditorView.lineWrapping,
+        EditorView.perLineTextDirection.of(true),
         EditorView.contentAttributes.of({
           dir: "ltr",
           "data-editable-kind": "mermaidEditor",
@@ -154,5 +223,31 @@ export function MermaidCodeEditor({
     });
   }, [value]);
 
-  return <div ref={hostRef} className="mermaid-code-editor" />;
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: setEditorError.of({ line: errorLine, message: errorMessage }),
+    });
+  }, [errorLine, errorMessage]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !errorLine || focusErrorRequest < 1) return;
+    const lineNumber = Math.max(1, Math.min(errorLine, view.state.doc.lines));
+    const line = view.state.doc.line(lineNumber);
+    view.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: "center" }),
+    });
+    view.focus();
+  }, [errorLine, focusErrorRequest]);
+
+  return (
+    <div
+      ref={hostRef}
+      className="mermaid-code-editor"
+      data-error-line={errorLine || undefined}
+    />
+  );
 }

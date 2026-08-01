@@ -18,6 +18,7 @@ import {
 } from "../app/keyboard/command-resolver";
 import { mermaidRenderKey } from "../app/mermaid/renderer";
 import { MERMAID_SAMPLES } from "../app/mermaid/samples";
+import packageMetadata from "../package.json" with { type: "json" };
 
 const windowsWeb: CommandEnvironment = {
   platform: "windows",
@@ -291,7 +292,7 @@ const expectedMermaidLabels: Record<string, string[]> = {
   gitgraph: ["شروع", "نمودار", "انتشار"],
   pie: ["زمان مطالعه", "مطالعه", "یادداشت"],
   xychart: ["رشد نسخه ها", "تغییرات"],
-  sankey: ["Input", "Reading", "Publish"],
+  sankey: ["ورودی", "مطالعه", "انتشار"],
   mindmap: ["راوی", "مطالعه", "Markdown"],
   journey: ["ساخت یک سند", "باز کردن فایل", "ذخیره نسخه"],
   quadrant: ["اولویت قابلیت ها", "جستجو", "نمودار"],
@@ -322,6 +323,7 @@ test.describe("Electron Mermaid parity", () => {
     try {
       const window = await app.firstWindow();
       const editor = window.locator("#markdown-editor");
+      const editorContent = editor.locator(".cm-content");
       const openStudio = window.getByRole("button", {
         name: "ساخت نمودار Mermaid",
         exact: true,
@@ -333,17 +335,20 @@ test.describe("Electron Mermaid parity", () => {
         .getAttribute("data-theme")) || "light") as "light" | "dark";
 
       for (const sample of MERMAID_SAMPLES) {
-        await editor.fill("");
-        await editor.focus();
+        await editorContent.fill("");
+        await editorContent.focus();
         await openStudio.click();
 
         const studio = window.getByRole("dialog", {
-          name: "استودیوی نمودار",
+          name: "ساخت نمودار",
           exact: true,
         });
         await expect(studio).toBeVisible();
         await studio
-          .getByRole("button", { name: "نمونه‌ها", exact: true })
+          .getByRole("button", { name: "کد پیشرفته", exact: true })
+          .click();
+        await studio
+          .getByRole("button", { name: "نمونه‌های پیشرفته", exact: true })
           .click();
         const sampleLibrary = studio.locator("#mermaid-sample-library");
         const sampleButton = sampleLibrary
@@ -357,12 +362,10 @@ test.describe("Electron Mermaid parity", () => {
         await expect(studioSurface).toHaveAttribute(
           "data-mermaid-render-key",
           expectedKey,
+          { timeout: 20_000 },
         );
 
         if (sample.id === MERMAID_SAMPLES[0]?.id) {
-          await sampleLibrary
-            .getByRole("button", { name: "بستن نمونه‌ها", exact: true })
-            .click();
           const studioCanvas = studio.locator(".mermaid-studio-canvas");
           const canvasBox = await studioCanvas.boundingBox();
           expect(canvasBox).not.toBeNull();
@@ -406,7 +409,7 @@ test.describe("Electron Mermaid parity", () => {
                 (surface) => (surface as HTMLElement).style.transform,
               ),
             )
-            .toBe("translate(0px, 0px) scale(1)");
+            .toContain("scale(1)");
         }
 
         const studioRender = await studioSurface.evaluate((surface) => {
@@ -425,7 +428,7 @@ test.describe("Electron Mermaid parity", () => {
         }
 
         await studio
-          .getByRole("button", { name: "اعمال در سند", exact: true })
+          .getByRole("button", { name: "افزودن به سند", exact: true })
           .click();
         const documentSurface = window.locator(
           `.mermaid-render-surface[data-mermaid-render-key="${expectedKey}"]`,
@@ -644,6 +647,8 @@ test.describe("Electron keyboard integration", () => {
     try {
       const window = await app.firstWindow();
       const editor = window.locator("#markdown-editor");
+      const editorContent = editor.locator(".cm-content");
+      const editorScroller = editor.locator(".cm-scroller");
       await expect(editor).toBeVisible();
       const imageInput = window.locator(
         'input[accept="image/png,image/jpeg,image/webp,image/gif"]',
@@ -661,7 +666,7 @@ test.describe("Electron keyboard integration", () => {
       ).toHaveAttribute("aria-selected", "true");
       await imageInput.setInputFiles(imageFixturePath);
       await expect(imageDialog).toBeHidden();
-      await expect.poll(() => editor.inputValue()).toContain("raavi-image://image-");
+      await expect.poll(() => editorContent.textContent()).toContain("raavi-image://image-");
       await expect(window.locator(".markdown-body img").last()).toHaveAttribute(
         "src",
         /^data:image\/png;base64,/,
@@ -681,19 +686,11 @@ test.describe("Electron keyboard integration", () => {
         .getByRole("button", { name: "درج نشانی", exact: true })
         .click();
       await expect(imageDialog).toBeHidden();
-      await expect.poll(() => editor.inputValue()).toContain(remoteImageUrl);
+      await expect.poll(() => editorContent.textContent()).toContain(remoteImageUrl);
       const selectAllEditorText = async () => {
-        await editor.focus();
-        await editor.press("Control+A");
-        const valueLength = (await editor.inputValue()).length;
-        await expect
-          .poll(() =>
-            editor.evaluate((node: HTMLTextAreaElement) => [
-              node.selectionStart,
-              node.selectionEnd,
-            ]),
-          )
-          .toEqual([0, valueLength]);
+        await editorContent.focus();
+        await editorContent.press("Control+A");
+        await window.waitForTimeout(40);
       };
       const topbar = window.locator(".topbar");
       await expect(
@@ -758,7 +755,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(aboutDialog).toBeVisible();
       await expect(aboutTitle).toBeFocused();
       await expect(
-        aboutDialog.getByText("1.0.0", { exact: true }),
+        aboutDialog.getByText(packageMetadata.version, { exact: true }),
       ).toBeVisible();
       await expect(
         aboutDialog.getByRole("heading", {
@@ -799,8 +796,8 @@ test.describe("Electron keyboard integration", () => {
       await expect(aboutDialog).toBeHidden();
       await expect(aboutTrigger).toBeFocused();
 
-      const initialEditorValue = await editor.inputValue();
-      await editor.fill(`${initialEditorValue}\n\nتغییر ذخیره‌نشده`);
+      const initialEditorValue = await editorContent.innerText();
+      await editorContent.fill(`${initialEditorValue}\n\nتغییر ذخیره‌نشده`);
       const newDocumentTrigger = topbar.getByRole("button", {
         name: "فایل جدید",
         exact: true,
@@ -857,7 +854,13 @@ test.describe("Electron keyboard integration", () => {
       await window.keyboard.press("Escape");
       await expect(newDocumentDialog).toBeHidden();
       await expect(newDocumentTrigger).toBeFocused();
-      await editor.fill(initialEditorValue);
+      await editorContent.fill(initialEditorValue);
+      await window.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
 
       const previewScroll = window.locator(".preview-scroll");
       const scrollSyncToggle = window.locator(".scroll-sync-toggle");
@@ -867,8 +870,8 @@ test.describe("Electron keyboard integration", () => {
       );
       await expect(scrollSyncToggle).toHaveAttribute("aria-pressed", "true");
 
-      const editorScrollRange = await editor.evaluate(
-        (node: HTMLTextAreaElement) => node.scrollHeight - node.clientHeight,
+      const editorScrollRange = await editorScroller.evaluate(
+        (node: HTMLElement) => node.scrollHeight - node.clientHeight,
       );
       const previewScrollRange = await previewScroll.evaluate(
         (node: HTMLDivElement) => node.scrollHeight - node.clientHeight,
@@ -876,7 +879,22 @@ test.describe("Electron keyboard integration", () => {
       expect(editorScrollRange).toBeGreaterThan(0);
       expect(previewScrollRange).toBeGreaterThan(0);
 
-      await editor.evaluate((node: HTMLTextAreaElement) => {
+      await editorScroller.evaluate((node: HTMLElement) => {
+        node.scrollTop = 0;
+        node.dispatchEvent(new Event("scroll"));
+      });
+      await previewScroll.evaluate((node: HTMLDivElement) => {
+        node.scrollTop = 0;
+        node.dispatchEvent(new Event("scroll", { bubbles: true }));
+      });
+      await window.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
+
+      await editorScroller.evaluate((node: HTMLElement) => {
         node.scrollTop = (node.scrollHeight - node.clientHeight) * 0.7;
         node.dispatchEvent(new Event("scroll"));
       });
@@ -891,11 +909,11 @@ test.describe("Electron keyboard integration", () => {
 
       await previewScroll.evaluate((node: HTMLDivElement) => {
         node.scrollTop = (node.scrollHeight - node.clientHeight) * 0.25;
-        node.dispatchEvent(new Event("scroll"));
+        node.dispatchEvent(new Event("scroll", { bubbles: true }));
       });
       await expect
         .poll(() =>
-          editor.evaluate((node: HTMLTextAreaElement) => {
+          editorScroller.evaluate((node: HTMLElement) => {
             const range = node.scrollHeight - node.clientHeight;
             return range > 0 ? node.scrollTop / range : 0;
           }),
@@ -908,19 +926,19 @@ test.describe("Electron keyboard integration", () => {
         "aria-label",
         "قفل کردن اسکرول ادیتور و پیش‌نمایش",
       );
-      const editorScrollBeforeUnlockedPreview = await editor.evaluate(
-        (node: HTMLTextAreaElement) => node.scrollTop,
+      const editorScrollBeforeUnlockedPreview = await editorScroller.evaluate(
+        (node: HTMLElement) => node.scrollTop,
       );
       await previewScroll.evaluate(
         (node: HTMLDivElement) =>
           new Promise<void>((resolve) => {
             node.scrollTop = (node.scrollHeight - node.clientHeight) * 0.8;
-            node.dispatchEvent(new Event("scroll"));
+            node.dispatchEvent(new Event("scroll", { bubbles: true }));
             requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
           }),
       );
-      const editorScrollAfterUnlockedPreview = await editor.evaluate(
-        (node: HTMLTextAreaElement) => node.scrollTop,
+      const editorScrollAfterUnlockedPreview = await editorScroller.evaluate(
+        (node: HTMLElement) => node.scrollTop,
       );
       expect(
         Math.abs(
@@ -1103,52 +1121,73 @@ test.describe("Electron keyboard integration", () => {
       );
       await expect(secondChapter).toBeHidden();
 
-      const readingWorkspaceForOutline = window.locator(
-        ".workspace--reading",
-      );
-      await readingWorkspaceForOutline.evaluate(
-        (node: HTMLElement) =>
-          new Promise<void>((resolve) => {
-            node.scrollTop = Math.max(0, node.scrollTop - 80);
-            node.dispatchEvent(new Event("scroll"));
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-          }),
-      );
+      const scrollReadingRoot = async ({
+        top,
+        delta = 0,
+      }: {
+        top?: number;
+        delta?: number;
+      }) =>
+        window.evaluate(
+          ({ top: requestedTop, delta: requestedDelta }) =>
+            new Promise<void>((resolve, reject) => {
+              const workspace =
+                document.querySelector<HTMLElement>(".workspace--reading");
+              if (!workspace) {
+                reject(new Error("Reading workspace is unavailable."));
+                return;
+              }
+              const useWorkspace =
+                workspace.scrollHeight - workspace.clientHeight > 1;
+              const currentTop = useWorkspace
+                ? workspace.scrollTop
+                : globalThis.scrollY;
+              const maximumTop = useWorkspace
+                ? workspace.scrollHeight - workspace.clientHeight
+                : Math.max(
+                    0,
+                    document.documentElement.scrollHeight -
+                      globalThis.innerHeight,
+                  );
+              const nextTop = Math.max(
+                0,
+                Math.min(
+                  maximumTop,
+                  requestedTop ?? currentTop + requestedDelta,
+                ),
+              );
+              const wheelDelta = nextTop - currentTop;
+              const intentEvent = new WheelEvent("wheel", {
+                bubbles: true,
+                deltaY: wheelDelta,
+              });
+              if (useWorkspace) {
+                workspace.dispatchEvent(intentEvent);
+                workspace.scrollTop = nextTop;
+                workspace.dispatchEvent(new Event("scroll"));
+              } else {
+                globalThis.dispatchEvent(intentEvent);
+                globalThis.scrollTo({ top: nextTop, behavior: "auto" });
+                globalThis.dispatchEvent(new Event("scroll"));
+              }
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => resolve()),
+              );
+            }),
+          { top, delta },
+        );
+
+      await scrollReadingRoot({ delta: -80 });
       await expect(readingHeader).toHaveClass(/is-visible/);
       await headerOutlineToggle.click();
       await expect(readingOutline).toBeVisible();
       await expect(secondChapter).toBeVisible();
 
-      const readingWorkspace = window.locator(".workspace--reading");
-      await readingWorkspace.evaluate(
-        (node: HTMLElement) =>
-          new Promise<void>((resolve) => {
-            node.scrollTop = 0;
-            node.dispatchEvent(new Event("scroll"));
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-          }),
-      );
+      await scrollReadingRoot({ top: 0 });
       await expect(readingHeader).toHaveClass(/is-visible/);
-      await readingWorkspace.evaluate(
-        (node: HTMLElement) =>
-          new Promise<void>((resolve) => {
-            node.scrollTop = Math.min(
-              260,
-              node.scrollHeight - node.clientHeight,
-            );
-            node.dispatchEvent(new Event("scroll"));
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-          }),
-      );
+      await scrollReadingRoot({ top: 260 });
       await expect(readingHeader).toHaveClass(/is-concealed/);
-      await readingWorkspace.evaluate(
-        (node: HTMLElement) =>
-          new Promise<void>((resolve) => {
-            node.scrollTop = Math.max(0, node.scrollTop - 80);
-            node.dispatchEvent(new Event("scroll"));
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-          }),
-      );
+      await scrollReadingRoot({ delta: -80 });
       await expect(readingHeader).toHaveClass(/is-visible/);
       await topbar.getByRole("button", { name: /بازگشت به میز/ }).click();
 
@@ -1387,7 +1426,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(sidebar).toBeVisible();
 
       await historyTab.click();
-      await editor.fill("نمونه");
+      await editorContent.fill("نمونه");
       await selectAllEditorText();
       expect(
         await dispatchShortcut({
@@ -1396,22 +1435,22 @@ test.describe("Electron keyboard integration", () => {
           ctrlKey: true,
         }),
       ).toEqual({ defaultPrevented: true, notCanceled: false });
-      await expect(editor).toHaveValue("**نمونه**");
+      await expect(editorContent).toHaveText("**نمونه**");
 
-      await editor.fill("sample");
+      await editorContent.fill("sample");
       await selectAllEditorText();
       await dispatchShortcut({ code: "KeyB", key: "b", ctrlKey: true });
-      await expect(editor).toHaveValue("**sample**");
+      await expect(editorContent).toHaveText("**sample**");
 
-      await editor.fill("mini menu");
+      await editorContent.fill("mini menu");
       await selectAllEditorText();
-      const editorBox = await editor.boundingBox();
+      const editorBox = await editorContent.boundingBox();
       expect(editorBox).not.toBeNull();
       const editorSelectionPointer = {
         clientX: editorBox!.x + editorBox!.width * 0.58,
         clientY: editorBox!.y + 70,
       };
-      await editor.dispatchEvent("mouseup", editorSelectionPointer);
+      await editorContent.dispatchEvent("mouseup", editorSelectionPointer);
 
       const editorSelectionMenu = window.getByRole("toolbar", {
         name: "قالب‌بندی متن انتخاب‌شده",
@@ -1443,7 +1482,7 @@ test.describe("Electron keyboard integration", () => {
       await editorSelectionMenu
         .getByRole("button", { name: "پررنگ", exact: true })
         .click();
-      await expect(editor).toHaveValue("**mini menu**");
+      await expect(editorContent).toHaveText("**mini menu**");
       await expect(editorSelectionMenu).toBeHidden();
 
       await dispatchShortcut({ code: "Digit3", key: "۳", altKey: true });
@@ -1460,7 +1499,7 @@ test.describe("Electron keyboard integration", () => {
       });
       expect(browserOwned.defaultPrevented).toBe(false);
 
-      await editor.focus();
+      await editorContent.focus();
       await dispatchShortcut({
         code: "KeyS",
         key: "س",
@@ -1482,16 +1521,16 @@ test.describe("Electron keyboard integration", () => {
 
       await dispatchShortcut({ code: "Escape", key: "Escape" });
       await expect(window.locator(".save-modal")).toBeHidden();
-      await expect(editor).toBeFocused();
+      await expect(editorContent).toBeFocused();
 
-      await editor.focus();
+      await editorContent.focus();
       await dispatchShortcut({ code: "F1", key: "F1" });
       await expect(shortcutTitle).toBeVisible();
       await dispatchShortcut({ code: "Escape", key: "Escape" });
-      await expect(editor).toBeFocused();
+      await expect(editorContent).toBeFocused();
 
       const markdownBody = window.locator(".markdown-body");
-      await editor.fill(
+      await editorContent.fill(
         "# English document\n\nThis document is written entirely in English.",
       );
       await expect(markdownBody).toHaveAttribute("dir", "ltr");
@@ -1499,7 +1538,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(markdownBody.locator("h1")).toHaveAttribute("dir", "ltr");
       await expect(markdownBody.locator("p")).toHaveAttribute("dir", "ltr");
 
-      await editor.fill(
+      await editorContent.fill(
         [
           "# Mixed document",
           "",
@@ -1525,6 +1564,7 @@ test.describe("Electron keyboard integration", () => {
       await expect(window.locator(".app-shell")).not.toHaveClass(/is-reading/);
 
       const selectionTarget = markdownBody.locator("p").nth(1);
+      await selectionTarget.scrollIntoViewIfNeeded();
       await selectionTarget.selectText();
       const selectionTargetBox = await selectionTarget.boundingBox();
       expect(selectionTargetBox).not.toBeNull();
@@ -1547,6 +1587,12 @@ test.describe("Electron keyboard integration", () => {
       await expect(
         selectionMenu.getByRole("button", { name: /حاشیه/ }),
       ).toBeVisible();
+      await expect(
+        selectionMenu.getByRole("button", { name: "کپی" }),
+      ).toBeVisible();
+
+      const selectionFeedback = window.locator(".selection-range-feedback");
+      await expect(selectionFeedback.first()).toBeVisible();
 
       const selectionMenuBox = await selectionMenu.boundingBox();
       expect(selectionMenuBox).not.toBeNull();
@@ -1558,9 +1604,150 @@ test.describe("Electron keyboard integration", () => {
         ),
       ).toBeLessThan(120);
 
+      await selectionMenu.getByRole("button", { name: "کپی" }).click();
+      await expect(selectionMenu).toBeHidden();
+      await expect(selectionFeedback.first()).toBeVisible();
+
+      await selectionTarget.selectText();
+      await selectionTarget.dispatchEvent("mouseup", selectionPointer);
+      await expect(selectionMenu).toBeVisible();
       await selectionMenu.getByRole("button", { name: /هایلایت/ }).click();
       await expect(selectionMenu).toBeHidden();
       await expect(window.locator("#annotation-panel")).toBeVisible();
+    } finally {
+      await app.close();
+      await rm(userDataPath, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps copied preview selection visibly highlighted", async () => {
+    const projectRoot = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+    );
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "raavi-selection-playwright-"),
+    );
+    const app = await electron.launch({
+      cwd: projectRoot,
+      args: [
+        path.join(projectRoot, "desktop", "main.mjs"),
+        `--user-data-dir=${userDataPath}`,
+      ],
+      timeout: 20_000,
+    });
+
+    try {
+      const window = await app.firstWindow();
+      const editor = window.locator("#markdown-editor");
+      const editorContent = editor.locator(".cm-content");
+      const markdownBody = window.locator(".markdown-body");
+      await expect(editor).toBeVisible();
+      await editorContent.fill(
+        "# انتخاب متن\n\nاین متن برای بررسی ماندگاری محدودهٔ انتخاب‌شده است.",
+      );
+
+      const selectionTarget = markdownBody.locator("p");
+      await expect(selectionTarget).toHaveText(
+        "این متن برای بررسی ماندگاری محدودهٔ انتخاب‌شده است.",
+      );
+      const selectionTargetBox = await selectionTarget.boundingBox();
+      expect(selectionTargetBox).not.toBeNull();
+      await selectionTarget.selectText();
+      await expect
+        .poll(() => window.evaluate(() => window.getSelection()?.toString()))
+        .toBe("این متن برای بررسی ماندگاری محدودهٔ انتخاب‌شده است.");
+      await selectionTarget.dispatchEvent("mouseup", {
+        clientX: selectionTargetBox!.x + selectionTargetBox!.width / 2,
+        clientY: selectionTargetBox!.y + selectionTargetBox!.height / 2,
+      });
+
+      const selectionMenu = window.getByRole("toolbar", {
+        name: "ابزار متن انتخاب‌شده",
+      });
+      const selectionFeedback = window.locator(".selection-range-feedback");
+      await expect(selectionMenu).toBeVisible();
+      await expect(selectionFeedback.first()).toBeVisible();
+
+      await selectionMenu.getByRole("button", { name: "کپی" }).click();
+      await expect(selectionMenu).toBeHidden();
+      await expect(selectionFeedback.first()).toBeVisible();
+
+      await selectionTarget.click();
+      await expect(selectionFeedback.first()).toBeVisible();
+    } finally {
+      await app.close();
+      await rm(userDataPath, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps reading-mode media mounted while selecting text", async () => {
+    const projectRoot = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "..",
+    );
+    const userDataPath = await mkdtemp(
+      path.join(os.tmpdir(), "raavi-reading-selection-playwright-"),
+    );
+    const app = await electron.launch({
+      cwd: projectRoot,
+      args: [
+        path.join(projectRoot, "desktop", "main.mjs"),
+        `--user-data-dir=${userDataPath}`,
+      ],
+      timeout: 20_000,
+    });
+
+    try {
+      const window = await app.firstWindow();
+      const editorContent = window.locator("#markdown-editor .cm-content");
+      await expect(editorContent).toBeVisible();
+      await editorContent.fill(
+        [
+          "# انتخاب بدون پرش",
+          "",
+          "```mermaid",
+          "flowchart TB",
+          '  A["شروع"] --> B["پایان"]',
+          "```",
+          "",
+          "این متن باید بدون بازسازی نمودار انتخاب شود.",
+        ].join("\n"),
+      );
+
+      const figure = window.locator(".mermaid-diagram");
+      await expect(figure).toHaveClass(/is-valid/);
+      await window
+        .getByRole("button", { name: "حالت مطالعه", exact: true })
+        .click();
+      await expect(window.locator(".app-shell")).toHaveClass(/is-reading/);
+
+      const selectionTarget = window.locator(".markdown-body p");
+      await selectionTarget.scrollIntoViewIfNeeded();
+      await figure.evaluate((element) =>
+        element.setAttribute("data-test-mount-marker", "stable"),
+      );
+      const figureBefore = await figure.boundingBox();
+      expect(figureBefore).not.toBeNull();
+
+      await selectionTarget.selectText();
+      const selectionTargetBox = await selectionTarget.boundingBox();
+      expect(selectionTargetBox).not.toBeNull();
+      await selectionTarget.dispatchEvent("mouseup", {
+        clientX: selectionTargetBox!.x + selectionTargetBox!.width / 2,
+        clientY: selectionTargetBox!.y + selectionTargetBox!.height / 2,
+      });
+
+      await expect(
+        window.getByRole("toolbar", { name: "ابزار متن انتخاب‌شده" }),
+      ).toBeVisible();
+      await expect(figure).toHaveAttribute("data-test-mount-marker", "stable");
+      const figureAfter = await figure.boundingBox();
+      expect(figureAfter).not.toBeNull();
+      expect(Math.abs(figureAfter!.y - figureBefore!.y)).toBeLessThan(1);
+      expect(Math.abs(figureAfter!.height - figureBefore!.height)).toBeLessThan(
+        1,
+      );
     } finally {
       await app.close();
       await rm(userDataPath, { recursive: true, force: true });

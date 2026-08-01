@@ -338,9 +338,9 @@ test("ships the secure Mermaid Studio and standard-fence workflow", async () => 
 
   assert.match(page, /MermaidDiagram/);
   assert.match(page, /MermaidStudio/);
-  assert.match(studio, /استودیوی نمودار/);
+  assert.match(studio, /ساخت نمودار/);
   assert.match(studio, /پیش‌نمایش زنده/);
-  assert.match(studio, /Ctrl\+Enter/);
+  assert.match(studio, /پیش‌نویس خودکار نگه‌داری می‌شود/);
   assert.match(renderer, /securityLevel: "strict"/);
   assert.match(renderer, /DOMParser/);
   assert.match(renderer, /renderTimeoutMs/);

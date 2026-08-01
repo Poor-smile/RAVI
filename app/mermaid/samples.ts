@@ -208,10 +208,10 @@ export const MERMAID_SAMPLES: MermaidSample[] = [
     docsUrl: "https://mermaid.js.org/syntax/sankey.html",
     code: `sankey-beta
 
-Input,Reading,8
-Input,Editing,5
-Editing,Publish,4
-Reading,Notes,3`,
+ورودی،مطالعه،۸
+ورودی،ویرایش،۵
+ویرایش،انتشار،۴
+مطالعه،یادداشت،۳`,
   },
   {
     id: "mindmap",
@@ -256,5 +256,194 @@ Reading,Notes,3`,
     "جستجو": [0.7, 0.8]
     "نمودار": [0.9, 0.6]
     "چاپ": [0.5, 0.7]`,
+  },
+  {
+    id: "swimlane",
+    category: "پایه",
+    title: "مسیر مسئولیت",
+    description: "فرایند در خط‌های جداگانهٔ افراد، تیم‌ها یا سامانه‌ها.",
+    docsUrl: "https://mermaid.js.org/syntax/swimlanes.html",
+    code: `swimlane-beta RL
+    accTitle: رسیدگی به درخواست
+    subgraph customer["مشتری"]
+        request(["ثبت درخواست"])
+    end
+    subgraph support["پشتیبانی"]
+        review["بررسی درخواست"]
+        answer["ارسال پاسخ"]
+    end
+    request -->|ارجاع| review
+    review -->|تأیید| answer`,
+  },
+  {
+    id: "block",
+    category: "مهندسی",
+    title: "نمودار بلوکی",
+    description: "اجزای سامانه با کنترل ستون، پهنا، شکل و اتصال.",
+    docsUrl: "https://mermaid.js.org/syntax/block.html",
+    code: `block-beta
+    columns 3
+    editor["ویرایشگر"]
+    preview["پیش‌نمایش"]
+    storage[("ذخیره‌سازی")]
+    editor -->|به‌روزرسانی| preview
+    preview -->|ثبت| storage`,
+  },
+  {
+    id: "packet",
+    category: "مهندسی",
+    title: "ساختار بسته",
+    description: "جای فیلدها در یک بستهٔ داده بر اساس تعداد بیت.",
+    docsUrl: "https://mermaid.js.org/syntax/packet.html",
+    code: `---
+config:
+  packet:
+    bitsPerRow: 32
+---
+packet
+    title بستهٔ داده
+    +4: "نسخه"
+    +4: "نوع"
+    +8: "طول"
+    +16: "داده"`,
+  },
+  {
+    id: "radar",
+    category: "داده",
+    title: "نمودار رادار",
+    description: "مقایسهٔ چند سری روی مجموعه‌ای از معیارهای مشترک.",
+    docsUrl: "https://mermaid.js.org/syntax/radar.html",
+    code: `radar-beta
+    title توانمندی تیم
+    axis speed["سرعت"], quality["کیفیت"], learning["یادگیری"]
+    curve now["اکنون"] { speed: 70, quality: 80, learning: 60 }
+    curve goal["هدف"] { speed: 90, quality: 90, learning: 85 }
+    showLegend true
+    min 0
+    max 100
+    graticule polygon
+    ticks 5`,
+  },
+  {
+    id: "eventmodeling",
+    category: "مهندسی",
+    title: "مدل‌سازی رویداد",
+    description: "جریان زمانی رابط، فرمان، رویداد و مدل‌های سامانه.",
+    docsUrl: "https://mermaid.js.org/syntax/eventModeling.html",
+    code: `---
+title: "جریان ثبت سفارش"
+---
+eventmodeling
+    tf 01 ui SHOP.CART
+    tf 02 cmd SHOP.SUBMIT
+    tf 03 evt SHOP.CREATED
+%% raavi-label:SHOP:%D9%81%D8%B1%D9%88%D8%B4%DA%AF%D8%A7%D9%87
+%% raavi-label:CART:%D8%B5%D9%81%D8%AD%D9%87%D9%94%20%D8%B3%D8%A8%D8%AF
+%% raavi-label:SUBMIT:%D8%AB%D8%A8%D8%AA%20%D8%B3%D9%81%D8%A7%D8%B1%D8%B4
+%% raavi-label:CREATED:%D8%B3%D9%81%D8%A7%D8%B1%D8%B4%20%D8%AB%D8%A8%D8%AA%20%D8%B4%D8%AF`,
+  },
+  {
+    id: "treemap",
+    category: "داده",
+    title: "نقشهٔ درختی مساحتی",
+    description: "نمایش سهم بخش‌ها در یک ساختار سلسله‌مراتبی.",
+    docsUrl: "https://mermaid.js.org/syntax/treemap.html",
+    code: `---
+title: "سهم قابلیت‌ها"
+config:
+  treemap:
+    showValues: true
+---
+treemap-beta
+  "محصول"
+    "ویرایشگر": 40
+    "مطالعه": 35
+    "نمودار": 25`,
+  },
+  {
+    id: "venn",
+    category: "داده",
+    title: "نمودار ون",
+    description: "مجموعه‌ها، هم‌پوشانی‌ها و اندازهٔ هر ناحیه.",
+    docsUrl: "https://mermaid.js.org/syntax/venn.html",
+    code: `venn-beta
+    title هم‌پوشانی مهارت‌ها
+    set technical["فنی"]: 12
+    set product["محصول"]: 10
+    union technical,product["مهارت مشترک"]: 4`,
+  },
+  {
+    id: "ishikawa",
+    category: "ایده",
+    title: "علت و معلول (ایشیکاوا)",
+    description: "دسته‌بندی علت‌های اصلی، علت‌ها و زیرعلت‌های یک مسئله.",
+    docsUrl: "https://mermaid.js.org/syntax/ishikawa.html",
+    code: `ishikawa
+  کندی انتشار
+    فرایند
+      بازبینی دیرهنگام
+        تأیید دستی
+    ابزار
+      آزمون ناکافی
+        پوشش کم`,
+  },
+  {
+    id: "wardley",
+    category: "ایده",
+    title: "نقشهٔ واردلی",
+    description: "زنجیرهٔ ارزش بر اساس دیده‌شدن، بلوغ و وابستگی.",
+    docsUrl: "https://mermaid.js.org/syntax/wardley.html",
+    code: `wardley-beta
+    title زنجیرهٔ ارزش راوی
+    size [1100, 700]
+    anchor "کاربر" [0.95, 0.65]
+    component "راوی" [0.8, 0.55] (build)
+    component "ذخیره‌سازی" [0.45, 0.8] (buy)
+    "کاربر" -> "راوی"
+    "راوی" -> "ذخیره‌سازی"
+    evolve "راوی" 0.72`,
+  },
+  {
+    id: "cynefin",
+    category: "ایده",
+    title: "چارچوب کینِفین",
+    description: "جای‌گذاری موقعیت‌ها در دامنه‌های مختلف تصمیم‌گیری.",
+    docsUrl: "https://mermaid.js.org/syntax/cynefin.html",
+    code: `---
+config:
+  cynefin:
+    showDomainDescriptions: true
+---
+cynefin-beta
+    title تصمیم‌های محصول
+    complex
+      "کشف قابلیت تازه"
+    complicated
+      "بهینه‌سازی پایگاه داده"
+    clear
+      "انتشار نسخه"
+    chaotic
+      "قطعی سراسری"
+    confusion
+    complex --> complicated : "الگو شناخته شد"
+    chaotic --> complex : "پایداری اولیه"`,
+  },
+  {
+    id: "treeview",
+    category: "مهندسی",
+    title: "نمای درختی",
+    description: "ساختار تو‌در‌توی پوشه‌ها، فایل‌ها یا هر سلسله‌مراتب.",
+    docsUrl: "https://mermaid.js.org/syntax/treeView.html",
+    code: `---
+title: "ساختار پروژه"
+config:
+  treeView:
+    showIcons: true
+---
+treeView-beta
+  "پروژهٔ راوی"/
+    "کد منبع"/
+      "ویرایشگر.tsx" ## ویرایش متن
+    "راهنما.md" ## راهنمای کاربر :::highlight`,
   },
 ];

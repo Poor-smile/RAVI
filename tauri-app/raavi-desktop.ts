@@ -10,9 +10,42 @@ type OpenedDocument = Parameters<
   : never;
 
 let openDocumentListenerReady = Promise.resolve();
+const RENDERER_STATE_STORAGE_KEY = "raavi:tauri-renderer-state:v1";
 
 const desktopApi = Object.freeze<RaaviDesktopAPI>({
   isDesktop: true,
+  getLocalDocumentSnapshot: async () => {
+    try {
+      const saved = window.localStorage.getItem(RENDERER_STATE_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  },
+  saveLocalDocumentSnapshot: async (snapshot) => {
+    window.localStorage.setItem(
+      RENDERER_STATE_STORAGE_KEY,
+      JSON.stringify(snapshot),
+    );
+    return { saved: true };
+  },
+  saveReadingPositions: async (readingPositions) => {
+    let currentSnapshot: Record<string, unknown> = {};
+    try {
+      const saved = window.localStorage.getItem(RENDERER_STATE_STORAGE_KEY);
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        currentSnapshot = parsed;
+      }
+    } catch {
+      currentSnapshot = {};
+    }
+    window.localStorage.setItem(
+      RENDERER_STATE_STORAGE_KEY,
+      JSON.stringify({ ...currentSnapshot, readingPositions }),
+    );
+    return { saved: true };
+  },
   getLibraryState: () => invoke("get_library_state"),
   chooseMarkdownFolder: () => invoke("choose_markdown_folder"),
   scanMarkdownFolder: (rootPath) =>

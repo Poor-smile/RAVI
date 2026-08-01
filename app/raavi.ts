@@ -30,6 +30,8 @@ export type RaaviImageAsset = {
   name: string;
   mimeType: "image/gif" | "image/jpeg" | "image/png" | "image/webp";
   data: string;
+  width?: number;
+  height?: number;
 };
 
 export type RaaviVersion = {
@@ -80,6 +82,20 @@ function parseImageAsset(value: unknown): RaaviImageAsset | null {
   const name = safeText(candidate.name, 240).trim();
   const mimeType = safeText(candidate.mimeType, 64).toLowerCase();
   const data = typeof candidate.data === "string" ? candidate.data : "";
+  const width =
+    typeof candidate.width === "number" &&
+    Number.isInteger(candidate.width) &&
+    candidate.width > 0 &&
+    candidate.width <= 16_384
+      ? candidate.width
+      : undefined;
+  const height =
+    typeof candidate.height === "number" &&
+    Number.isInteger(candidate.height) &&
+    candidate.height > 0 &&
+    candidate.height <= 16_384
+      ? candidate.height
+      : undefined;
 
   if (
     !/^[a-z0-9][a-z0-9-]{0,119}$/iu.test(id) ||
@@ -98,6 +114,7 @@ function parseImageAsset(value: unknown): RaaviImageAsset | null {
     name,
     mimeType: mimeType as RaaviImageAsset["mimeType"],
     data,
+    ...(width && height ? { width, height } : {}),
   };
 }
 

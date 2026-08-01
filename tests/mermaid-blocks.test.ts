@@ -2,10 +2,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   findMermaidBlocks,
+  mermaidBlockAtOffset,
   insertMermaidBlock,
   makeMermaidFence,
   replaceMermaidBlock,
 } from "../app/mermaid/blocks";
+
+test("a Mermaid block does not capture an adjacent fenced code block", () => {
+  const markdown = [
+    "```mermaid",
+    "flowchart LR",
+    "  A --> B",
+    "```",
+    "",
+    "```typescript",
+    "const value = 1;",
+    "```",
+  ].join("\n");
+  const [block] = findMermaidBlocks(markdown);
+  assert.equal(mermaidBlockAtOffset([block], block.startOffset), block);
+  assert.equal(mermaidBlockAtOffset([block], block.endOffset + 1), undefined);
+});
 
 const FLOW = `flowchart LR
   A[شروع] --> B[پایان]`;

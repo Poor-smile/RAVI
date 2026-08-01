@@ -2,11 +2,11 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: ["keyboard-shortcuts.spec.ts", "mermaid-persian-studio.spec.ts"],
+  testMatch: ["reading-continuity-audit.spec.ts"],
   workers: 1,
-  timeout: 45_000,
+  timeout: 180_000,
   expect: {
-    timeout: 7_000,
+    timeout: 10_000,
   },
   reporter: [["line"]],
   use: {

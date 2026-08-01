@@ -6,7 +6,8 @@ import {
   nativeTheme,
   shell,
 } from "electron";
-import { access, readFile, writeFile } from "node:fs/promises";
+import { access, readFile, rename, writeFile } from "node:fs/promises";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -24,6 +25,7 @@ const allowedDocumentPaths = new Set();
 const MAX_RECENT_FILES = 20;
 const MAX_HISTORY_DOCUMENTS = 50;
 const MAX_DOCUMENT_VERSIONS = 30;
+const MAX_RENDERER_STATE_BYTES = 48 * 1024 * 1024;
 const isSmokeTest =
   process.argv.includes("--smoke-test") || process.env.RAAVI_SMOKE_TEST === "1";
 const initialDocumentPath = markdownPathFromArguments(process.argv);
@@ -31,6 +33,8 @@ const initialDocumentPath = markdownPathFromArguments(process.argv);
 let mainWindow = null;
 let localServer = null;
 let rendererReady = false;
+let rendererStateWriteQueue = Promise.resolve();
+let rendererStateReadCount = 0;
 let pendingDocumentRequest = initialDocumentPath
   ? { filePath: initialDocumentPath, openInReadingMode: true }
   : null;
@@ -59,6 +63,10 @@ function libraryStatePath() {
 
 function historyStatePath() {
   return path.join(app.getPath("userData"), "document-history.json");
+}
+
+function rendererStatePath() {
+  return path.join(app.getPath("userData"), "renderer-state.json");
 }
 
 async function readJsonFile(filePath, fallback) {
@@ -93,6 +101,172 @@ async function readLibraryState() {
 
 async function writeLibraryState(value) {
   await writeFile(libraryStatePath(), JSON.stringify(value, null, 2), "utf8");
+}
+
+async function getRendererState() {
+  rendererStateReadCount += 1;
+  const snapshot = await readRendererStateFile();
+  if (!initialDocumentPath || rendererStateReadCount > 1) return snapshot;
+
+  // When Windows launches Raavi for a specific file, restoring the previous
+  // document first creates a brief stale view and lets its scroll callbacks
+  // race with the requested document. Only hydrate the cross-document reading
+  // index; the requested file remains the sole source of visible content.
+  return snapshot?.readingPositions
+    ? { readingPositions: snapshot.readingPositions }
+    : null;
+}
+
+async function readRendererStateFile() {
+  const value = await readJsonFile(rendererStatePath(), null);
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : null;
+}
+
+function saveRendererState(_event, snapshot) {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    throw new Error("Renderer state is invalid.");
+  }
+  const incomingSerialized = JSON.stringify(snapshot);
+  if (Buffer.byteLength(incomingSerialized, "utf8") > MAX_RENDERER_STATE_BYTES) {
+    throw new Error("Renderer state is too large.");
+  }
+
+  rendererStateWriteQueue = rendererStateWriteQueue
+    .catch(() => {})
+    .then(async () => {
+      const currentSnapshot = (await readRendererStateFile()) ?? {};
+      const currentPositions =
+        currentSnapshot.readingPositions &&
+        typeof currentSnapshot.readingPositions === "object" &&
+        !Array.isArray(currentSnapshot.readingPositions)
+          ? currentSnapshot.readingPositions
+          : {};
+      const incomingPositions =
+        snapshot.readingPositions &&
+        typeof snapshot.readingPositions === "object" &&
+        !Array.isArray(snapshot.readingPositions)
+          ? snapshot.readingPositions
+          : {};
+      const readingPositions = { ...incomingPositions };
+      for (const [key, currentRecord] of Object.entries(currentPositions)) {
+        const incomingRecord = readingPositions[key];
+        if (
+          !incomingRecord ||
+          Number(currentRecord?.updatedAt ?? 0) >
+            Number(incomingRecord?.updatedAt ?? 0)
+        ) {
+          readingPositions[key] = currentRecord;
+        }
+      }
+      const serialized = JSON.stringify({ ...snapshot, readingPositions });
+      if (Buffer.byteLength(serialized, "utf8") > MAX_RENDERER_STATE_BYTES) {
+        throw new Error("Renderer state is too large.");
+      }
+      const targetPath = rendererStatePath();
+      const temporaryPath = `${targetPath}.tmp`;
+      await writeFile(temporaryPath, serialized, "utf8");
+      try {
+        await rename(temporaryPath, targetPath);
+      } catch {
+        await writeFile(targetPath, serialized, "utf8");
+      }
+      return { saved: true };
+    });
+  return rendererStateWriteQueue;
+}
+
+function saveRendererReadingPositions(_event, readingPositions) {
+  if (
+    !readingPositions ||
+    typeof readingPositions !== "object" ||
+    Array.isArray(readingPositions)
+  ) {
+    throw new Error("Renderer reading positions are invalid.");
+  }
+
+  rendererStateWriteQueue = rendererStateWriteQueue
+    .catch(() => {})
+    .then(async () => {
+      const currentSnapshot = (await readRendererStateFile()) ?? {};
+      const currentPositions =
+        currentSnapshot.readingPositions &&
+        typeof currentSnapshot.readingPositions === "object" &&
+        !Array.isArray(currentSnapshot.readingPositions)
+          ? currentSnapshot.readingPositions
+          : {};
+      const mergedPositions = { ...readingPositions };
+      for (const [key, currentRecord] of Object.entries(currentPositions)) {
+        const incomingRecord = mergedPositions[key];
+        if (
+          !incomingRecord ||
+          Number(currentRecord?.updatedAt ?? 0) >
+            Number(incomingRecord?.updatedAt ?? 0)
+        ) {
+          mergedPositions[key] = currentRecord;
+        }
+      }
+      const serialized = JSON.stringify({
+        ...currentSnapshot,
+        readingPositions: mergedPositions,
+      });
+      if (Buffer.byteLength(serialized, "utf8") > MAX_RENDERER_STATE_BYTES) {
+        throw new Error("Renderer state is too large.");
+      }
+      const targetPath = rendererStatePath();
+      const temporaryPath = `${targetPath}.tmp`;
+      await writeFile(temporaryPath, serialized, "utf8");
+      try {
+        await rename(temporaryPath, targetPath);
+      } catch {
+        await writeFile(targetPath, serialized, "utf8");
+      }
+      return { saved: true };
+    });
+  return rendererStateWriteQueue;
+}
+
+function saveRendererReadingPositionsSync(event, readingPositions) {
+  if (
+    !readingPositions ||
+    typeof readingPositions !== "object" ||
+    Array.isArray(readingPositions)
+  ) {
+    event.returnValue = { saved: false };
+    return;
+  }
+
+  try {
+    const targetPath = rendererStatePath();
+    let currentSnapshot = {};
+    try {
+      const parsed = JSON.parse(readFileSync(targetPath, "utf8"));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        currentSnapshot = parsed;
+      }
+    } catch {
+      // A first-run profile has no renderer snapshot yet.
+    }
+    const serialized = JSON.stringify({
+      ...currentSnapshot,
+      readingPositions,
+    });
+    if (Buffer.byteLength(serialized, "utf8") > MAX_RENDERER_STATE_BYTES) {
+      event.returnValue = { saved: false };
+      return;
+    }
+    const temporaryPath = `${targetPath}.positions.tmp`;
+    writeFileSync(temporaryPath, serialized, "utf8");
+    try {
+      renameSync(temporaryPath, targetPath);
+    } catch {
+      writeFileSync(targetPath, serialized, "utf8");
+    }
+    event.returnValue = { saved: true };
+  } catch {
+    event.returnValue = { saved: false };
+  }
 }
 
 async function rememberLibraryFolder(rootPath) {
@@ -432,6 +606,16 @@ async function saveCurrentDocument(_event, payload) {
 }
 
 function registerDesktopHandlers() {
+  ipcMain.handle("renderer-state:get", getRendererState);
+  ipcMain.handle("renderer-state:save", saveRendererState);
+  ipcMain.handle(
+    "renderer-state:save-reading-positions",
+    saveRendererReadingPositions,
+  );
+  ipcMain.on(
+    "renderer-state:save-reading-positions-sync",
+    saveRendererReadingPositionsSync,
+  );
   ipcMain.handle("library:get-state", getLibrarySnapshot);
   ipcMain.handle("library:choose-folder", chooseLibraryFolder);
   ipcMain.handle("library:scan-folder", rescanLibraryFolder);

@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   Clock3,
   Code2,
+  Copy,
   Download,
   Ellipsis,
   Eye,
@@ -73,17 +74,23 @@ import {
   Children,
   DragEvent,
   KeyboardEvent as ReactKeyboardEvent,
+  lazy,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
+  Suspense,
   isValidElement,
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import ReactMarkdown, {
+  type Components,
+  defaultUrlTransform,
+} from "react-markdown";
 import remarkGfm from "remark-gfm";
 import packageMetadata from "../package.json";
 import { AboutDialog } from "./components/about-dialog";
@@ -99,9 +106,8 @@ import {
 } from "./components/new-document-dialog";
 import { SupportDialog } from "./components/support-dialog";
 import { MermaidDiagram } from "./components/mermaid-diagram";
-import {
+import type {
   MermaidApplyResult,
-  MermaidStudio,
   MermaidStudioSession,
 } from "./components/mermaid-studio";
 import {
@@ -109,10 +115,7 @@ import {
   commandTitle,
 } from "./components/command-tooltip";
 import { ShortcutHelpDialog } from "./components/shortcut-help-dialog";
-import {
-  MarkdownCodeEditor,
-  MarkdownCodeEditorHandle,
-} from "./components/markdown-code-editor";
+import type { MarkdownCodeEditorHandle } from "./components/markdown-code-editor";
 import { useCommandSystem } from "./hooks/use-command-system";
 import {
   ALL_COMMAND_IDS,
@@ -128,6 +131,21 @@ import {
 } from "./mermaid/blocks";
 import { DEFAULT_MERMAID_CODE } from "./mermaid/samples";
 import {
+  captureReadingViewport,
+  createReadingDraftId,
+  READING_POSITION_VERSION,
+  readingAnchorsMatch,
+  readingContentSignature,
+  readingDocumentKey,
+  restoreReadingViewport,
+  sanitizeReadingPositionMap,
+  upsertReadingPosition,
+  type ReadingPositionMap,
+  type ReadingPositionRecord,
+  type ReadingScrollContext,
+  type ReadingViewMode,
+} from "./reading-position";
+import {
   AnnotationKind,
   MAX_RAVI_IMAGE_ASSETS,
   MAX_RAVI_IMAGE_BYTES,
@@ -141,6 +159,17 @@ import {
   raaviImageDataUrl,
   raaviImageUrl,
 } from "./raavi";
+
+const MermaidStudio = lazy(() =>
+  import("./components/mermaid-studio").then((module) => ({
+    default: module.MermaidStudio,
+  })),
+);
+const MarkdownCodeEditor = lazy(() =>
+  import("./components/markdown-code-editor").then((module) => ({
+    default: module.MarkdownCodeEditor,
+  })),
+);
 
 const STORAGE_KEY = "raavi:document:v1";
 const LOCAL_DOCUMENT_DB_NAME = "raavi-local-documents";
@@ -231,7 +260,7 @@ function detectDesktopInstallRecommendation(): DesktopInstallRecommendation {
       description:
         "برای اتصال پوشه‌ها و دسترسی سریع‌تر به نوشته‌ها، نسخه Windows را روی همین دستگاه نصب کنید.",
       actionLabel: "دانلود برای Windows",
-      href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.1.0-x64.exe",
+      href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.3.0-x64.exe",
     };
   }
 
@@ -376,6 +405,7 @@ type DesktopOpenedDocument = {
   revision?: number;
   versions?: RaaviVersion[];
   openInReadingMode?: boolean;
+  draftId?: string;
 };
 
 type DesktopRecentFile = {
@@ -410,10 +440,36 @@ type LocalDocumentSnapshot = {
   activeDocumentPath: string;
   documentType: DocumentFileType;
   lastSavedSnapshot: string;
+  draftId?: string;
+  viewMode?: ReadingViewMode;
+  readingOutlineOpen?: boolean;
+  readingPositions?: ReadingPositionMap;
+  annotationComposer?: {
+    kind: Extract<AnnotationKind, "comment" | "margin">;
+    text: string;
+    selection: SelectionDraft;
+  } | null;
+};
+
+type ReadingResumeNotice = {
+  documentKey: string;
+  label: string;
+  precision: "exact" | "near";
+  record: ReadingPositionRecord;
 };
 
 export type RaaviDesktopAPI = {
   isDesktop: true;
+  getLocalDocumentSnapshot: () => Promise<LocalDocumentSnapshot | null>;
+  saveLocalDocumentSnapshot: (
+    snapshot: LocalDocumentSnapshot,
+  ) => Promise<{ saved: boolean }>;
+  saveReadingPositions: (
+    positions: ReadingPositionMap,
+  ) => Promise<{ saved: boolean }>;
+  saveReadingPositionsSync?: (
+    positions: ReadingPositionMap,
+  ) => { saved: boolean };
   getLibraryState: () => Promise<DesktopLibraryState>;
   chooseMarkdownFolder: () => Promise<DesktopLibraryScan | null>;
   scanMarkdownFolder: (rootPath: string) => Promise<DesktopLibraryScan>;
@@ -494,6 +550,13 @@ type SelectionMenuPosition = {
   x: number;
   y: number;
   placement: "above" | "below";
+};
+
+type SelectionHighlightRect = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 };
 
 type AnnotationHoverPreview = {
@@ -830,7 +893,13 @@ function annotationId() {
   return globalThis.crypto?.randomUUID?.() ?? `ravi-${Date.now()}`;
 }
 
-function resolveAnnotationStart(text: string, annotation: RaaviAnnotation) {
+function resolveAnnotationStart(
+  text: string,
+  annotation: Pick<
+    RaaviAnnotation,
+    "start" | "quote" | "prefix" | "suffix"
+  >,
+) {
   if (
     text.slice(annotation.start, annotation.start + annotation.quote.length) ===
     annotation.quote
@@ -1093,6 +1162,7 @@ async function scanMarkdownDirectory(
             revision: parsed.revision,
             versions: parsed.versions,
             openInReadingMode: false,
+            draftId: `web-file:${file.name.normalize("NFKC").toLocaleLowerCase("fa")}`,
           };
         }
         return {
@@ -1224,6 +1294,29 @@ function readImageAssetData(file: File) {
   });
 }
 
+function readImageAssetDimensions(file: File) {
+  return new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    const cleanUp = () => URL.revokeObjectURL(objectUrl);
+    image.addEventListener("error", () => {
+      cleanUp();
+      reject(new Error("IMAGE_DIMENSIONS_FAILED"));
+    });
+    image.addEventListener("load", () => {
+      const width = image.naturalWidth;
+      const height = image.naturalHeight;
+      cleanUp();
+      if (!width || !height) {
+        reject(new Error("IMAGE_DIMENSIONS_FAILED"));
+        return;
+      }
+      resolve({ width, height });
+    });
+    image.src = objectUrl;
+  });
+}
+
 function imageAltFromFileName(fileName: string) {
   return (
     fileName
@@ -1243,6 +1336,45 @@ function raaviMarkdownUrlTransform(url: string) {
     return url;
   }
   return defaultUrlTransform(url);
+}
+
+function caretBoundaryFromPoint(clientX: number, clientY: number) {
+  const caretPosition = document.caretPositionFromPoint?.(clientX, clientY);
+  if (caretPosition) {
+    return { node: caretPosition.offsetNode, offset: caretPosition.offset };
+  }
+  const caretRange = document.caretRangeFromPoint?.(clientX, clientY);
+  return caretRange
+    ? { node: caretRange.startContainer, offset: caretRange.startOffset }
+    : null;
+}
+
+function rangeBetweenBoundaries(
+  first: { node: Node; offset: number },
+  second: { node: Node; offset: number },
+) {
+  try {
+    const firstProbe = document.createRange();
+    firstProbe.setStart(first.node, first.offset);
+    firstProbe.collapse(true);
+    const secondProbe = document.createRange();
+    secondProbe.setStart(second.node, second.offset);
+    secondProbe.collapse(true);
+    const firstComesFirst =
+      firstProbe.compareBoundaryPoints(Range.START_TO_START, secondProbe) <= 0;
+    const range = document.createRange();
+    range.setStart(
+      firstComesFirst ? first.node : second.node,
+      firstComesFirst ? first.offset : second.offset,
+    );
+    range.setEnd(
+      firstComesFirst ? second.node : first.node,
+      firstComesFirst ? second.offset : first.offset,
+    );
+    return range;
+  } catch {
+    return null;
+  }
 }
 
 function openLocalDocumentDb() {
@@ -1362,6 +1494,11 @@ export default function Home() {
   const [activeReadingHeadingIndex, setActiveReadingHeadingIndex] =
     useState(-1);
   const [readerSize, setReaderSize] = useState(18);
+  const [documentDraftId, setDocumentDraftId] = useState("active");
+  const [readingPositions, setReadingPositions] =
+    useState<ReadingPositionMap>({});
+  const [readingResumeNotice, setReadingResumeNotice] =
+    useState<ReadingResumeNotice | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("preview");
   const [editorAssistantTab, setEditorAssistantTab] =
     useState<EditorAssistantTab | null>(null);
@@ -1395,6 +1532,9 @@ export default function Home() {
     useState<SelectionMenuPosition | null>(null);
   const [selectionDraft, setSelectionDraft] =
     useState<SelectionDraft | null>(null);
+  const [selectionHighlightRects, setSelectionHighlightRects] = useState<
+    SelectionHighlightRect[]
+  >([]);
   const [selectionMenuPosition, setSelectionMenuPosition] =
     useState<SelectionMenuPosition | null>(null);
   const [composerKind, setComposerKind] = useState<
@@ -1419,6 +1559,7 @@ export default function Home() {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const imageInsertButtonRef = useRef<HTMLButtonElement>(null);
   const imageModalRef = useRef<HTMLDivElement>(null);
+  const mermaidLoadingModalRef = useRef<HTMLDivElement>(null);
   const imageUrlInputRef = useRef<HTMLInputElement>(null);
   const imageLocalPickerRef = useRef<HTMLButtonElement>(null);
   const imageModalCloseRef = useRef<HTMLButtonElement>(null);
@@ -1433,6 +1574,7 @@ export default function Home() {
   const selectionMenuRef = useRef<HTMLDivElement>(null);
   const commentButtonRef = useRef<HTMLButtonElement>(null);
   const marginButtonRef = useRef<HTMLButtonElement>(null);
+  const composerTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const composerOriginRef = useRef<HTMLButtonElement | null>(null);
   const readingReturnFocusRef = useRef<HTMLElement | null>(null);
   const saveModalCloseRef = useRef<HTMLButtonElement>(null);
@@ -1450,6 +1592,44 @@ export default function Home() {
   const readingHeaderFrameRef = useRef<number | null>(null);
   const readingOutlineFrameRef = useRef<number | null>(null);
   const readingLastScrollTopRef = useRef(0);
+  const readingPositionTimerRef = useRef<number | null>(null);
+  const readingRestoreFrameRef = useRef<number | null>(null);
+  const readingRestoreTimerRef = useRef<number | null>(null);
+  const readingRestoreInProgressRef = useRef(false);
+  const readingRestoreExpectedScrollTopRef = useRef<number | null>(null);
+  const readingRestoreProtectPendingRef = useRef(false);
+  const readingRestoreRequestRef = useRef(0);
+  const readingDocumentEpochRef = useRef(0);
+  const readingCaptureSuspendedRef = useRef(false);
+  const readingUserInteractionUntilRef = useRef(0);
+  const readingIntentionalNavigationRef = useRef(false);
+  const readingNavigationTimerRef = useRef<number | null>(null);
+  const readingNavigationReleaseTimerRef = useRef<number | null>(null);
+  const readingNavigationTargetRef = useRef<{
+    element: HTMLElement;
+    placement: "start" | "center";
+  } | null>(null);
+  const readingReflowTimerRef = useRef<number | null>(null);
+  const readingLayoutTransitionTimerRef = useRef<number | null>(null);
+  const readingPositionsRef = useRef<ReadingPositionMap>({});
+  const lastReadingAnchorRef = useRef<ReadingPositionRecord | null>(null);
+  const pendingReadingLayoutAnchorRef = useRef<ReadingPositionRecord | null>(
+    null,
+  );
+  const selectionReadingAnchorRef = useRef<ReadingPositionRecord | null>(null);
+  const selectionStartScrollRef = useRef<{
+    documentKey: string;
+    root: HTMLElement;
+    top: number;
+    request: number;
+  } | null>(null);
+  const selectionScrollRestoreRequestRef = useRef(0);
+  const selectionPointerStartRef = useRef<{
+    documentKey: string;
+    node: Node;
+    offset: number;
+  } | null>(null);
+  const diagramReadingAnchorRef = useRef<ReadingPositionRecord | null>(null);
   const lastExpandedPreviewPercentRef = useRef(50);
   const paneDragCleanupRef = useRef<(() => void) | null>(null);
   const scrollSyncFrameRef = useRef<number | null>(null);
@@ -1467,6 +1647,75 @@ export default function Home() {
     () => extractReadingHeadings(content),
     [content],
   );
+  const currentDocumentKey = useMemo(
+    () => readingDocumentKey({ activeDocumentPath, draftId: documentDraftId }),
+    [activeDocumentPath, documentDraftId],
+  );
+  const currentContentSignature = useMemo(
+    () => readingContentSignature(content),
+    [content],
+  );
+  const readingDocumentStateRef = useRef({
+    documentKey: currentDocumentKey,
+    contentSignature: currentContentSignature,
+    readerSize,
+    outlineOpen: readingOutlineOpen,
+  });
+  useLayoutEffect(() => {
+    if (
+      readingCaptureSuspendedRef.current &&
+      (currentDocumentKey !== readingDocumentStateRef.current.documentKey ||
+        currentContentSignature !==
+          readingDocumentStateRef.current.contentSignature)
+    ) {
+      return;
+    }
+    readingDocumentStateRef.current = {
+      documentKey: currentDocumentKey,
+      contentSignature: currentContentSignature,
+      readerSize,
+      outlineOpen: readingOutlineOpen,
+    };
+    readingCaptureSuspendedRef.current = false;
+  }, [
+    currentContentSignature,
+    currentDocumentKey,
+    readerSize,
+    readingOutlineOpen,
+  ]);
+  const cancelReadingRestoreWork = useCallback(() => {
+    readingRestoreRequestRef.current += 1;
+    if (readingPositionTimerRef.current !== null) {
+      window.clearTimeout(readingPositionTimerRef.current);
+      readingPositionTimerRef.current = null;
+    }
+    if (readingRestoreFrameRef.current !== null) {
+      window.cancelAnimationFrame(readingRestoreFrameRef.current);
+      readingRestoreFrameRef.current = null;
+    }
+    if (readingRestoreTimerRef.current !== null) {
+      window.clearTimeout(readingRestoreTimerRef.current);
+      readingRestoreTimerRef.current = null;
+    }
+    if (readingReflowTimerRef.current !== null) {
+      window.clearTimeout(readingReflowTimerRef.current);
+      readingReflowTimerRef.current = null;
+    }
+    if (readingNavigationTimerRef.current !== null) {
+      window.clearTimeout(readingNavigationTimerRef.current);
+      readingNavigationTimerRef.current = null;
+    }
+    if (readingNavigationReleaseTimerRef.current !== null) {
+      window.clearTimeout(readingNavigationReleaseTimerRef.current);
+      readingNavigationReleaseTimerRef.current = null;
+    }
+    readingIntentionalNavigationRef.current = false;
+    readingNavigationTargetRef.current = null;
+    readingRestoreInProgressRef.current = false;
+    readingRestoreExpectedScrollTopRef.current = null;
+    readingRestoreProtectPendingRef.current = false;
+    pendingReadingLayoutAnchorRef.current = null;
+  }, []);
   const documentEditorHeadings = useMemo(() => editorHeadings(content), [content]);
   const persianReviewIssues = useMemo(
     () => analyzePersianMarkdown(content),
@@ -1689,7 +1938,7 @@ export default function Home() {
       if (pane === "editor") {
         editorRef.current?.focus();
       } else {
-        previewArticleRef.current?.focus();
+        previewArticleRef.current?.focus({ preventScroll: true });
       }
     });
   }, []);
@@ -1697,10 +1946,12 @@ export default function Home() {
   const clearPaneTransientUi = useCallback(() => {
     setEditorSelectionMenuPosition(null);
     setSelectionDraft(null);
+    setSelectionHighlightRects([]);
     setSelectionMenuPosition(null);
     setComposerKind(null);
     setComposerText("");
     setHoverPreview(null);
+    selectionReadingAnchorRef.current = null;
     window.getSelection()?.removeAllRanges();
   }, []);
 
@@ -1907,22 +2158,48 @@ export default function Home() {
     ],
   );
 
-  const focusReadingHeading = useCallback((documentIndex: number) => {
+  const focusReadingHeading = (documentIndex: number) => {
     const heading = previewArticleRef.current?.querySelectorAll<HTMLElement>(
       "h1, h2, h3, h4, h5, h6",
     )[documentIndex];
     if (!heading) return;
 
+    cancelReadingRestoreWork();
+    readingIntentionalNavigationRef.current = true;
+    readingNavigationTargetRef.current = {
+      element: heading,
+      placement: "start",
+    };
     setActiveReadingHeadingIndex(documentIndex);
     heading.setAttribute("tabindex", "-1");
     heading.focus({ preventScroll: true });
-    heading.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-      block: "start",
-    });
-  }, []);
+    const reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    scrollReadingElement(
+      heading,
+      reducedMotion ? "auto" : "smooth",
+      "start",
+    );
+    if (readingNavigationTimerRef.current !== null) {
+      window.clearTimeout(readingNavigationTimerRef.current);
+    }
+    readingNavigationTimerRef.current = window.setTimeout(
+      () => {
+        readingNavigationTimerRef.current = null;
+        if (heading.isConnected) {
+          scrollReadingElement(heading, "auto", "start");
+        }
+        readingNavigationReleaseTimerRef.current = window.setTimeout(() => {
+          readingNavigationReleaseTimerRef.current = null;
+          readingIntentionalNavigationRef.current = false;
+          readingNavigationTargetRef.current = null;
+          scheduleReadingPositionCommit(0);
+        }, 900);
+      },
+      reducedMotion ? 80 : 560,
+    );
+  };
 
   useEffect(
     () => () => {
@@ -1952,12 +2229,91 @@ export default function Home() {
 
   useEffect(() => {
     if (!readingMode) return;
+    const scrollRoot = workspaceRef.current;
+    if (!scrollRoot) return;
+
+    const markUserScrollIntent = (event: Event) => {
+      readingUserInteractionUntilRef.current = performance.now() + 260;
+      selectionScrollRestoreRequestRef.current += 1;
+      if (
+        event.type === "pointerdown" &&
+        event instanceof PointerEvent &&
+        event.target instanceof Element &&
+        event.target.closest(".markdown-body")
+      ) {
+        selectionStartScrollRef.current = {
+          documentKey: readingDocumentStateRef.current.documentKey,
+          root: scrollRoot,
+          top:
+            scrollRoot === document.scrollingElement
+              ? window.scrollY
+              : scrollRoot.scrollTop,
+          request: selectionScrollRestoreRequestRef.current,
+        };
+        const boundary = caretBoundaryFromPoint(event.clientX, event.clientY);
+        const article = previewArticleRef.current;
+        selectionPointerStartRef.current =
+          boundary && article?.contains(boundary.node)
+            ? {
+                documentKey: readingDocumentStateRef.current.documentKey,
+                ...boundary,
+              }
+            : null;
+      }
+      cancelReadingRestoreWork();
+    };
+    const handleReadingKey = (event: KeyboardEvent) => {
+      if (
+        ![
+          "ArrowDown",
+          "ArrowUp",
+          "PageDown",
+          "PageUp",
+          "Home",
+          "End",
+          " ",
+        ].includes(event.key)
+      ) {
+        return;
+      }
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      markUserScrollIntent(event);
+    };
+
+    scrollRoot.addEventListener("wheel", markUserScrollIntent, {
+      capture: true,
+      passive: true,
+    });
+    scrollRoot.addEventListener("touchstart", markUserScrollIntent, {
+      capture: true,
+      passive: true,
+    });
+    scrollRoot.addEventListener("pointerdown", markUserScrollIntent, true);
+    document.addEventListener("keydown", handleReadingKey, true);
+
+    return () => {
+      scrollRoot.removeEventListener("wheel", markUserScrollIntent, true);
+      scrollRoot.removeEventListener("touchstart", markUserScrollIntent, true);
+      scrollRoot.removeEventListener("pointerdown", markUserScrollIntent, true);
+      document.removeEventListener("keydown", handleReadingKey, true);
+    };
+  }, [cancelReadingRestoreWork, readingMode]);
+
+  useEffect(() => {
+    if (!readingMode) return;
 
     const scrollRoot = workspaceRef.current;
     if (!scrollRoot) return;
 
     const currentScrollTop = () =>
-      Math.max(scrollRoot.scrollTop, window.scrollY);
+      scrollRoot.scrollHeight - scrollRoot.clientHeight > 1
+        ? scrollRoot.scrollTop
+        : window.scrollY;
 
     readingLastScrollTopRef.current = currentScrollTop();
 
@@ -1966,6 +2322,15 @@ export default function Home() {
       const nextScrollTop = currentScrollTop();
       const previousScrollTop = readingLastScrollTopRef.current;
       const delta = nextScrollTop - previousScrollTop;
+
+      if (
+        readingRestoreInProgressRef.current ||
+        readingRestoreProtectPendingRef.current ||
+        performance.now() > readingUserInteractionUntilRef.current
+      ) {
+        readingLastScrollTopRef.current = nextScrollTop;
+        return;
+      }
 
       if (nextScrollTop <= 24 || delta <= -4) {
         setReadingHeaderVisible(true);
@@ -2006,12 +2371,19 @@ export default function Home() {
     const scrollRoot = workspaceRef.current;
     const article = previewArticleRef.current;
     if (!scrollRoot || !article) return;
+    const usesWindowScroll =
+      scrollRoot.scrollHeight - scrollRoot.clientHeight <= 1;
+    const scrollTarget: HTMLElement | Window = usesWindowScroll
+      ? window
+      : scrollRoot;
 
     const updateActiveHeading = () => {
       readingOutlineFrameRef.current = null;
       const renderedHeadings =
         article.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6");
-      const rootRect = scrollRoot.getBoundingClientRect();
+      const rootRect = usesWindowScroll
+        ? { top: 0, height: window.innerHeight }
+        : scrollRoot.getBoundingClientRect();
       const threshold = rootRect.top + Math.min(150, rootRect.height * 0.2);
       let nextIndex = readingHeadings[0]?.documentIndex ?? -1;
 
@@ -2036,12 +2408,12 @@ export default function Home() {
         window.requestAnimationFrame(updateActiveHeading);
     };
 
-    scrollRoot.addEventListener("scroll", scheduleUpdate, { passive: true });
+    scrollTarget.addEventListener("scroll", scheduleUpdate, { passive: true });
     window.addEventListener("resize", scheduleUpdate);
     scheduleUpdate();
 
     return () => {
-      scrollRoot.removeEventListener("scroll", scheduleUpdate);
+      scrollTarget.removeEventListener("scroll", scheduleUpdate);
       window.removeEventListener("resize", scheduleUpdate);
       if (readingOutlineFrameRef.current !== null) {
         window.cancelAnimationFrame(readingOutlineFrameRef.current);
@@ -2049,6 +2421,621 @@ export default function Home() {
       }
     };
   }, [readingHeadings, readingMode, readerSize]);
+
+  useEffect(() => {
+    readingPositionsRef.current = readingPositions;
+  }, [readingPositions]);
+
+  const getReadingScrollContext = useCallback(() => {
+    const article = previewArticleRef.current;
+    const workspace = workspaceRef.current;
+    const previewScroll = previewScrollRef.current;
+    if (!article || !workspace || !previewScroll) return null;
+
+    const isReading = Boolean(document.querySelector(".app-shell.is-reading"));
+    if (!isReading) return { article, root: previewScroll };
+
+    const workspaceCanScroll =
+      workspace.scrollHeight - workspace.clientHeight > 1;
+    const documentRoot = document.scrollingElement;
+    return {
+      article,
+      root:
+        workspaceCanScroll || !(documentRoot instanceof HTMLElement)
+          ? workspace
+          : documentRoot,
+    };
+  }, []);
+
+  const scrollReadingElement = useCallback(
+    (
+      element: HTMLElement,
+      behavior: ScrollBehavior,
+      placement: "start" | "center",
+    ) => {
+      const context = getReadingScrollContext();
+      if (!context) return;
+      const root = context.root;
+      const rootRect =
+        root === document.scrollingElement
+          ? { top: 0, height: window.innerHeight }
+          : root.getBoundingClientRect();
+      const desiredTop =
+        placement === "center"
+          ? rootRect.top + rootRect.height * 0.42
+          : rootRect.top + Math.min(132, rootRect.height * 0.18);
+      const currentScrollTop =
+        root === document.scrollingElement ? window.scrollY : root.scrollTop;
+      const nextScrollTop =
+        currentScrollTop + element.getBoundingClientRect().top - desiredTop;
+      if (root === document.scrollingElement) {
+        window.scrollTo({ top: nextScrollTop, behavior });
+      } else {
+        root.scrollTo({ top: nextScrollTop, behavior });
+      }
+    },
+    [getReadingScrollContext],
+  );
+
+  const captureCurrentReadingPosition = useCallback(
+    (viewMode?: ReadingViewMode) => {
+      if (readingCaptureSuspendedRef.current) return null;
+      const context = getReadingScrollContext();
+      const viewport = context ? captureReadingViewport(context) : null;
+      if (!viewport) return null;
+      const documentState = readingDocumentStateRef.current;
+      const currentMode = viewMode ??
+        (document.querySelector(".app-shell.is-reading")
+          ? "reading"
+          : "desk");
+      return {
+        version: READING_POSITION_VERSION,
+        documentKey: documentState.documentKey,
+        contentSignature: documentState.contentSignature,
+        viewMode: currentMode,
+        ...viewport,
+        readerSize: documentState.readerSize,
+        outlineOpen: documentState.outlineOpen,
+        updatedAt: Date.now(),
+      } satisfies ReadingPositionRecord;
+    },
+    [getReadingScrollContext],
+  );
+
+  const commitReadingPosition = useCallback((record: ReadingPositionRecord) => {
+    if (
+      record.documentKey !== readingDocumentStateRef.current.documentKey
+    ) {
+      return;
+    }
+    const next = upsertReadingPosition(readingPositionsRef.current, record);
+    readingPositionsRef.current = next;
+    lastReadingAnchorRef.current = record;
+    setReadingPositions(next);
+    void window.raaviDesktop?.saveReadingPositions(next).catch(() => {});
+  }, []);
+
+  const scheduleReadingPositionCommit = useCallback(
+    (delay = 220) => {
+      if (readingPositionTimerRef.current !== null) {
+        window.clearTimeout(readingPositionTimerRef.current);
+      }
+      const documentEpoch = readingDocumentEpochRef.current;
+      const documentKey = readingDocumentStateRef.current.documentKey;
+      readingPositionTimerRef.current = window.setTimeout(() => {
+        readingPositionTimerRef.current = null;
+        if (
+          documentEpoch !== readingDocumentEpochRef.current ||
+          documentKey !== readingDocumentStateRef.current.documentKey
+        ) {
+          return;
+        }
+        const record = captureCurrentReadingPosition();
+        if (record?.documentKey === documentKey) commitReadingPosition(record);
+      }, delay);
+    },
+    [captureCurrentReadingPosition, commitReadingPosition],
+  );
+
+  const scheduleReadingRestore = useCallback(
+    (
+      record: ReadingPositionRecord,
+      options: {
+        announce?: boolean;
+        retries?: number;
+        protectPending?: boolean;
+      } = {},
+    ) => {
+      if (
+        record.documentKey !== readingDocumentStateRef.current.documentKey
+      ) {
+        return;
+      }
+      const request = readingRestoreRequestRef.current + 1;
+      readingRestoreRequestRef.current = request;
+      const documentEpoch = readingDocumentEpochRef.current;
+      const documentKey = record.documentKey;
+      const requestIsCurrent = () =>
+        request === readingRestoreRequestRef.current &&
+        documentEpoch === readingDocumentEpochRef.current &&
+        documentKey === readingDocumentStateRef.current.documentKey;
+      if (readingRestoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(readingRestoreFrameRef.current);
+      }
+      if (readingRestoreTimerRef.current !== null) {
+        window.clearTimeout(readingRestoreTimerRef.current);
+      }
+      readingRestoreProtectPendingRef.current = Boolean(
+        options.protectPending,
+      );
+
+      const retries = options.retries ?? 8;
+      const settleRestore = Boolean(options.announce);
+      const startedAt = performance.now();
+      let stableLayoutSamples = 0;
+      let previousLayoutSignature = "";
+      let latestCaptured: ReadingPositionRecord | null = null;
+      let anchorWasVerified = false;
+
+      const readLayoutState = (context: ReadingScrollContext) => {
+        const article = context.article;
+        const rootBounds =
+          context.root === document.scrollingElement
+            ? { top: 0, bottom: window.innerHeight, height: window.innerHeight }
+            : context.root.getBoundingClientRect();
+        const vicinity = Math.max(rootBounds.height, window.innerHeight) * 2;
+        const pendingImages = Array.from(article.querySelectorAll("img")).filter(
+          (image) => {
+            const bounds = image.getBoundingClientRect();
+            const isNearViewport =
+              bounds.bottom >= rootBounds.top - vicinity &&
+              bounds.top <= rootBounds.bottom + vicinity;
+            return isNearViewport && !image.complete;
+          },
+        ).length;
+        const pendingDiagrams = article.querySelectorAll(
+          ".mermaid-diagram-canvas[aria-busy='true']",
+        ).length;
+        const articleBounds = article.getBoundingClientRect();
+        return {
+          pending: pendingImages + pendingDiagrams,
+          signature: [
+            Math.round(articleBounds.height),
+            article.scrollHeight,
+            context.root.scrollHeight,
+            pendingImages,
+            pendingDiagrams,
+          ].join(":"),
+        };
+      };
+
+      const finish = (precision: "exact" | "near") => {
+        if (!requestIsCurrent()) return;
+        readingRestoreTimerRef.current = null;
+        readingRestoreProtectPendingRef.current = false;
+        readingRestoreInProgressRef.current = false;
+        readingRestoreExpectedScrollTopRef.current = null;
+        const finalRecord = latestCaptured ?? record;
+        lastReadingAnchorRef.current = finalRecord;
+        commitReadingPosition(finalRecord);
+        if (options.announce && record.fallbackProgress > 0.01) {
+          const label =
+            record.anchor.headingPath.at(-1) ||
+            record.anchor.textPrefix.slice(0, 56) ||
+            "جای قبلی مطالعه";
+          setReadingResumeNotice({
+            documentKey: record.documentKey,
+            label,
+            precision,
+            record,
+          });
+        }
+      };
+
+      const run = (attempt: number) => {
+        if (!requestIsCurrent()) return;
+        if (readingCaptureSuspendedRef.current) {
+          readingRestoreTimerRef.current = window.setTimeout(
+            () => run(attempt),
+            16,
+          );
+          return;
+        }
+        const context = getReadingScrollContext();
+        if (!context) return;
+        readingRestoreInProgressRef.current = true;
+        const restoreResult = restoreReadingViewport(
+          context,
+          record,
+          readingDocumentStateRef.current.contentSignature,
+        );
+        readingRestoreExpectedScrollTopRef.current =
+          context.root === document.scrollingElement
+            ? window.scrollY
+            : context.root.scrollTop;
+        readingRestoreFrameRef.current = window.requestAnimationFrame(() => {
+          readingRestoreFrameRef.current = null;
+          if (!requestIsCurrent()) return;
+          const captured = captureCurrentReadingPosition();
+          if (captured?.documentKey === documentKey) {
+            latestCaptured = captured;
+            anchorWasVerified =
+              anchorWasVerified ||
+              readingAnchorsMatch(record.anchor, captured.anchor);
+          }
+          const layout = readLayoutState(context);
+          stableLayoutSamples =
+            layout.signature === previousLayoutSignature
+              ? stableLayoutSamples + 1
+              : 0;
+          previousLayoutSignature = layout.signature;
+          readingRestoreInProgressRef.current = false;
+          readingRestoreExpectedScrollTopRef.current = null;
+          const elapsed = performance.now() - startedAt;
+          const layoutSettled =
+            !settleRestore ||
+            (elapsed >= 420 && layout.pending === 0 && stableLayoutSamples >= 2);
+          const timedOut = settleRestore && elapsed >= 5000;
+          const exhausted = !settleRestore && attempt + 1 >= retries;
+
+          if (layoutSettled || timedOut || exhausted) {
+            const exact =
+              anchorWasVerified &&
+              restoreResult.match !== "progress" &&
+              restoreResult.match !== "none";
+            finish(exact ? "exact" : "near");
+            return;
+          }
+
+          readingRestoreTimerRef.current = window.setTimeout(
+            () => requestIsCurrent() && run(attempt + 1),
+            settleRestore
+              ? attempt === 0
+                ? 60
+                : 120
+              : attempt + 2 === retries
+                ? 100
+                : attempt === 0
+                  ? 16
+                  : 12,
+          );
+        });
+      };
+
+      readingRestoreFrameRef.current = window.requestAnimationFrame(() => {
+        if (!requestIsCurrent()) return;
+        readingRestoreFrameRef.current = window.requestAnimationFrame(() => {
+          if (!requestIsCurrent()) return;
+          readingRestoreFrameRef.current = null;
+          run(0);
+        });
+      });
+    },
+    [
+      captureCurrentReadingPosition,
+      commitReadingPosition,
+      getReadingScrollContext,
+    ],
+  );
+
+  const preserveReadingViewport = useCallback(
+    (
+      change: () => void,
+      options?: {
+        retries?: number;
+        anchor?: ReadingPositionRecord | null;
+      },
+    ) => {
+      const anchor =
+        options?.anchor ??
+        captureCurrentReadingPosition() ??
+        lastReadingAnchorRef.current;
+      if (anchor) {
+        lastReadingAnchorRef.current = anchor;
+        pendingReadingLayoutAnchorRef.current = anchor;
+      }
+      change();
+      if (anchor) {
+        scheduleReadingRestore(anchor, {
+          retries: options?.retries ?? 3,
+          protectPending: true,
+        });
+      }
+    },
+    [captureCurrentReadingPosition, scheduleReadingRestore],
+  );
+
+  const restoreComposerReadingViewport = useCallback(() => {
+    if (!readingMode) return;
+    const anchor = selectionReadingAnchorRef.current;
+    const context = getReadingScrollContext();
+    if (
+      !anchor ||
+      !context ||
+      anchor.documentKey !== readingDocumentStateRef.current.documentKey
+    ) {
+      return;
+    }
+
+    readingRestoreInProgressRef.current = true;
+    restoreReadingViewport(
+      context,
+      anchor,
+      readingDocumentStateRef.current.contentSignature,
+    );
+    readingRestoreExpectedScrollTopRef.current =
+      context.root === document.scrollingElement
+        ? window.scrollY
+        : context.root.scrollTop;
+    const captured = captureCurrentReadingPosition();
+    if (captured) lastReadingAnchorRef.current = captured;
+  }, [
+    captureCurrentReadingPosition,
+    getReadingScrollContext,
+    readingMode,
+  ]);
+
+  const handleDiagramFullscreenChange = useCallback(
+    (fullscreen: boolean) => {
+      if (!readingMode) return;
+      if (fullscreen) {
+        diagramReadingAnchorRef.current =
+          captureCurrentReadingPosition() ?? lastReadingAnchorRef.current;
+        return;
+      }
+      const anchor = diagramReadingAnchorRef.current;
+      diagramReadingAnchorRef.current = null;
+      if (anchor) {
+        scheduleReadingRestore(anchor, {
+          retries: 4,
+          protectPending: true,
+        });
+      }
+    },
+    [captureCurrentReadingPosition, readingMode, scheduleReadingRestore],
+  );
+
+  useLayoutEffect(() => {
+    const anchor = pendingReadingLayoutAnchorRef.current;
+    if (!anchor) return;
+    if (
+      anchor.documentKey !== readingDocumentStateRef.current.documentKey
+    ) {
+      pendingReadingLayoutAnchorRef.current = null;
+      return;
+    }
+    const context = getReadingScrollContext();
+    if (!context) return;
+
+    readingRestoreInProgressRef.current = true;
+    restoreReadingViewport(
+      context,
+      anchor,
+      readingDocumentStateRef.current.contentSignature,
+    );
+    readingRestoreExpectedScrollTopRef.current =
+      context.root === document.scrollingElement
+        ? window.scrollY
+        : context.root.scrollTop;
+    pendingReadingLayoutAnchorRef.current = null;
+    const captured = captureCurrentReadingPosition();
+    if (captured) lastReadingAnchorRef.current = captured;
+  }, [
+    annotationPanelOpen,
+    captureCurrentReadingPosition,
+    composerKind,
+    desktopPaneMode,
+    getReadingScrollContext,
+    libraryOpen,
+    mobilePane,
+    readerSize,
+    readingMode,
+    readingOutlineOpen,
+  ]);
+
+  const startReadingAtBeginning = () => {
+    const context = getReadingScrollContext();
+    if (!context) return;
+    cancelReadingRestoreWork();
+    readingIntentionalNavigationRef.current = true;
+    if (context.root === document.scrollingElement) {
+      window.scrollTo({ top: 0, behavior: "auto" });
+    } else {
+      context.root.scrollTop = 0;
+    }
+    setReadingResumeNotice(null);
+    readingNavigationTimerRef.current = window.setTimeout(() => {
+      readingNavigationTimerRef.current = null;
+      readingIntentionalNavigationRef.current = false;
+      scheduleReadingPositionCommit(0);
+    }, 80);
+    previewArticleRef.current?.focus({ preventScroll: true });
+  };
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const context = getReadingScrollContext();
+    if (!context) return;
+    const root = context.root;
+
+    const rememberVisibleAnchor = () => {
+      if (readingCaptureSuspendedRef.current) return;
+      if (
+        readingRestoreProtectPendingRef.current &&
+        (readingRestoreFrameRef.current !== null ||
+          readingRestoreTimerRef.current !== null)
+      ) {
+        return;
+      }
+      const currentScrollTop =
+        root === document.scrollingElement ? window.scrollY : root.scrollTop;
+      const expectedScrollTop = readingRestoreExpectedScrollTopRef.current;
+      if (
+        readingRestoreInProgressRef.current &&
+        expectedScrollTop === null
+      ) {
+        return;
+      }
+      if (
+        readingRestoreInProgressRef.current &&
+        expectedScrollTop !== null &&
+        Math.abs(currentScrollTop - expectedScrollTop) < 2
+      ) {
+        return;
+      }
+      readingRestoreInProgressRef.current = false;
+      readingRestoreExpectedScrollTopRef.current = null;
+      readingRestoreProtectPendingRef.current = false;
+      if (readingRestoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(readingRestoreFrameRef.current);
+        readingRestoreFrameRef.current = null;
+      }
+      if (readingRestoreTimerRef.current) {
+        window.clearTimeout(readingRestoreTimerRef.current);
+        readingRestoreTimerRef.current = null;
+      }
+      const record = captureCurrentReadingPosition();
+      if (record) lastReadingAnchorRef.current = record;
+      scheduleReadingPositionCommit();
+    };
+    const preserveAcrossResize = () => {
+      const anchor =
+        lastReadingAnchorRef.current ?? captureCurrentReadingPosition();
+      if (anchor) {
+        scheduleReadingRestore(anchor, { protectPending: true });
+      }
+    };
+    const flushWhenHidden = () => {
+      if (document.visibilityState !== "hidden") return;
+      const record = readingRestoreProtectPendingRef.current
+        ? lastReadingAnchorRef.current
+        : captureCurrentReadingPosition();
+      if (record) commitReadingPosition(record);
+    };
+
+    root.addEventListener("scroll", rememberVisibleAnchor, { passive: true });
+    if (root !== document.scrollingElement) {
+      window.addEventListener("scroll", rememberVisibleAnchor, {
+        passive: true,
+      });
+    }
+    window.addEventListener("resize", preserveAcrossResize);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    if (
+      readingRestoreFrameRef.current === null &&
+      !readingRestoreTimerRef.current
+    ) {
+      const initialRecord = captureCurrentReadingPosition();
+      if (initialRecord) lastReadingAnchorRef.current = initialRecord;
+      scheduleReadingPositionCommit();
+    }
+
+    return () => {
+      root.removeEventListener("scroll", rememberVisibleAnchor);
+      window.removeEventListener("scroll", rememberVisibleAnchor);
+      window.removeEventListener("resize", preserveAcrossResize);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+    };
+  }, [
+    captureCurrentReadingPosition,
+    commitReadingPosition,
+    getReadingScrollContext,
+    hydrated,
+    mobilePane,
+    readingMode,
+    scheduleReadingPositionCommit,
+    scheduleReadingRestore,
+  ]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const article = previewArticleRef.current;
+    if (!article) return;
+    let previousHeight = article.getBoundingClientRect().height;
+
+    const restoreAfterReflow = () => {
+      if (readingCaptureSuspendedRef.current) return;
+      if (
+        readingRestoreProtectPendingRef.current &&
+        (readingRestoreFrameRef.current !== null ||
+          readingRestoreTimerRef.current !== null)
+      ) {
+        return;
+      }
+      if (readingIntentionalNavigationRef.current) {
+        const target = readingNavigationTargetRef.current;
+        if (target?.element.isConnected) {
+          window.requestAnimationFrame(() => {
+            if (
+              readingIntentionalNavigationRef.current &&
+              target === readingNavigationTargetRef.current
+            ) {
+              scrollReadingElement(target.element, "auto", target.placement);
+            }
+          });
+        }
+        return;
+      }
+      if (readingReflowTimerRef.current !== null) {
+        window.clearTimeout(readingReflowTimerRef.current);
+      }
+      const documentEpoch = readingDocumentEpochRef.current;
+      const documentKey = readingDocumentStateRef.current.documentKey;
+      const delay = Math.max(
+        72,
+        readingUserInteractionUntilRef.current - performance.now() + 24,
+      );
+      readingReflowTimerRef.current = window.setTimeout(() => {
+        readingReflowTimerRef.current = null;
+        if (performance.now() <= readingUserInteractionUntilRef.current) {
+          restoreAfterReflow();
+          return;
+        }
+        if (
+          documentEpoch !== readingDocumentEpochRef.current ||
+          documentKey !== readingDocumentStateRef.current.documentKey ||
+          readingIntentionalNavigationRef.current
+        ) {
+          return;
+        }
+        const anchor = lastReadingAnchorRef.current;
+        if (
+          anchor &&
+          anchor.fallbackProgress > 0.01 &&
+          anchor.documentKey === documentKey
+        ) {
+          scheduleReadingRestore(anchor, {
+            retries: 1,
+            protectPending: true,
+          });
+        }
+      }, delay);
+    };
+    const handleMediaLoad = (event: Event) => {
+      if (event.target instanceof HTMLImageElement) restoreAfterReflow();
+    };
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            const nextHeight = article.getBoundingClientRect().height;
+            if (Math.abs(nextHeight - previousHeight) < 2) return;
+            previousHeight = nextHeight;
+            restoreAfterReflow();
+          });
+
+    article.addEventListener("load", handleMediaLoad, true);
+    resizeObserver?.observe(article);
+    void document.fonts?.ready.then(restoreAfterReflow).catch(() => {});
+    return () => {
+      article.removeEventListener("load", handleMediaLoad, true);
+      resizeObserver?.disconnect();
+      if (readingReflowTimerRef.current !== null) {
+        window.clearTimeout(readingReflowTimerRef.current);
+        readingReflowTimerRef.current = null;
+      }
+    };
+  }, [content, hydrated, scheduleReadingRestore, scrollReadingElement]);
 
   const stats = useMemo(() => {
     const cleanText = content.trim();
@@ -2089,17 +3076,32 @@ export default function Home() {
       activeDocumentPath,
       documentType,
       lastSavedSnapshot,
+      draftId: documentDraftId,
+      viewMode: readingMode ? "reading" : "desk",
+      readingOutlineOpen,
+      readingPositions,
+      annotationComposer:
+        composerKind && selectionDraft
+          ? { kind: composerKind, text: composerText, selection: selectionDraft }
+          : null,
     }),
     [
       activeDocumentPath,
       annotations,
       content,
+      composerKind,
+      composerText,
       documentType,
+      documentDraftId,
       fileName,
       imageAssets,
       lastSavedSnapshot,
       readerSize,
+      readingMode,
+      readingOutlineOpen,
+      readingPositions,
       revision,
+      selectionDraft,
       versions,
     ],
   );
@@ -2219,6 +3221,37 @@ export default function Home() {
 
   const applyOpenedDocument = useCallback(
     (document: DesktopOpenedDocument, message?: string) => {
+      const previousPosition = captureCurrentReadingPosition();
+      if (previousPosition) commitReadingPosition(previousPosition);
+      cancelReadingRestoreWork();
+      readingCaptureSuspendedRef.current = true;
+      readingDocumentEpochRef.current += 1;
+      readingUserInteractionUntilRef.current = 0;
+
+      const nextDraftId =
+        document.draftId ?? createReadingDraftId();
+      const nextDocumentKey = readingDocumentKey({
+        activeDocumentPath: document.path ?? "",
+        draftId: nextDraftId,
+      });
+      const savedPosition = readingPositionsRef.current[nextDocumentKey];
+      const nextReadingMode = savedPosition
+        ? savedPosition.viewMode === "reading"
+        : Boolean(document.openInReadingMode);
+      readingDocumentStateRef.current = {
+        documentKey: nextDocumentKey,
+        contentSignature: readingContentSignature(document.content),
+        readerSize:
+          savedPosition?.readerSize ??
+          readingDocumentStateRef.current.readerSize,
+        outlineOpen:
+          savedPosition?.outlineOpen ??
+          readingDocumentStateRef.current.outlineOpen,
+      };
+      lastReadingAnchorRef.current = savedPosition ?? null;
+      selectionReadingAnchorRef.current = null;
+      selectionStartScrollRef.current = null;
+
       openedDocumentRef.current = true;
       const nextAnnotations = document.annotations ?? [];
       const nextAssets = document.assets ?? [];
@@ -2227,6 +3260,7 @@ export default function Home() {
       setAnnotations(nextAnnotations);
       setImageAssets(nextAssets);
       setActiveDocumentPath(document.path ?? "");
+      setDocumentDraftId(nextDraftId);
       setDocumentType(document.documentType ?? "markdown");
       setRevision(document.revision ?? 1);
       setVersions(document.versions ?? []);
@@ -2238,15 +3272,20 @@ export default function Home() {
       setSelectionDraft(null);
       setComposerKind(null);
       setComposerText("");
-      setAnnotationPanelOpen(Boolean(nextAnnotations.length));
+      setAnnotationPanelOpen(false);
       setActiveLibraryPath("");
       setMobilePane("preview");
-      setReadingMode(Boolean(document.openInReadingMode));
+      setReadingMode(nextReadingMode);
       setReadingHeaderVisible(true);
+      setReadingResumeNotice(null);
+      if (savedPosition) {
+        setReaderSize(savedPosition.readerSize);
+        setReadingOutlineOpen(savedPosition.outlineOpen);
+      }
       setShortcutHelpOpen(false);
       setSaveModalOpen(false);
       setNewDocumentModalOpen(false);
-      if (document.openInReadingMode) {
+      if (nextReadingMode) {
         setLibraryOpen(false);
       } else if (!window.matchMedia("(max-width: 820px)").matches) {
         setLibraryOpen(true);
@@ -2264,24 +3303,74 @@ export default function Home() {
         ].slice(0, 20));
       }
       if (message) showNotice(message);
+      if (savedPosition) {
+        scheduleReadingRestore(savedPosition, {
+          announce: true,
+          protectPending: true,
+        });
+      }
     },
-    [showNotice],
+    [
+      cancelReadingRestoreWork,
+      captureCurrentReadingPosition,
+      commitReadingPosition,
+      scheduleReadingRestore,
+      showNotice,
+    ],
   );
 
   useEffect(() => {
     const desktop = window.raaviDesktop;
-    if (!desktop) return;
+    if (!desktop || !hydrated) return;
 
     const unsubscribe = desktop.onOpenMarkdownFile((document) => {
       applyOpenedDocument(document, `«${document.name}» باز شد.`);
     });
     desktop.rendererReady();
     return unsubscribe;
-  }, [applyOpenedDocument]);
+  }, [applyOpenedDocument, hydrated]);
 
   const applyLocalDocumentSnapshot = useCallback(
     (snapshot: Partial<LocalDocumentSnapshot>) => {
-      if (typeof snapshot.content === "string") setContent(snapshot.content);
+      cancelReadingRestoreWork();
+      readingCaptureSuspendedRef.current = true;
+      readingDocumentEpochRef.current += 1;
+      readingUserInteractionUntilRef.current = 0;
+      const nextContent =
+        typeof snapshot.content === "string" ? snapshot.content : SAMPLE_MARKDOWN;
+      const nextPath =
+        typeof snapshot.activeDocumentPath === "string"
+          ? snapshot.activeDocumentPath
+          : "";
+      const nextDraftId =
+        typeof snapshot.draftId === "string" && snapshot.draftId.trim()
+          ? snapshot.draftId
+          : createReadingDraftId();
+      const nextPositions = sanitizeReadingPositionMap(
+        snapshot.readingPositions,
+      );
+      const nextDocumentKey = readingDocumentKey({
+        activeDocumentPath: nextPath,
+        draftId: nextDraftId,
+      });
+      const savedPosition = nextPositions[nextDocumentKey];
+      readingDocumentStateRef.current = {
+        documentKey: nextDocumentKey,
+        contentSignature: readingContentSignature(nextContent),
+        readerSize:
+          savedPosition?.readerSize ??
+          (typeof snapshot.readerSize === "number"
+            ? Math.min(22, Math.max(16, snapshot.readerSize))
+            : readingDocumentStateRef.current.readerSize),
+        outlineOpen:
+          savedPosition?.outlineOpen ??
+          snapshot.readingOutlineOpen ??
+          readingDocumentStateRef.current.outlineOpen,
+      };
+      lastReadingAnchorRef.current = savedPosition ?? null;
+      selectionStartScrollRef.current = null;
+
+      setContent(nextContent);
       if (typeof snapshot.fileName === "string") setFileName(snapshot.fileName);
       if (Array.isArray(snapshot.annotations)) {
         setAnnotations(snapshot.annotations);
@@ -2289,7 +3378,9 @@ export default function Home() {
       if (Array.isArray(snapshot.assets)) {
         setImageAssets(snapshot.assets.slice(0, MAX_RAVI_IMAGE_ASSETS));
       }
-      if (typeof snapshot.readerSize === "number") {
+      if (savedPosition) {
+        setReaderSize(savedPosition.readerSize);
+      } else if (typeof snapshot.readerSize === "number") {
         setReaderSize(Math.min(22, Math.max(16, snapshot.readerSize)));
       }
       if (
@@ -2301,8 +3392,47 @@ export default function Home() {
       if (Array.isArray(snapshot.versions)) {
         setVersions(snapshot.versions.slice(-MAX_LOCAL_VERSIONS));
       }
-      if (typeof snapshot.activeDocumentPath === "string") {
-        setActiveDocumentPath(snapshot.activeDocumentPath);
+      setActiveDocumentPath(nextPath);
+      setDocumentDraftId(nextDraftId);
+      readingPositionsRef.current = nextPositions;
+      setReadingPositions(nextPositions);
+      const nextViewMode = savedPosition?.viewMode ?? snapshot.viewMode;
+      setReadingMode(nextViewMode === "reading");
+      setReadingOutlineOpen(
+        savedPosition?.outlineOpen ?? snapshot.readingOutlineOpen ?? true,
+      );
+      setAnnotationPanelOpen(false);
+      const savedComposer = snapshot.annotationComposer;
+      const savedSelection = savedComposer?.selection;
+      if (
+        savedComposer &&
+        (savedComposer.kind === "comment" || savedComposer.kind === "margin") &&
+        typeof savedComposer.text === "string" &&
+        savedComposer.text.length <= 20_000 &&
+        savedSelection &&
+        Number.isSafeInteger(savedSelection.start) &&
+        Number.isSafeInteger(savedSelection.end) &&
+        savedSelection.start >= 0 &&
+        savedSelection.end >= savedSelection.start &&
+        typeof savedSelection.quote === "string" &&
+        savedSelection.quote.length > 0 &&
+        savedSelection.quote.length <= 2_000 &&
+        typeof savedSelection.prefix === "string" &&
+        typeof savedSelection.suffix === "string"
+      ) {
+        setSelectionDraft({
+          start: savedSelection.start,
+          end: savedSelection.end,
+          quote: savedSelection.quote,
+          prefix: savedSelection.prefix.slice(-48),
+          suffix: savedSelection.suffix.slice(0, 48),
+        });
+        setComposerKind(savedComposer.kind);
+        setComposerText(savedComposer.text);
+      } else {
+        setSelectionDraft(null);
+        setComposerKind(null);
+        setComposerText("");
       }
       if (
         snapshot.documentType === "markdown" ||
@@ -2315,8 +3445,14 @@ export default function Home() {
           ? snapshot.lastSavedSnapshot
           : "",
       );
+      if (savedPosition) {
+        scheduleReadingRestore(savedPosition, {
+          announce: true,
+          protectPending: true,
+        });
+      }
     },
-    [],
+    [cancelReadingRestoreWork, scheduleReadingRestore],
   );
 
   useEffect(() => {
@@ -2324,8 +3460,11 @@ export default function Home() {
       void (async () => {
       try {
         if (openedDocumentRef.current) return;
-        let parsed = await readLocalDocumentSnapshot().catch(() => null);
-        if (!parsed) {
+        const desktop = window.raaviDesktop;
+        let parsed = desktop
+          ? await desktop.getLocalDocumentSnapshot().catch(() => null)
+          : await readLocalDocumentSnapshot().catch(() => null);
+        if (!parsed && !desktop) {
           const saved = window.localStorage.getItem(STORAGE_KEY);
           parsed = saved ? (JSON.parse(saved) as LocalDocumentSnapshot) : null;
         }
@@ -2348,16 +3487,25 @@ export default function Home() {
     if (!hydrated) return;
 
     const timer = setTimeout(() => {
-      void writeLocalDocumentSnapshot(localDocumentSnapshot).catch(() => {});
-      try {
-        window.localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(localDocumentSnapshot),
-        );
-      } catch {
-        setError(
-          "پیش‌نویس محلی ذخیره نشد؛ برای جلوگیری از ازدست‌رفتن تغییرات، فایل را ذخیره کنید.",
-        );
+      const desktop = window.raaviDesktop;
+      if (desktop) {
+        void desktop.saveLocalDocumentSnapshot(localDocumentSnapshot).catch(() => {
+          setError(
+            "پیش‌نویس محلی ذخیره نشد؛ برای جلوگیری از ازدست‌رفتن تغییرات، فایل را ذخیره کنید.",
+          );
+        });
+      } else {
+        void writeLocalDocumentSnapshot(localDocumentSnapshot).catch(() => {});
+        try {
+          window.localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify(localDocumentSnapshot),
+          );
+        } catch {
+          setError(
+            "پیش‌نویس محلی ذخیره نشد؛ برای جلوگیری از ازدست‌رفتن تغییرات، فایل را ذخیره کنید.",
+          );
+        }
       }
     }, 450);
 
@@ -2368,20 +3516,55 @@ export default function Home() {
     if (!hydrated) return;
 
     const flushLatestDocument = () => {
-      void writeLocalDocumentSnapshot(localDocumentSnapshot).catch(() => {});
-      try {
-        window.localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(localDocumentSnapshot),
-        );
-      } catch {
-        // The visible save state already communicates storage failures.
+      const position = readingRestoreProtectPendingRef.current
+        ? lastReadingAnchorRef.current
+        : captureCurrentReadingPosition();
+      const positions = position
+        ? upsertReadingPosition(readingPositionsRef.current, position)
+        : readingPositionsRef.current;
+      const latestSnapshot: LocalDocumentSnapshot = {
+        ...localDocumentSnapshot,
+        viewMode: document.querySelector(".app-shell.is-reading")
+          ? "reading"
+          : "desk",
+        readingPositions: positions,
+      };
+      const desktop = window.raaviDesktop;
+      if (desktop) {
+        void desktop.saveLocalDocumentSnapshot(latestSnapshot).catch(() => {});
+      } else {
+        void writeLocalDocumentSnapshot(latestSnapshot).catch(() => {});
+        try {
+          window.localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify(latestSnapshot),
+          );
+        } catch {
+          // The visible save state already communicates storage failures.
+        }
       }
     };
 
+    const flushLatestReadingPositionSync = () => {
+      const position = readingRestoreProtectPendingRef.current
+        ? lastReadingAnchorRef.current
+        : captureCurrentReadingPosition();
+      if (!position) return;
+      const positions = upsertReadingPosition(
+        readingPositionsRef.current,
+        position,
+      );
+      readingPositionsRef.current = positions;
+      window.raaviDesktop?.saveReadingPositionsSync?.(positions);
+    };
+
     window.addEventListener("pagehide", flushLatestDocument);
-    return () => window.removeEventListener("pagehide", flushLatestDocument);
-  }, [hydrated, localDocumentSnapshot]);
+    window.addEventListener("beforeunload", flushLatestReadingPositionSync);
+    return () => {
+      window.removeEventListener("pagehide", flushLatestDocument);
+      window.removeEventListener("beforeunload", flushLatestReadingPositionSync);
+    };
+  }, [captureCurrentReadingPosition, hydrated, localDocumentSnapshot]);
 
   useEffect(() => {
     return () => {
@@ -2392,6 +3575,30 @@ export default function Home() {
       if (annotationHoverFrameRef.current) {
         cancelAnimationFrame(annotationHoverFrameRef.current);
       }
+      if (readingPositionTimerRef.current) {
+        clearTimeout(readingPositionTimerRef.current);
+      }
+      if (readingRestoreFrameRef.current !== null) {
+        cancelAnimationFrame(readingRestoreFrameRef.current);
+      }
+      if (readingRestoreTimerRef.current) {
+        clearTimeout(readingRestoreTimerRef.current);
+      }
+      if (readingNavigationTimerRef.current !== null) {
+        clearTimeout(readingNavigationTimerRef.current);
+      }
+      if (readingNavigationReleaseTimerRef.current !== null) {
+        clearTimeout(readingNavigationReleaseTimerRef.current);
+      }
+      if (readingReflowTimerRef.current !== null) {
+        clearTimeout(readingReflowTimerRef.current);
+      }
+      if (readingLayoutTransitionTimerRef.current !== null) {
+        clearTimeout(readingLayoutTransitionTimerRef.current);
+      }
+      document.documentElement.classList.remove(
+        "reading-layout-is-changing",
+      );
     };
   }, []);
 
@@ -2408,11 +3615,13 @@ export default function Home() {
         return;
       }
       setSelectionDraft(null);
+      setSelectionHighlightRects([]);
       setSelectionMenuPosition(null);
       window.getSelection()?.removeAllRanges();
     };
     const dismissSelectionMenuOnResize = () => {
       setSelectionDraft(null);
+      setSelectionHighlightRects([]);
       setSelectionMenuPosition(null);
       window.getSelection()?.removeAllRanges();
     };
@@ -2545,6 +3754,11 @@ export default function Home() {
         text-decoration: underline var(--proof-blue-dark) 2.5px;
         text-underline-offset: 4px;
       }
+      ::highlight(raavi-selection) {
+        background: var(--comment-highlight-bg);
+        text-decoration: underline var(--proof-blue-dark) 2px;
+        text-underline-offset: 3px;
+      }
     `;
     document.head.appendChild(style);
     return () => style.remove();
@@ -2573,6 +3787,7 @@ export default function Home() {
       "raavi-comment",
       "raavi-margin",
       "raavi-active",
+      "raavi-selection",
     ];
     const frame = requestAnimationFrame(() => {
       const text = root.textContent ?? "";
@@ -2616,6 +3831,27 @@ export default function Home() {
       } else {
         highlightRegistry.delete("raavi-active");
       }
+
+      if (selectionDraft) {
+        const start = resolveAnnotationStart(text, selectionDraft);
+        const range = start >= 0
+          ? rangeFromTextOffsets(
+              root,
+              start,
+              start + selectionDraft.quote.length,
+            )
+          : null;
+        if (range) {
+          highlightRegistry.set(
+            "raavi-selection",
+            new HighlightConstructor(range),
+          );
+        } else {
+          highlightRegistry.delete("raavi-selection");
+        }
+      } else {
+        highlightRegistry.delete("raavi-selection");
+      }
     });
 
     return () => {
@@ -2628,25 +3864,106 @@ export default function Home() {
     content,
     mobilePane,
     readingMode,
+    selectionDraft,
   ]);
+
+  useEffect(() => {
+    if (!selectionDraft || composerKind) return;
+    const frame = requestAnimationFrame(() => {
+      const root = previewArticleRef.current;
+      const nativeSelection = window.getSelection();
+      if (!root || !nativeSelection) return;
+      if (nativeSelection.toString().trim() === selectionDraft.quote) return;
+
+      const text = root.textContent ?? "";
+      const start = resolveAnnotationStart(text, selectionDraft);
+      const range = start >= 0
+        ? rangeFromTextOffsets(
+            root,
+            start,
+            start + selectionDraft.quote.length,
+          )
+        : null;
+      if (!range) return;
+      nativeSelection.removeAllRanges();
+      nativeSelection.addRange(range);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [composerKind, content, mobilePane, readingMode, selectionDraft]);
 
   const capturePreviewSelection = (
     pointer?: { clientX: number; clientY: number },
   ) => {
-    requestAnimationFrame(() => {
-      const article = previewArticleRef.current;
-      const previewScroll = previewScrollRef.current;
-      const selection = window.getSelection();
-      if (
-        !article ||
-        !previewScroll ||
-        !selection ||
-        selection.rangeCount !== 1
-      ) {
-        return;
-      }
+    const article = previewArticleRef.current;
+    const previewScroll = previewScrollRef.current;
+    const selection = window.getSelection();
+    if (!article || !previewScroll) return;
+    const nativeRange =
+      selection?.rangeCount === 1 ? selection.getRangeAt(0).cloneRange() : null;
+    const pointerStart = selectionPointerStartRef.current;
+    selectionPointerStartRef.current = null;
+    const pointerEnd = pointer
+      ? caretBoundaryFromPoint(pointer.clientX, pointer.clientY)
+      : null;
+    const pointerRange =
+      pointerStart &&
+      pointerStart.documentKey === readingDocumentStateRef.current.documentKey &&
+      pointerEnd &&
+      article.contains(pointerStart.node) &&
+      article.contains(pointerEnd.node)
+        ? rangeBetweenBoundaries(pointerStart, pointerEnd)
+        : null;
+    const range =
+      nativeRange && !nativeRange.collapsed ? nativeRange : pointerRange;
+    if (!range) return;
+    if (pointerRange && (!nativeRange || nativeRange.collapsed) && selection) {
+      selection.removeAllRanges();
+      selection.addRange(pointerRange.cloneRange());
+    }
+    selectionReadingAnchorRef.current = null;
 
-      const range = selection.getRangeAt(0);
+    requestAnimationFrame(() => {
+      if (!article.isConnected || !previewScroll.isConnected) return;
+      const selectionStartScroll = selectionStartScrollRef.current;
+      selectionStartScrollRef.current = null;
+      const restorePointerScroll = () => {
+        if (
+          selectionStartScroll &&
+          selectionStartScroll.documentKey ===
+            readingDocumentStateRef.current.documentKey &&
+          selectionStartScroll.root.isConnected
+        ) {
+          const applySavedScroll = () => {
+            if (
+              !selectionStartScroll.root.isConnected ||
+              selectionStartScroll.request !==
+                selectionScrollRestoreRequestRef.current
+            ) {
+              return false;
+            }
+            readingRestoreInProgressRef.current = true;
+            readingRestoreExpectedScrollTopRef.current = selectionStartScroll.top;
+            if (selectionStartScroll.root === document.scrollingElement) {
+              window.scrollTo({ top: selectionStartScroll.top, behavior: "auto" });
+            } else {
+              selectionStartScroll.root.scrollTop = selectionStartScroll.top;
+            }
+            return true;
+          };
+          const pinSavedScroll = (framesRemaining: number) => {
+            if (!applySavedScroll()) return;
+            if (framesRemaining > 0) {
+              requestAnimationFrame(() => pinSavedScroll(framesRemaining - 1));
+            } else {
+              readingRestoreInProgressRef.current = false;
+              readingRestoreExpectedScrollTopRef.current = null;
+              selectionReadingAnchorRef.current ??=
+                captureCurrentReadingPosition();
+            }
+          };
+          pinSavedScroll(12);
+        }
+      };
       if (
         range.collapsed ||
         !article.contains(range.startContainer) ||
@@ -2654,8 +3971,10 @@ export default function Home() {
       ) {
         if (!composerKind) {
           setSelectionDraft(null);
+          setSelectionHighlightRects([]);
           setSelectionMenuPosition(null);
         }
+        restorePointerScroll();
         return;
       }
 
@@ -2663,13 +3982,17 @@ export default function Home() {
       const quote = rawQuote.trim();
       if (!quote) {
         setSelectionDraft(null);
+        setSelectionHighlightRects([]);
         setSelectionMenuPosition(null);
+        restorePointerScroll();
         return;
       }
       if (quote.length > 2_000) {
         setSelectionDraft(null);
+        setSelectionHighlightRects([]);
         setSelectionMenuPosition(null);
         setError("برای یادداشت‌گذاری، بخش کوتاه‌تری از متن را انتخاب کنید.");
+        restorePointerScroll();
         return;
       }
 
@@ -2684,6 +4007,14 @@ export default function Home() {
       const fullText = article.textContent ?? "";
       const rangeRect = range.getBoundingClientRect();
       const scrollRect = previewScroll.getBoundingClientRect();
+      const highlightRects = Array.from(range.getClientRects())
+        .filter((rect) => rect.width > 0 && rect.height > 0)
+        .map((rect) => ({
+          left: rect.left - scrollRect.left + previewScroll.scrollLeft,
+          top: rect.top - scrollRect.top + previewScroll.scrollTop,
+          width: rect.width,
+          height: rect.height,
+        }));
       const anchorClientX =
         pointer?.clientX ?? (rangeRect.left + rangeRect.right) / 2;
       const distanceAbove = (pointer?.clientY ?? rangeRect.top) - scrollRect.top;
@@ -2692,7 +4023,7 @@ export default function Home() {
         pointer?.clientY ??
         (placement === "above" ? rangeRect.top : rangeRect.bottom);
       const menuHalfWidth = Math.min(
-        112,
+        152,
         Math.max(72, scrollRect.width / 2 - 12),
       );
       const minimumX = previewScroll.scrollLeft + menuHalfWidth;
@@ -2708,6 +4039,7 @@ export default function Home() {
         prefix: fullText.slice(Math.max(0, start - 48), start),
         suffix: fullText.slice(end, end + 48),
       });
+      setSelectionHighlightRects(highlightRects);
       setSelectionMenuPosition({
         x: Math.min(Math.max(rawX, minimumX), Math.max(minimumX, maximumX)),
         y:
@@ -2720,11 +4052,54 @@ export default function Home() {
       setComposerKind(null);
       setComposerText("");
       setError("");
+      restorePointerScroll();
+      if (!selectionStartScroll) {
+        selectionReadingAnchorRef.current = captureCurrentReadingPosition();
+      }
     });
   };
 
   const clearNativeSelection = () => {
     window.getSelection()?.removeAllRanges();
+  };
+
+  const copyPreviewSelection = async () => {
+    if (!selectionDraft?.quote) {
+      showNotice("ابتدا بخشی از متن پیش‌نمایش را انتخاب کنید.");
+      return;
+    }
+
+    const readingAnchor =
+      selectionReadingAnchorRef.current ?? captureCurrentReadingPosition();
+    try {
+      await navigator.clipboard.writeText(selectionDraft.quote);
+    } catch {
+      const nativeSelection = window.getSelection();
+      const savedRanges = nativeSelection
+        ? Array.from({ length: nativeSelection.rangeCount }, (_, index) =>
+            nativeSelection.getRangeAt(index).cloneRange(),
+          )
+        : [];
+      const textarea = document.createElement("textarea");
+      textarea.value = selectionDraft.quote;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      textarea.remove();
+      nativeSelection?.removeAllRanges();
+      savedRanges.forEach((range) => nativeSelection?.addRange(range));
+      if (!copied) {
+        showNotice("کپی خودکار ممکن نشد؛ از Ctrl+C استفاده کنید.");
+        return;
+      }
+    }
+
+    setSelectionMenuPosition(null);
+    if (readingAnchor) scheduleReadingRestore(readingAnchor);
+    showNotice("متن کپی شد؛ محدودهٔ آبی تا انتخاب بعدی باقی می‌ماند.");
   };
 
   const addAnnotation = (
@@ -2745,15 +4120,19 @@ export default function Home() {
       createdAt: new Date().toISOString(),
     };
 
-    setAnnotations((current) => [...current, annotation]);
-    setSelectionDraft(null);
-    setSelectionMenuPosition(null);
-    setComposerKind(null);
-    setComposerText("");
-    composerOriginRef.current = null;
-    setAnnotationPanelOpen(true);
-    setActiveAnnotationId(annotation.id);
-    clearNativeSelection();
+    preserveReadingViewport(() => {
+      setAnnotations((current) => [...current, annotation]);
+      setSelectionDraft(null);
+      setSelectionHighlightRects([]);
+      setSelectionMenuPosition(null);
+      setComposerKind(null);
+      setComposerText("");
+      composerOriginRef.current = null;
+      setAnnotationPanelOpen(true);
+      setActiveAnnotationId(annotation.id);
+      clearNativeSelection();
+    }, { anchor: selectionReadingAnchorRef.current });
+    selectionReadingAnchorRef.current = null;
     showNotice(`${ANNOTATION_LABELS[kind]} ثبت شد.`);
   };
 
@@ -2765,9 +4144,16 @@ export default function Home() {
       showNotice("ابتدا بخشی از متن پیش‌نمایش را انتخاب کنید.");
       return;
     }
-    composerOriginRef.current = origin ?? null;
-    setComposerKind(kind);
-    setComposerText("");
+    preserveReadingViewport(() => {
+      composerOriginRef.current = origin ?? null;
+      setComposerKind(kind);
+      setComposerText("");
+    }, { anchor: selectionReadingAnchorRef.current, retries: 3 });
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        composerTextAreaRef.current?.focus({ preventScroll: true }),
+      ),
+    );
   };
 
   const submitAnnotationComposer = () => {
@@ -2777,9 +4163,11 @@ export default function Home() {
 
   const cancelAnnotationComposer = () => {
     const origin = composerOriginRef.current;
-    setComposerKind(null);
-    setComposerText("");
-    requestAnimationFrame(() => origin?.focus());
+    preserveReadingViewport(() => {
+      setComposerKind(null);
+      setComposerText("");
+    });
+    requestAnimationFrame(() => origin?.focus({ preventScroll: true }));
   };
 
   const updateAnnotationBody = (id: string, body: string) => {
@@ -2791,14 +4179,23 @@ export default function Home() {
   };
 
   const removeAnnotation = (id: string) => {
-    setAnnotations((current) =>
-      current.filter((annotation) => annotation.id !== id),
+    const anchor = captureCurrentReadingPosition();
+    annotationPanelRef.current?.focus({ preventScroll: true });
+    preserveReadingViewport(
+      () => {
+        setAnnotations((current) =>
+          current.filter((annotation) => annotation.id !== id),
+        );
+        if (activeAnnotationId === id) setActiveAnnotationId("");
+        showNotice("یادداشت حذف شد.");
+      },
+      { anchor, retries: 3 },
     );
-    if (activeAnnotationId === id) setActiveAnnotationId("");
-    showNotice("یادداشت حذف شد.");
   };
 
   const focusAnnotation = (annotation: RaaviAnnotation) => {
+    cancelReadingRestoreWork();
+    readingIntentionalNavigationRef.current = true;
     setActiveAnnotationId(annotation.id);
     setAnnotationPanelOpen(true);
     setHoverPreview(null);
@@ -2806,10 +4203,14 @@ export default function Home() {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const article = previewArticleRef.current;
-        if (!article) return;
+        if (!article) {
+          readingIntentionalNavigationRef.current = false;
+          return;
+        }
         const text = article.textContent ?? "";
         const start = resolveAnnotationStart(text, annotation);
         if (start < 0) {
+          readingIntentionalNavigationRef.current = false;
           showNotice("محل این یادداشت پس از ویرایش متن پیدا نشد.");
           return;
         }
@@ -2819,10 +4220,41 @@ export default function Home() {
           start + annotation.quote.length,
         );
         const target = range?.startContainer.parentElement;
-        target?.scrollIntoView({ behavior: "smooth", block: "center" });
+        const reducedMotion = window.matchMedia(
+          "(prefers-reduced-motion: reduce)",
+        ).matches;
+        if (target) {
+          readingNavigationTargetRef.current = {
+            element: target,
+            placement: "center",
+          };
+          scrollReadingElement(
+            target,
+            reducedMotion ? "auto" : "smooth",
+            "center",
+          );
+        }
         document
           .getElementById(`annotation-card-${annotation.id}`)
           ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        if (readingNavigationTimerRef.current !== null) {
+          window.clearTimeout(readingNavigationTimerRef.current);
+        }
+        readingNavigationTimerRef.current = window.setTimeout(
+          () => {
+            readingNavigationTimerRef.current = null;
+            if (target?.isConnected) {
+              scrollReadingElement(target, "auto", "center");
+            }
+            readingNavigationReleaseTimerRef.current = window.setTimeout(() => {
+              readingNavigationReleaseTimerRef.current = null;
+              readingIntentionalNavigationRef.current = false;
+              readingNavigationTargetRef.current = null;
+              scheduleReadingPositionCommit(0);
+            }, 900);
+          },
+          reducedMotion ? 80 : 560,
+        );
       });
     });
   };
@@ -3156,6 +4588,7 @@ export default function Home() {
             revision: 1,
             versions: [],
             openInReadingMode: false,
+            draftId: `web-file:${spec.fileName.normalize("NFKC").toLocaleLowerCase("fa")}`,
           },
           `«${spec.fileName}» ساخته شد؛ ویرایش را شروع کنید.`,
         );
@@ -3497,7 +4930,11 @@ export default function Home() {
     try {
       const document = await file.read();
       applyOpenedDocument(
-        { ...document, openInReadingMode: false },
+        {
+          ...document,
+          openInReadingMode: false,
+          draftId: `web-library:${file.path}`,
+        },
         `«${file.name}» از کتابخانه باز شد.`,
       );
       setActiveLibraryPath(file.path);
@@ -3926,11 +5363,16 @@ export default function Home() {
         .replace(/[\[\]\r\n]/gu, " ")
         .trim();
       const id = `image-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
+      const [data, dimensions] = await Promise.all([
+        readImageAssetData(file),
+        readImageAssetDimensions(file),
+      ]);
       const asset: RaaviImageAsset = {
         id,
         name: file.name.slice(0, 240),
         mimeType: file.type as RaaviImageAsset["mimeType"],
-        data: await readImageAssetData(file),
+        data,
+        ...dimensions,
       };
       const imageMarkdown = `![${selectedAlt || imageAltFromFileName(file.name)}](${raaviImageUrl(id)})`;
       const prefix = start > 0 && !/\n$/u.test(editorContent.slice(0, start))
@@ -4060,7 +5502,7 @@ export default function Home() {
           previewScrollRef.current.scrollTop = session.previewScrollTop;
         }
         if (focus === "editor") editorRef.current?.focus();
-        else previewArticleRef.current?.focus();
+        else previewArticleRef.current?.focus({ preventScroll: true });
       });
     },
     [],
@@ -4147,6 +5589,74 @@ export default function Home() {
     [content, restoreMermaidWorkspace, showNotice],
   );
 
+  const changeReaderSize = (delta: -1 | 1) => {
+    preserveReadingViewport(() => {
+      setReaderSize((size) => Math.min(22, Math.max(16, size + delta)));
+    }, {
+      anchor: readingPositionsRef.current[currentDocumentKey] ?? null,
+    });
+  };
+
+  const toggleThemePreservingReading = () => {
+    if (!readingMode) {
+      toggleTheme();
+      return;
+    }
+    preserveReadingViewport(toggleTheme, { retries: 6 });
+  };
+
+  const openShortcutHelp = () => {
+    preserveReadingViewport(() => setShortcutHelpOpen(true), { retries: 2 });
+  };
+
+  const closeShortcutHelp = () => {
+    preserveReadingViewport(() => setShortcutHelpOpen(false), { retries: 2 });
+  };
+
+  const toggleShortcutHelp = () => {
+    preserveReadingViewport(
+      () => setShortcutHelpOpen((current) => !current),
+      { retries: 2 },
+    );
+  };
+
+  const beginReadingLayoutTransition = () => {
+    document.documentElement.classList.add("reading-layout-is-changing");
+    if (readingLayoutTransitionTimerRef.current !== null) {
+      window.clearTimeout(readingLayoutTransitionTimerRef.current);
+    }
+    readingLayoutTransitionTimerRef.current = window.setTimeout(() => {
+      readingLayoutTransitionTimerRef.current = null;
+      document.documentElement.classList.remove("reading-layout-is-changing");
+    }, 360);
+  };
+
+  const toggleAnnotationPanel = () => {
+    preserveReadingViewport(() => {
+      setAnnotationPanelOpen((current) => !current);
+    }, {
+      anchor: readingPositionsRef.current[currentDocumentKey] ?? null,
+    });
+  };
+
+  const closeAnnotationPanel = (returnFocus = false) => {
+    preserveReadingViewport(() => setAnnotationPanelOpen(false), {
+      anchor: readingPositionsRef.current[currentDocumentKey] ?? null,
+    });
+    if (returnFocus) {
+      requestAnimationFrame(() =>
+        annotationToggleRef.current?.focus({ preventScroll: true }),
+      );
+    }
+  };
+
+  const toggleReadingOutline = () => {
+    preserveReadingViewport(() => {
+      setReadingOutlineOpen((current) => !current);
+      setReadingHeaderVisible(true);
+    });
+  };
+
   const restoreVersion = (version: RaaviVersion) => {
     setContent(version.content);
     setAnnotations(version.annotations);
@@ -4156,7 +5666,7 @@ export default function Home() {
     setSelectionDraft(null);
     setComposerKind(null);
     setComposerText("");
-    setAnnotationPanelOpen(Boolean(version.annotations.length));
+    setAnnotationPanelOpen(false);
     setReadingMode(false);
     showNotice(
       `نسخه‌ی ${version.number.toLocaleString("fa-IR")} برای بازبینی بازیابی شد؛ برای ثبت آن ذخیره کنید.`,
@@ -4164,16 +5674,30 @@ export default function Home() {
   };
 
   const leaveReadingMode = () => {
-    setReadingMode(false);
-    setReadingHeaderVisible(true);
-    if (!window.matchMedia("(max-width: 820px)").matches) {
-      setLibraryOpen(true);
-    }
+    const readingAnchor = captureCurrentReadingPosition("desk");
     const returnTarget = readingReturnFocusRef.current;
-    requestAnimationFrame(() =>
-      returnTarget?.isConnected
-        ? returnTarget.focus()
-        : previewArticleRef.current?.focus(),
+    const completeTransition = () => {
+      if (!document.querySelector(".app-shell.is-reading")) return;
+      beginReadingLayoutTransition();
+      preserveReadingViewport(
+        () => {
+          setReadingMode(false);
+          setReadingHeaderVisible(true);
+          if (!window.matchMedia("(max-width: 820px)").matches) {
+            setLibraryOpen(true);
+          }
+        },
+        { anchor: readingAnchor, retries: 8 },
+      );
+      requestAnimationFrame(() =>
+        returnTarget?.isConnected
+          ? returnTarget.focus({ preventScroll: true })
+          : previewArticleRef.current?.focus({ preventScroll: true }),
+      );
+    };
+    void import("./components/markdown-code-editor").then(
+      completeTransition,
+      completeTransition,
     );
   };
 
@@ -4186,33 +5710,59 @@ export default function Home() {
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    setEditorSelectionMenuPosition(null);
-    setReadingMode(true);
-    setReadingHeaderVisible(true);
-    setLibraryOpen(false);
-    setMobilePane("preview");
-    requestAnimationFrame(() => previewArticleRef.current?.focus());
+    beginReadingLayoutTransition();
+    preserveReadingViewport(
+      () => {
+        setEditorSelectionMenuPosition(null);
+        setReadingMode(true);
+        setReadingHeaderVisible(true);
+        setLibraryOpen(false);
+        setMobilePane("preview");
+      },
+      { retries: 4 },
+    );
+    requestAnimationFrame(() =>
+      previewArticleRef.current?.focus({ preventScroll: true }),
+    );
   };
 
   const focusEditor = () => {
-    if (readingMode) setReadingMode(false);
-    setMobilePane("editor");
-    if (!window.matchMedia("(max-width: 820px)").matches) setLibraryOpen(true);
+    const isMobile = window.matchMedia("(max-width: 820px)").matches;
+    const change = () => {
+      if (readingMode) setReadingMode(false);
+      setMobilePane("editor");
+      if (!isMobile) setLibraryOpen(true);
+    };
+    if (readingMode && isMobile) {
+      const position = captureCurrentReadingPosition("desk");
+      if (position) commitReadingPosition(position);
+      change();
+    } else {
+      preserveReadingViewport(change);
+    }
     requestAnimationFrame(() => editorRef.current?.focus());
   };
 
   const focusPreview = () => {
+    const savedPosition =
+      readingPositionsRef.current[currentDocumentKey] ??
+      lastReadingAnchorRef.current;
     setEditorSelectionMenuPosition(null);
     setMobilePane("preview");
-    requestAnimationFrame(() => previewArticleRef.current?.focus());
+    if (savedPosition) scheduleReadingRestore(savedPosition);
+    requestAnimationFrame(() =>
+      previewArticleRef.current?.focus({ preventScroll: true }),
+    );
   };
 
   const focusLibrarySearch = () => {
-    if (readingMode) setReadingMode(false);
-    setEditorSelectionMenuPosition(null);
     const isWebSurface = commandEnvironment.surface === "web";
-    setLibraryTab(isWebSurface ? "history" : "library");
-    setLibraryOpen(true);
+    preserveReadingViewport(() => {
+      if (readingMode) setReadingMode(false);
+      setEditorSelectionMenuPosition(null);
+      setLibraryTab(isWebSurface ? "history" : "library");
+      setLibraryOpen(true);
+    });
     requestAnimationFrame(() =>
       requestAnimationFrame(() =>
         (isWebSurface
@@ -4259,11 +5809,15 @@ export default function Home() {
   };
 
   const focusAnnotationPanel = () => {
-    if (readingMode) setReadingMode(false);
-    setMobilePane("preview");
-    setAnnotationPanelOpen(true);
+    preserveReadingViewport(() => {
+      if (readingMode) setReadingMode(false);
+      setMobilePane("preview");
+      setAnnotationPanelOpen(true);
+    });
     requestAnimationFrame(() =>
-      requestAnimationFrame(() => annotationPanelRef.current?.focus()),
+      requestAnimationFrame(() =>
+        annotationPanelRef.current?.focus({ preventScroll: true }),
+      ),
     );
   };
 
@@ -4281,7 +5835,7 @@ export default function Home() {
       return;
     }
     if (topLayer === "shortcuts") {
-      setShortcutHelpOpen(false);
+      closeShortcutHelp();
       return;
     }
     if (topLayer === "save") {
@@ -4311,8 +5865,11 @@ export default function Home() {
     }
     if (selectionDraft) {
       setSelectionDraft(null);
+      setSelectionHighlightRects([]);
       clearNativeSelection();
-      requestAnimationFrame(() => previewArticleRef.current?.focus());
+      requestAnimationFrame(() =>
+        previewArticleRef.current?.focus({ preventScroll: true }),
+      );
       return;
     }
     if (activeAnnotationId) {
@@ -4320,8 +5877,7 @@ export default function Home() {
       return;
     }
     if (annotationPanelOpen) {
-      setAnnotationPanelOpen(false);
-      requestAnimationFrame(() => annotationToggleRef.current?.focus());
+      closeAnnotationPanel(true);
       return;
     }
     if (readingMode) leaveReadingMode();
@@ -4350,7 +5906,7 @@ export default function Home() {
     "file.new": openNewDocumentModal,
     "help.shortcuts": () => {
       clearAnnotationHover();
-      setShortcutHelpOpen((current) => !current);
+      toggleShortcutHelp();
     },
     "edit.undo": () => editorRef.current?.undo(),
     "edit.redo": () => editorRef.current?.redo(),
@@ -4366,16 +5922,14 @@ export default function Home() {
     "edit.image": openImageModal,
     "edit.quote": insertQuote,
     "diagram.mermaid": () => openMermaidStudio(),
-    "view.theme": toggleTheme,
+    "view.theme": toggleThemePreservingReading,
     "view.reading": toggleReadingMode,
     "focus.editor": focusEditor,
     "focus.preview": focusPreview,
     "focus.library": focusLibrarySearch,
     "focus.annotations": focusAnnotationPanel,
-    "view.text.decrease": () =>
-      setReaderSize((size) => Math.max(16, size - 1)),
-    "view.text.increase": () =>
-      setReaderSize((size) => Math.min(22, size + 1)),
+    "view.text.decrease": () => changeReaderSize(-1),
+    "view.text.increase": () => changeReaderSize(1),
     "annotation.highlight": () => addAnnotation("highlight"),
     "annotation.comment": () =>
       openAnnotationComposer("comment", commentButtonRef.current),
@@ -4470,6 +6024,142 @@ export default function Home() {
     isCommandEnabled,
   });
 
+  const markdownComponents = useMemo<Components>(
+    () => ({
+      pre: ({ children, node }) => {
+        const block = mermaidBlockAtOffset(
+          mermaidBlocks,
+          node?.position?.start.offset,
+        );
+        if (block) {
+          return (
+            <MermaidDiagram
+              block={block}
+              theme={themeMode}
+              onEdit={openMermaidStudio}
+              onFullscreenChange={handleDiagramFullscreenChange}
+              readingMode={readingMode}
+            />
+          );
+        }
+        return <pre>{children}</pre>;
+      },
+      p: ({ children }) => (
+        <p dir={blockTextDirection(children)}>{children}</p>
+      ),
+      h1: ({ children }) => (
+        <h1 dir={blockTextDirection(children)}>{children}</h1>
+      ),
+      h2: ({ children }) => (
+        <h2 dir={blockTextDirection(children)}>{children}</h2>
+      ),
+      h3: ({ children }) => (
+        <h3 dir={blockTextDirection(children)}>{children}</h3>
+      ),
+      h4: ({ children }) => (
+        <h4 dir={blockTextDirection(children)}>{children}</h4>
+      ),
+      h5: ({ children }) => (
+        <h5 dir={blockTextDirection(children)}>{children}</h5>
+      ),
+      h6: ({ children }) => (
+        <h6 dir={blockTextDirection(children)}>{children}</h6>
+      ),
+      li: ({ children, className }) => (
+        <li className={className} dir={blockTextDirection(children)}>
+          {children}
+        </li>
+      ),
+      blockquote: ({ children }) => (
+        <blockquote dir={blockTextDirection(children)}>{children}</blockquote>
+      ),
+      th: ({ children }) => (
+        <th dir={blockTextDirection(children)}>{children}</th>
+      ),
+      td: ({ children }) => (
+        <td dir={blockTextDirection(children)}>{children}</td>
+      ),
+      a: ({ ...props }) => (
+        <a
+          {...props}
+          dir="auto"
+          target="_blank"
+          rel="noreferrer noopener"
+        />
+      ),
+      img: ({ src, alt }) => {
+        const imageSource = typeof src === "string" ? src.trim() : "";
+        const assetId = raaviImageAssetId(imageSource);
+        if (assetId) {
+          const asset = imageAssetsById.get(assetId);
+          if (!asset) {
+            return (
+              <span className="remote-media-blocked" role="note">
+                <ImagePlus size={18} aria-hidden="true" />
+                <span>
+                  <strong>تصویرِ همراه سند پیدا نشد</strong>
+                  <small>
+                    این Markdown به تصویر داخلیِ یک فایل .ravi اشاره می‌کند، اما
+                    محمولهٔ تصویر در فایل موجود نیست.
+                  </small>
+                </span>
+              </span>
+            );
+          }
+
+          return (
+            // The data URL is a local document asset and cannot use Next image optimization.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              className="markdown-image"
+              src={raaviImageDataUrl(asset)}
+              alt={alt ?? asset.name}
+              loading="lazy"
+              width={asset.width}
+              height={asset.height}
+            />
+          );
+        }
+        const isRemoteImage = /^(?:https?:)?\/\//i.test(imageSource);
+
+        // Markdown can reference arbitrary local paths, so Next Image cannot pre-resolve them.
+        return (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            className="markdown-image markdown-image--provisional-ratio"
+            src={src}
+            alt={alt ?? ""}
+            loading="lazy"
+            width={1600}
+            height={900}
+            referrerPolicy={isRemoteImage ? "no-referrer" : undefined}
+          />
+        );
+      },
+    }),
+    [
+      blockTextDirection,
+      imageAssetsById,
+      handleDiagramFullscreenChange,
+      mermaidBlocks,
+      openMermaidStudio,
+      readingMode,
+      themeMode,
+    ],
+  );
+  const renderedMarkdownPreview = useMemo(
+    () => (
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        urlTransform={raaviMarkdownUrlTransform}
+        components={markdownComponents}
+      >
+        {content}
+      </ReactMarkdown>
+    ),
+    [content, markdownComponents],
+  );
+
   const editorPaneCollapsed =
     !readingMode && !libraryIsModal && desktopPaneMode === "preview";
   const previewPaneCollapsed =
@@ -4552,7 +6242,7 @@ export default function Home() {
           <button
             className={`theme-toggle is-${themeMode}`}
             type="button"
-            onClick={toggleTheme}
+            onClick={toggleThemePreservingReading}
             disabled={Boolean(themeTransition)}
             aria-label={
               themeMode === "light"
@@ -4597,10 +6287,7 @@ export default function Home() {
               <button
                 className="reading-header-outline-toggle"
                 type="button"
-                onClick={() => {
-                  setReadingOutlineOpen(true);
-                  setReadingHeaderVisible(true);
-                }}
+                onClick={toggleReadingOutline}
                 aria-controls="reading-outline-navigation"
                 aria-expanded={false}
                 aria-label="بازکردن فهرست فصل‌ها"
@@ -4923,10 +6610,7 @@ export default function Home() {
               <button
                 className="reading-outline-toggle"
                 type="button"
-                onClick={() => {
-                  setReadingOutlineOpen(false);
-                  setReadingHeaderVisible(true);
-                }}
+                onClick={toggleReadingOutline}
                 aria-controls="reading-outline-navigation"
                 aria-expanded={true}
                 aria-label="جمع‌کردن فهرست فصل‌ها"
@@ -5255,23 +6939,33 @@ export default function Home() {
           </div>
 
           <div className="editor-surface">
-            <MarkdownCodeEditor
-              id="markdown-editor"
-              ref={editorRef}
-              value={content}
-              onChange={(nextContent) => {
-                setEditorSelectionMenuPosition(null);
-                setContent(nextContent);
-                if (saveState === "error") setSaveState("saved");
-              }}
-              onScroll={() => {
-                setEditorSelectionMenuPosition(null);
-                handleSyncedScroll("editor");
-              }}
-              onSelectionChange={captureEditorSelection}
-              transformPastedText={normalizePersianMarkdown}
-              ariaDescribedBy="editor-hint"
-            />
+            {!readingMode && (
+              <Suspense
+                fallback={
+                  <div className="editor-loading" role="status" aria-live="polite">
+                    ویرایشگر در حال آماده‌شدن است…
+                  </div>
+                }
+              >
+                <MarkdownCodeEditor
+                  id="markdown-editor"
+                  ref={editorRef}
+                  value={content}
+                  onChange={(nextContent) => {
+                    setEditorSelectionMenuPosition(null);
+                    setContent(nextContent);
+                    if (saveState === "error") setSaveState("saved");
+                  }}
+                  onScroll={() => {
+                    setEditorSelectionMenuPosition(null);
+                    handleSyncedScroll("editor");
+                  }}
+                  onSelectionChange={captureEditorSelection}
+                  transformPastedText={normalizePersianMarkdown}
+                  ariaDescribedBy="editor-hint"
+                />
+              </Suspense>
+            )}
 
             {editorAssistantTab && (
               <aside
@@ -5471,7 +7165,7 @@ export default function Home() {
             <button
               className="editor-shortcut-help"
               type="button"
-              onClick={() => setShortcutHelpOpen(true)}
+              onClick={openShortcutHelp}
             >
               <Keyboard size={14} aria-hidden="true" />
               نمایش همهٔ میان‌برها
@@ -5618,9 +7312,7 @@ export default function Home() {
                   annotationPanelOpen ? "is-active" : ""
                 }`}
                 type="button"
-                onClick={() =>
-                  setAnnotationPanelOpen((current) => !current)
-                }
+                onClick={toggleAnnotationPanel}
                 aria-expanded={annotationPanelOpen}
                 aria-controls="annotation-panel"
                 aria-keyshortcuts={commandAriaKeyShortcuts(
@@ -5640,9 +7332,7 @@ export default function Home() {
               <div className="reader-controls" aria-label="اندازه‌ی متن">
                 <button
                   type="button"
-                  onClick={() =>
-                    setReaderSize((size) => Math.max(16, size - 1))
-                  }
+                  onClick={() => changeReaderSize(-1)}
                   disabled={readerSize <= 16}
                   aria-label="کوچک‌تر کردن متن"
                   aria-keyshortcuts={commandAriaKeyShortcuts(
@@ -5662,9 +7352,7 @@ export default function Home() {
                 </span>
                 <button
                   type="button"
-                  onClick={() =>
-                    setReaderSize((size) => Math.min(22, size + 1))
-                  }
+                  onClick={() => changeReaderSize(1)}
                   disabled={readerSize >= 22}
                   aria-label="بزرگ‌تر کردن متن"
                   aria-keyshortcuts={commandAriaKeyShortcuts(
@@ -5701,14 +7389,18 @@ export default function Home() {
                     متن {ANNOTATION_LABELS[composerKind]}
                   </span>
                   <textarea
+                    ref={composerTextAreaRef}
                     value={composerText}
-                    onChange={(event) => setComposerText(event.target.value)}
+                    onFocus={restoreComposerReadingViewport}
+                    onChange={(event) => {
+                      restoreComposerReadingViewport();
+                      setComposerText(event.target.value);
+                    }}
                     placeholder={
                       composerKind === "comment"
                         ? "نظر یا بازخورد خود را بنویسید…"
                         : "یادداشت حاشیه‌ای را بنویسید…"
                     }
-                    autoFocus
                     dir="auto"
                     data-editable-kind="composer"
                     aria-keyshortcuts={commandAriaKeyShortcuts(
@@ -5769,7 +7461,7 @@ export default function Home() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setAnnotationPanelOpen(false)}
+                    onClick={() => closeAnnotationPanel()}
                     aria-label="بستن حاشیه‌ها"
                   >
                     <X size={17} aria-hidden="true" />
@@ -5878,6 +7570,32 @@ export default function Home() {
               }
             >
             {selectionDraft &&
+              selectionHighlightRects.map((rect, index) => (
+                <span
+                  aria-hidden="true"
+                  className="selection-range-feedback"
+                  key={`${rect.left}-${rect.top}-${index}`}
+                  style={
+                    {
+                      left: rect.left,
+                      top: rect.top,
+                      width: rect.width,
+                      height: rect.height,
+                    } as React.CSSProperties
+                  }
+                />
+              ))}
+            <div
+              className="visually-hidden"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {selectionDraft
+                ? `${selectionDraft.quote.length.toLocaleString("fa-IR")} نویسه انتخاب شد؛ ابزارهای کپی، هایلایت و یادداشت در دسترس‌اند.`
+                : ""}
+            </div>
+            {selectionDraft &&
               selectionMenuPosition &&
               !composerKind && (
                 <div
@@ -5896,6 +7614,15 @@ export default function Home() {
                     if (event.pointerType === "mouse") event.preventDefault();
                   }}
                 >
+                  <button
+                    className="annotation-action annotation-action--copy"
+                    type="button"
+                    onClick={() => void copyPreviewSelection()}
+                    title="کپی متن انتخاب‌شده"
+                  >
+                    <Copy size={14} aria-hidden="true" />
+                    کپی
+                  </button>
                   <button
                     className="annotation-action annotation-action--highlight"
                     type="button"
@@ -5967,6 +7694,13 @@ export default function Home() {
                 dir={documentTextDirection}
                 tabIndex={-1}
                 aria-label="متن پیش‌نمایش؛ برای جابه‌جایی سریع از میان‌بر تمرکز پیش‌نمایش استفاده کنید"
+                onPointerDown={() => {
+                  if (!composerKind) {
+                    setSelectionDraft(null);
+                    setSelectionHighlightRects([]);
+                    setSelectionMenuPosition(null);
+                  }
+                }}
                 onMouseUp={(event) =>
                   capturePreviewSelection({
                     clientX: event.clientX,
@@ -5978,124 +7712,7 @@ export default function Home() {
                 onPointerLeave={clearAnnotationHover}
                 onClick={handleAnnotationClick}
               >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  urlTransform={raaviMarkdownUrlTransform}
-                  components={{
-                    pre: ({ children, node }) => {
-                      const block = mermaidBlockAtOffset(
-                        mermaidBlocks,
-                        node?.position?.start.offset,
-                      );
-                      if (block) {
-                        return (
-                          <MermaidDiagram
-                            block={block}
-                            theme={themeMode}
-                            onEdit={openMermaidStudio}
-                            readingMode={readingMode}
-                          />
-                        );
-                      }
-                      return <pre>{children}</pre>;
-                    },
-                    p: ({ children }) => (
-                      <p dir={blockTextDirection(children)}>{children}</p>
-                    ),
-                    h1: ({ children }) => (
-                      <h1 dir={blockTextDirection(children)}>{children}</h1>
-                    ),
-                    h2: ({ children }) => (
-                      <h2 dir={blockTextDirection(children)}>{children}</h2>
-                    ),
-                    h3: ({ children }) => (
-                      <h3 dir={blockTextDirection(children)}>{children}</h3>
-                    ),
-                    h4: ({ children }) => (
-                      <h4 dir={blockTextDirection(children)}>{children}</h4>
-                    ),
-                    h5: ({ children }) => (
-                      <h5 dir={blockTextDirection(children)}>{children}</h5>
-                    ),
-                    h6: ({ children }) => (
-                      <h6 dir={blockTextDirection(children)}>{children}</h6>
-                    ),
-                    li: ({ children, className }) => (
-                      <li
-                        className={className}
-                        dir={blockTextDirection(children)}
-                      >
-                        {children}
-                      </li>
-                    ),
-                    blockquote: ({ children }) => (
-                      <blockquote dir={blockTextDirection(children)}>
-                        {children}
-                      </blockquote>
-                    ),
-                    th: ({ children }) => (
-                      <th dir={blockTextDirection(children)}>{children}</th>
-                    ),
-                    td: ({ children }) => (
-                      <td dir={blockTextDirection(children)}>{children}</td>
-                    ),
-                    a: ({ ...props }) => (
-                      <a
-                        {...props}
-                        dir="auto"
-                        target="_blank"
-                        rel="noreferrer noopener"
-                      />
-                    ),
-                    img: ({ src, alt }) => {
-                      const imageSource =
-                        typeof src === "string" ? src.trim() : "";
-                      const assetId = raaviImageAssetId(imageSource);
-                      if (assetId) {
-                        const asset = imageAssetsById.get(assetId);
-                        if (!asset) {
-                          return (
-                            <span className="remote-media-blocked" role="note">
-                              <ImagePlus size={18} aria-hidden="true" />
-                              <span>
-                                <strong>تصویرِ همراه سند پیدا نشد</strong>
-                                <small>
-                                  این Markdown به تصویر داخلیِ یک فایل .ravi اشاره
-                                  می‌کند، اما محمولهٔ تصویر در فایل موجود نیست.
-                                </small>
-                              </span>
-                            </span>
-                          );
-                        }
-
-                        return (
-                          // The data URL is a local document asset and cannot use Next image optimization.
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={raaviImageDataUrl(asset)}
-                            alt={alt ?? asset.name}
-                            loading="lazy"
-                          />
-                        );
-                      }
-                      const isRemoteImage =
-                        /^(?:https?:)?\/\//i.test(imageSource);
-
-                      // Markdown can reference arbitrary local paths, so Next Image cannot pre-resolve them.
-                      return (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={src}
-                          alt={alt ?? ""}
-                          loading="lazy"
-                          referrerPolicy={isRemoteImage ? "no-referrer" : undefined}
-                        />
-                      );
-                    },
-                  }}
-                >
-                  {content}
-                </ReactMarkdown>
+                {renderedMarkdownPreview}
               </article>
             ) : (
               <div className="empty-preview">
@@ -6587,19 +8204,55 @@ export default function Home() {
         )}
       </div>
 
+      {readingMode && !readingHeaderVisible && (
+        <button
+          className="reading-return-handle"
+          type="button"
+          onClick={leaveReadingMode}
+          aria-label="بازگشت به میز"
+          title="بازگشت به میز"
+        >
+          <X size={17} aria-hidden="true" />
+          <span>بازگشت به میز</span>
+        </button>
+      )}
+
       {mermaidStudioSession && (
-        <MermaidStudio
-          key={mermaidStudioSession.id}
-          open
-          isTopLayer={topLayer === "mermaid"}
-          session={mermaidStudioSession}
-          fileName={fileName}
-          theme={themeMode}
-          onToggleTheme={toggleTheme}
-          onApply={applyMermaidStudio}
-          onClose={closeMermaidStudio}
-          returnFocusRef={mermaidReturnFocusRef}
-        />
+        <Suspense
+          fallback={
+            <AccessibleModal
+              open
+              isTopLayer={topLayer === "mermaid"}
+              onClose={() => closeMermaidStudio(mermaidStudioSession)}
+              dialogRef={mermaidLoadingModalRef}
+              returnFocusRef={mermaidReturnFocusRef}
+              backdropClassName="mermaid-studio-backdrop"
+              dialogClassName="mermaid-studio-loading"
+              labelledBy="mermaid-studio-loading-title"
+              describedBy="mermaid-studio-loading-description"
+            >
+              <Network size={22} aria-hidden="true" />
+              <div role="status" aria-live="polite">
+                <strong id="mermaid-studio-loading-title">ساخت نمودار در حال آماده‌شدن است</strong>
+                <span id="mermaid-studio-loading-description">
+                  ابزارهای نمودار فقط هنگام نیاز بارگذاری می‌شوند.
+                </span>
+              </div>
+            </AccessibleModal>
+          }
+        >
+          <MermaidStudio
+            key={mermaidStudioSession.id}
+            open
+            isTopLayer={topLayer === "mermaid"}
+            session={mermaidStudioSession}
+            fileName={fileName}
+            theme={themeMode}
+            onApply={applyMermaidStudio}
+            onClose={closeMermaidStudio}
+            returnFocusRef={mermaidReturnFocusRef}
+          />
+        </Suspense>
       )}
 
       <NewDocumentDialog
@@ -6955,7 +8608,7 @@ export default function Home() {
         open={shortcutHelpOpen}
         isTopLayer={topLayer === "shortcuts"}
         environment={commandEnvironment}
-        onClose={() => setShortcutHelpOpen(false)}
+        onClose={closeShortcutHelp}
       />
 
       {hoverPreview && hoveredAnnotation && (
@@ -6987,6 +8640,65 @@ export default function Home() {
           {notice}
         </div>
       )}
+
+      {readingResumeNotice &&
+        readingResumeNotice.documentKey === currentDocumentKey && (
+          <div className="reading-resume-notice" role="status" aria-live="polite">
+            <div>
+              <BookOpen size={18} aria-hidden="true" />
+              <span>
+                <strong>
+                  {readingResumeNotice.precision === "exact"
+                    ? "مطالعه از جای قبلی ادامه یافت"
+                    : "به نزدیک‌ترین بخشِ قابل بازیابی برگشتیم"}
+                </strong>
+                <small dir="auto">{readingResumeNotice.label}</small>
+              </span>
+            </div>
+            <div className="reading-resume-actions">
+              {readingResumeNotice.precision === "exact" ? (
+                <>
+                  <button
+                    className="reading-resume-continue"
+                    type="button"
+                    onClick={() => setReadingResumeNotice(null)}
+                  >
+                    ادامه مطالعه
+                  </button>
+                  <button type="button" onClick={startReadingAtBeginning}>
+                    شروع از ابتدا
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="reading-resume-continue"
+                    type="button"
+                    onClick={() => {
+                      const savedRecord = readingResumeNotice.record;
+                      setReadingResumeNotice(null);
+                      scheduleReadingRestore(savedRecord, {
+                        announce: true,
+                        protectPending: true,
+                      });
+                    }}
+                  >
+                    رفتن به نشان قبلی
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReadingResumeNotice(null);
+                      scheduleReadingPositionCommit(0);
+                    }}
+                  >
+                    ادامه از اینجا
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
     </div>
   );
 }

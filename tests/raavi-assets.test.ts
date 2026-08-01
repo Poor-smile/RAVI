@@ -14,6 +14,8 @@ const imageAsset = {
   name: "sample.png",
   mimeType: "image/png" as const,
   data: "iVBORw0KGgo=",
+  width: 640,
+  height: 360,
 };
 
 test("Raavi packages inserted image assets with the document", () => {
@@ -42,4 +44,22 @@ test("Raavi ignores unsafe or unsupported image payloads", () => {
   ]);
   const parsed = parseRaaviDocument(JSON.stringify(document));
   assert.deepEqual(parsed.assets, []);
+});
+
+test("Raavi preserves valid image geometry and drops invalid geometry", () => {
+  const valid = parseRaaviDocument(
+    JSON.stringify(makeRaaviDocument("sample.md", "", [], 1, [], [imageAsset])),
+  );
+  const invalid = parseRaaviDocument(
+    JSON.stringify(
+      makeRaaviDocument("sample.md", "", [], 1, [], [
+        { ...imageAsset, width: -1, height: 999_999 },
+      ]),
+    ),
+  );
+
+  assert.equal(valid.assets[0]?.width, 640);
+  assert.equal(valid.assets[0]?.height, 360);
+  assert.equal(invalid.assets[0]?.width, undefined);
+  assert.equal(invalid.assets[0]?.height, undefined);
 });

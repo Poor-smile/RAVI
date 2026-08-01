@@ -24,13 +24,39 @@ const INITIAL_STATE: MermaidRenderState = {
   error: null,
 };
 
+const MERMAID_RENDER_CACHE_LIMIT = 80;
+const mermaidRenderCache = new Map<string, string>();
+
+function cachedRenderState(code: string, theme: MermaidTheme) {
+  const renderKey = mermaidRenderKey(code, theme);
+  const svg = mermaidRenderCache.get(renderKey);
+  if (!svg) return INITIAL_STATE;
+  return {
+    status: "valid",
+    svg,
+    lastValidSvg: svg,
+    renderKey,
+    error: null,
+  } satisfies MermaidRenderState;
+}
+
+function rememberRenderedSvg(renderKey: string, svg: string) {
+  mermaidRenderCache.delete(renderKey);
+  mermaidRenderCache.set(renderKey, svg);
+  if (mermaidRenderCache.size <= MERMAID_RENDER_CACHE_LIMIT) return;
+  const oldestKey = mermaidRenderCache.keys().next().value;
+  if (typeof oldestKey === "string") mermaidRenderCache.delete(oldestKey);
+}
+
 export function useMermaidRender(
   code: string,
   theme: MermaidTheme,
   debounceMs = 0,
   renderNonce = 0,
 ) {
-  const [state, setState] = useState<MermaidRenderState>(INITIAL_STATE);
+  const [state, setState] = useState<MermaidRenderState>(() =>
+    cachedRenderState(code, theme),
+  );
   const requestRef = useRef(0);
 
   useEffect(() => {
@@ -49,15 +75,35 @@ export function useMermaidRender(
         }));
         return;
       }
+      const renderKey = mermaidRenderKey(code, theme);
+      const cachedSvg = mermaidRenderCache.get(renderKey);
+      if (cachedSvg && renderNonce === 0) {
+        setState((current) =>
+          current.status === "valid" &&
+          current.svg === cachedSvg &&
+          current.renderKey === renderKey
+            ? current
+            : {
+                status: "valid",
+                svg: cachedSvg,
+                lastValidSvg: cachedSvg,
+                renderKey,
+                error: null,
+              },
+        );
+        return;
+      }
       setState((current) => ({ ...current, status: "loading", error: null }));
       void renderMermaid(code, theme).then((result) => {
         if (requestRef.current !== request) return;
         if (result.ok) {
+          const nextRenderKey = mermaidRenderKey(code, theme);
+          rememberRenderedSvg(nextRenderKey, result.svg);
           setState({
             status: "valid",
             svg: result.svg,
             lastValidSvg: result.svg,
-            renderKey: mermaidRenderKey(code, theme),
+            renderKey: nextRenderKey,
             error: null,
           });
           return;

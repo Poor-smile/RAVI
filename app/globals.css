@@ -416,6 +416,12 @@ html.theme-is-changing .save-type-options label {
     border-color 260ms ease;
 }
 
+html.reading-layout-is-changing .workspace-frame,
+html.reading-layout-is-changing .workspace,
+html.reading-layout-is-changing .work-pane {
+  transition: none !important;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -438,7 +444,7 @@ html.theme-is-changing .save-type-options label {
 }
 
 .button {
-  height: 42px;
+  height: 44px;
   border: 0;
   border-radius: 6px;
   padding: 0 15px;
@@ -1945,6 +1951,15 @@ html.theme-is-changing .save-type-options label {
   color: var(--ink-700);
 }
 
+.reader-controls button {
+  width: 44px;
+  height: 44px;
+}
+
+.reader-controls {
+  min-width: 132px;
+}
+
 .preview-header-actions {
   display: flex;
   align-items: center;
@@ -1952,7 +1967,7 @@ html.theme-is-changing .save-type-options label {
 }
 
 .annotation-toggle {
-  min-height: 34px;
+  min-height: 44px;
   padding: 3px 8px;
   display: inline-flex;
   align-items: center;
@@ -2055,7 +2070,7 @@ html.theme-is-changing .save-type-options label {
 }
 
 .annotation-action {
-  min-height: 32px;
+  min-height: 44px;
   padding: 4px 8px;
   display: inline-flex;
   align-items: center;
@@ -2147,6 +2162,16 @@ html.theme-is-changing .save-type-options label {
   position: relative;
   min-width: 0;
   flex: 1;
+  overflow-anchor: none;
+}
+
+.selection-range-feedback {
+  position: absolute;
+  z-index: 12;
+  pointer-events: none;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--proof-blue) 22%, transparent);
+  box-shadow: inset 0 -2px var(--proof-blue);
 }
 
 .selection-mini-menu {
@@ -2165,6 +2190,11 @@ html.theme-is-changing .save-type-options label {
   box-shadow: 0 10px 26px var(--shadow-color);
   white-space: nowrap;
   will-change: transform, opacity, clip-path;
+  pointer-events: none;
+}
+
+.selection-mini-menu button {
+  pointer-events: auto;
 }
 
 .selection-mini-menu.is-above {
@@ -2180,7 +2210,7 @@ html.theme-is-changing .save-type-options label {
 }
 
 .selection-mini-menu .annotation-action {
-  min-height: 30px;
+  min-height: 44px;
   padding: 3px 8px;
   flex: none;
   gap: 4px;
@@ -2256,8 +2286,8 @@ html.theme-is-changing .save-type-options label {
 }
 
 .annotation-panel-header button {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   color: var(--chrome-muted);
@@ -2427,7 +2457,7 @@ html.theme-is-changing .save-type-options label {
 }
 
 .annotation-card-footer button {
-  min-height: 30px;
+  min-height: 44px;
   padding: 3px 6px;
   display: inline-flex;
   align-items: center;
@@ -2577,6 +2607,15 @@ html.theme-is-changing .save-type-options label {
   min-height: 0;
   overflow: hidden;
   background: var(--editor-surface-bg);
+}
+
+.editor-loading {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--ink-500);
+  background: var(--editor-surface-bg);
+  font-size: 11px;
 }
 
 #markdown-editor {
@@ -3228,7 +3267,7 @@ html.theme-is-changing .save-type-options label {
   left: 50%;
   width: 3px;
   min-height: 28px;
-  border-radius: 2px;
+  border-radius: 3px;
   background: var(--proof-blue);
   opacity: 0;
   transform: translateX(-50%) scaleY(0.84);
@@ -3362,6 +3401,8 @@ html.theme-is-changing .save-type-options label {
   margin: 0 auto;
   padding: clamp(28px, 4.5vw, 68px) clamp(22px, 5vw, 72px) 90px;
   color: var(--document-text);
+  -webkit-user-select: text;
+  user-select: text;
   font-size: var(--reader-size);
   line-height: 2;
   overflow-wrap: anywhere;
@@ -3658,6 +3699,10 @@ html.theme-is-changing .save-type-options label {
   height: auto;
 }
 
+.markdown-image--provisional-ratio {
+  aspect-ratio: auto 16 / 9;
+}
+
 .empty-preview {
   min-height: 100%;
   padding: 48px 24px;
@@ -3773,6 +3818,119 @@ html.theme-is-changing .save-type-options label {
 
 .toast svg {
   color: var(--success);
+}
+
+.reading-return-handle {
+  position: fixed;
+  z-index: 42;
+  inset-block-start: 10px;
+  inset-inline-end: 12px;
+  min-height: 44px;
+  padding: 7px 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--chrome-fg);
+  background: var(--chrome-900);
+  border: 0;
+  border-radius: 4px;
+  box-shadow: 0 8px 24px var(--shadow-color);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  animation: toastIn 180ms var(--ease-paper) both;
+}
+
+.reading-return-handle:hover {
+  color: var(--chrome-950);
+  background: var(--chrome-fg);
+}
+
+.reading-return-handle:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.reading-resume-notice {
+  position: fixed;
+  z-index: 44;
+  inset-inline-start: 24px;
+  inset-block-end: 24px;
+  width: min(430px, calc(100vw - 32px));
+  min-height: 72px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  direction: rtl;
+  color: var(--chrome-fg);
+  background: var(--chrome-950);
+  box-shadow: 0 16px 42px var(--shadow-color);
+  animation: toastIn 240ms var(--ease-paper) both;
+}
+
+.reading-resume-notice > div:first-child {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.reading-resume-notice > div:first-child > svg {
+  flex: none;
+  color: var(--success);
+}
+
+.reading-resume-notice > div:first-child > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.reading-resume-notice strong {
+  font-size: 11px;
+}
+
+.reading-resume-notice small {
+  overflow: hidden;
+  color: var(--chrome-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reading-resume-actions {
+  flex: none;
+  display: flex;
+  gap: 5px;
+}
+
+.reading-resume-actions button {
+  min-height: 44px;
+  padding: 6px 9px;
+  color: var(--chrome-muted);
+  background: transparent;
+  border: 1px solid var(--chrome-500);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reading-resume-actions button:hover,
+.reading-resume-actions button:focus-visible {
+  color: var(--chrome-950);
+  background: var(--chrome-fg);
+  border-color: var(--chrome-fg);
+}
+
+.reading-resume-actions .reading-resume-continue {
+  color: var(--on-accent);
+  background: var(--proof-blue);
+  border-color: var(--proof-blue);
 }
 
 .about-modal-backdrop {
@@ -5512,6 +5670,9 @@ html.theme-is-changing .save-type-options label {
     clamp(24px, 4vw, 56px);
   background: var(--paper-300);
   direction: ltr;
+  overflow-anchor: none;
+  overflow-y: scroll;
+  scrollbar-gutter: stable both-edges;
 }
 
 .workspace--reading.reading-outline-is-collapsed {
@@ -5577,8 +5738,8 @@ html.theme-is-changing .save-type-options label {
 
 .reading-outline-toggle {
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -5626,7 +5787,7 @@ html.theme-is-changing .save-type-options label {
 .reading-outline-navigation button {
   position: relative;
   width: 100%;
-  min-height: 38px;
+  min-height: 44px;
   padding: 8px 10px;
   display: block;
   overflow: hidden;
@@ -5772,7 +5933,7 @@ html.theme-is-changing .save-type-options label {
 
 .reading-header-outline-toggle {
   flex: none;
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 10px;
   display: inline-flex;
   align-items: center;
@@ -5813,16 +5974,60 @@ html.theme-is-changing .save-type-options label {
 .workspace--reading .preview-pane {
   width: min(100%, 1040px);
   min-height: calc(100dvh - 210px);
-  margin: 0 auto;
+  margin-block: 0;
+  margin-inline: 0 auto;
   border: 0;
   box-shadow: 0 18px 54px rgba(29, 36, 30, 0.17);
-  animation: paperOpen 380ms var(--ease-paper) both;
+  transform: none;
 }
 
 .workspace--reading .pane-header {
   position: sticky;
   z-index: 4;
   top: 0;
+}
+
+.workspace--reading .annotation-toolbar {
+  position: sticky;
+  z-index: 5;
+  top: 52px;
+}
+
+.workspace--reading .annotation-toolbar.is-composing {
+  position: fixed;
+  z-index: 36;
+  top: 66px;
+  left: calc(50% - 140px);
+  width: min(760px, calc(100vw - 360px));
+  min-height: 78px;
+  transform: translateX(-50%);
+  box-shadow: 0 12px 34px var(--shadow-color);
+}
+
+.workspace--reading.reading-outline-is-collapsed .annotation-toolbar.is-composing {
+  left: 50%;
+  width: min(900px, calc(100vw - 48px));
+}
+
+.workspace--reading .annotation-panel {
+  position: fixed;
+  z-index: 24;
+  top: 96px;
+  bottom: 32px;
+  left: 16px;
+  width: min(290px, calc(100vw - 32px));
+  min-width: 0;
+  height: auto;
+  max-height: calc(100dvh - 128px);
+  align-self: flex-start;
+  box-shadow: 14px 12px 34px rgba(23, 27, 24, 0.18);
+}
+
+.workspace--reading .annotation-toolbar.is-composing + .preview-stage .annotation-panel {
+  top: 130px;
+  bottom: 32px;
+  height: auto;
+  max-height: calc(100dvh - 162px);
 }
 
 .workspace--reading .preview-scroll {
@@ -6256,8 +6461,8 @@ html.theme-is-changing .save-type-options label {
   }
 
   .reading-header-outline-toggle {
-    width: 40px;
-    min-height: 40px;
+    width: 44px;
+    min-height: 44px;
     padding: 0;
     justify-content: center;
   }
@@ -6284,8 +6489,31 @@ html.theme-is-changing .save-type-options label {
     box-shadow: 16px 0 34px rgba(23, 27, 24, 0.18);
   }
 
+  .workspace--reading .annotation-panel,
+  .workspace--reading .annotation-toolbar.is-composing + .preview-stage .annotation-panel {
+    position: fixed;
+    z-index: 24;
+    top: 58px;
+    right: auto;
+    bottom: 0;
+    left: 0;
+    width: min(310px, 92vw);
+    height: auto;
+    max-height: calc(100dvh - 58px);
+    align-self: stretch;
+  }
+
   .annotation-toolbar.is-composing {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .workspace--reading .annotation-toolbar.is-composing,
+  .workspace--reading.reading-outline-is-collapsed .annotation-toolbar.is-composing {
+    top: 64px;
+    left: 50%;
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 76px);
+    overflow: auto;
   }
 
   .annotation-composer-copy {
@@ -6296,10 +6524,14 @@ html.theme-is-changing .save-type-options label {
     display: grid;
   }
 
-  .format-tools button,
-  .reader-controls button {
+  .format-tools button {
     width: 40px;
     height: 40px;
+  }
+
+  .reader-controls button {
+    width: 44px;
+    height: 44px;
   }
 
   .markdown-body {
@@ -6316,6 +6548,36 @@ html.theme-is-changing .save-type-options label {
   .toast {
     left: 16px;
     bottom: 16px;
+  }
+
+  .reading-return-handle {
+    inset-block-start: 8px;
+    inset-inline-end: 10px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .reading-return-handle span {
+    display: none;
+  }
+
+  .reading-resume-notice {
+    inset-inline: 16px;
+    inset-block-end: 16px;
+    width: auto;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reading-resume-actions {
+    width: 100%;
+  }
+
+  .reading-resume-actions button {
+    min-height: 44px;
+    flex: 1;
   }
 
   .save-modal-backdrop {
@@ -6552,8 +6814,8 @@ html.theme-is-changing .save-type-options label {
   }
 
   .annotation-toggle {
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     justify-content: center;
   }
@@ -6568,12 +6830,12 @@ html.theme-is-changing .save-type-options label {
   }
 
   .annotation-action {
-    min-height: 36px;
+    min-height: 44px;
     flex: 1;
   }
 
   .selection-mini-menu .annotation-action {
-    min-height: 32px;
+    min-height: 44px;
     padding-inline: 7px;
   }
 
@@ -6899,7 +7161,7 @@ html.theme-is-changing .save-type-options label {
   color: var(--ink-500);
   background: var(--paper-50);
   border-block-start: 1px solid var(--rule);
-  font-size: 8px;
+  font-size: 9px;
   text-align: center;
 }
 
@@ -6910,6 +7172,34 @@ html.theme-is-changing .save-type-options label {
   direction: rtl;
   background: var(--paper-200);
   animation: fadeIn 160ms ease both;
+}
+
+.mermaid-studio-loading {
+  width: min(420px, calc(100vw - 32px));
+  min-height: 150px;
+  padding: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--ink-700);
+  background: var(--paper-50);
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+}
+
+.mermaid-studio-loading > div {
+  display: grid;
+  gap: 5px;
+}
+
+.mermaid-studio-loading strong {
+  color: var(--ink-950);
+  font-size: 14px;
+}
+
+.mermaid-studio-loading span {
+  font-size: 11px;
 }
 
 .mermaid-studio {
@@ -6929,7 +7219,7 @@ html.theme-is-changing .save-type-options label {
 }
 
 .mermaid-studio-header {
-  min-height: 68px;
+  min-height: 76px;
   padding: 10px clamp(12px, 2.2vw, 28px);
   display: flex;
   align-items: center;
@@ -6965,7 +7255,7 @@ html.theme-is-changing .save-type-options label {
 }
 
 .mermaid-studio-identity strong {
-  font-size: 14px;
+  font-size: 20px;
 }
 
 .mermaid-studio-identity span {
@@ -6986,7 +7276,7 @@ html.theme-is-changing .save-type-options label {
 .mermaid-studio-back,
 .mermaid-studio-theme,
 .mermaid-studio-samples-toggle {
-  min-height: 36px;
+  min-height: 44px;
   padding: 6px 10px;
   justify-content: center;
   gap: 6px;
@@ -7005,15 +7295,15 @@ html.theme-is-changing .save-type-options label {
 }
 
 .mermaid-studio-theme {
-  width: 36px;
+  width: 44px;
   padding: 0;
 }
 
 .mermaid-validation {
-  min-height: 30px;
+  min-height: 36px;
   gap: 5px;
   color: var(--chrome-muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .mermaid-validation.is-valid {
@@ -7025,7 +7315,20 @@ html.theme-is-changing .save-type-options label {
 }
 
 .mermaid-apply {
-  min-height: 38px;
+  min-height: 44px;
+}
+
+.mermaid-apply-wrap {
+  min-width: 168px;
+  display: grid;
+  justify-items: stretch;
+  gap: 3px;
+}
+
+.mermaid-apply-wrap small {
+  color: var(--chrome-muted);
+  font-size: 9px;
+  text-align: center;
 }
 
 .mermaid-apply:disabled {
@@ -7036,30 +7339,80 @@ html.theme-is-changing .save-type-options label {
 }
 
 .mermaid-studio-error {
-  min-height: 44px;
-  padding: 7px clamp(12px, 2.2vw, 28px);
+  min-height: 58px;
+  padding: 10px clamp(12px, 2.2vw, 28px);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 9px;
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+  align-items: start;
+  gap: 12px;
   color: var(--error);
   background: var(--error-soft);
   border-block-end: 1px solid color-mix(in srgb, var(--error) 38%, transparent);
-  font-size: 10px;
+  font-size: 11px;
 }
 
-.mermaid-studio-error span {
+.mermaid-error-copy {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
-.mermaid-studio-error small {
-  overflow: hidden;
+.mermaid-error-copy p {
+  margin: 0;
   color: var(--ink-700);
+  line-height: 1.8;
+}
+
+.mermaid-error-copy details {
+  width: min(720px, 100%);
+  color: var(--ink-700);
+}
+
+.mermaid-error-copy summary {
+  width: fit-content;
+  color: var(--proof-blue-dark);
+  cursor: pointer;
+}
+
+.mermaid-error-copy pre {
+  max-height: 120px;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  overflow: auto;
+  color: var(--ink-700);
+  background: var(--paper-50);
+  border: 1px solid var(--rule);
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.mermaid-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.mermaid-error-actions button {
+  min-height: 38px;
+  padding: 6px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--error);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--error) 42%, var(--rule));
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mermaid-error-actions button:hover,
+.mermaid-error-actions button:focus-visible {
+  color: var(--paper-50);
+  background: var(--error);
+  outline: 0;
 }
 
 .mermaid-studio-workspace {
@@ -7097,7 +7450,7 @@ html.theme-is-changing .save-type-options label {
   color: var(--ink-700);
   background: var(--pane-header-bg);
   border-block-end: 1px solid var(--rule);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -7108,8 +7461,8 @@ html.theme-is-changing .save-type-options label {
 
 .mermaid-studio-pane-heading button,
 .mermaid-preview-tools button {
-  min-width: 30px;
-  height: 30px;
+  min-width: 44px;
+  height: 44px;
   padding: 4px 7px;
   display: inline-flex;
   align-items: center;
@@ -7135,15 +7488,15 @@ html.theme-is-changing .save-type-options label {
 }
 
 .mermaid-preview-tools output {
-  min-width: 38px;
+  min-width: 44px;
   color: var(--ink-500);
-  font-size: 8px;
+  font-size: 9px;
   text-align: center;
 }
 
 .mermaid-pan-indicator {
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -7168,7 +7521,7 @@ html.theme-is-changing .save-type-options label {
 .mermaid-code-editor .cm-editor {
   color: var(--ink-950);
   background: var(--input-bg);
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-family: "Cascadia Code", Consolas, Vazirmatn, Tahoma, monospace;
   font-size: 13px;
 }
 
@@ -7201,6 +7554,25 @@ html.theme-is-changing .save-type-options label {
   background: color-mix(in srgb, var(--proof-blue) 24%, transparent);
 }
 
+.mermaid-code-editor .cm-mermaid-error-line {
+  background: color-mix(in srgb, var(--error) 9%, transparent);
+  box-shadow: inset -3px 0 0 var(--error);
+}
+
+.mermaid-code-editor .cm-mermaid-error-note {
+  margin: 2px 42px 8px 12px;
+  padding: 7px 10px;
+  color: var(--error);
+  background: var(--error-soft);
+  border: 1px solid color-mix(in srgb, var(--error) 34%, var(--rule));
+  border-radius: 4px;
+  font-family: IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif;
+  font-size: 11px;
+  line-height: 1.7;
+  text-align: right;
+  white-space: normal;
+}
+
 .mermaid-code-editor .ͼb {
   color: var(--proof-blue-dark);
 }
@@ -7231,7 +7603,7 @@ html.theme-is-changing .save-type-options label {
   background: var(--paper-100);
   border-block-start: 1px solid var(--rule);
   direction: ltr;
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .mermaid-studio-divider {
@@ -7243,6 +7615,765 @@ html.theme-is-changing .save-type-options label {
   border-inline: 1px solid var(--rule-strong);
   cursor: col-resize;
   touch-action: none;
+}
+
+.mermaid-studio-divider:focus-visible {
+  background: var(--proof-blue-soft);
+  outline: 3px solid var(--focus-ring);
+  outline-offset: -3px;
+}
+
+.mermaid-mode-switch {
+  display: flex;
+  gap: 4px;
+}
+
+.mermaid-pane-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mermaid-mode-switch button {
+  min-width: 96px;
+}
+
+.mermaid-mode-switch button.is-active {
+  color: var(--on-accent);
+  background: var(--proof-blue);
+  border-color: var(--proof-blue);
+}
+
+.mermaid-kind-picker,
+.mermaid-form-builder {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  color: var(--ink-950);
+  background: var(--paper-50);
+}
+
+.mermaid-kind-picker {
+  padding: clamp(20px, 4vw, 48px);
+}
+
+.mermaid-kind-picker > header {
+  max-width: 760px;
+  margin: 0 auto 24px;
+}
+
+.mermaid-kind-picker > header > span,
+.mermaid-form-intro > div > span {
+  color: var(--proof-blue-dark);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mermaid-kind-picker h2,
+.mermaid-form-intro h2 {
+  margin: 5px 0 4px;
+  font-size: clamp(20px, 2vw, 28px);
+}
+
+.mermaid-kind-picker p,
+.mermaid-form-intro p {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+.mermaid-kind-search {
+  width: min(100%, 760px);
+  min-height: 46px;
+  margin: 0 auto 28px;
+  padding-inline: 13px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink-500);
+  background: var(--input-bg);
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+}
+
+.mermaid-kind-search:focus-within {
+  color: var(--proof-blue-dark);
+  border-color: var(--proof-blue);
+  box-shadow: 0 0 0 3px var(--proof-blue-soft);
+}
+
+.mermaid-kind-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+}
+
+.mermaid-kind-groups {
+  width: min(100%, 900px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 30px 36px;
+}
+
+.mermaid-kind-group {
+  min-width: 0;
+}
+
+.mermaid-kind-group h3 {
+  margin: 0 0 8px;
+  color: var(--ink-700);
+  font-size: 12px;
+}
+
+.mermaid-kind-list {
+  border-block-start: 1px solid var(--rule-strong);
+}
+
+.mermaid-kind-list > button {
+  width: 100%;
+  min-height: 72px;
+  padding: 12px 8px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  border-block-end: 1px solid var(--rule);
+  text-align: start;
+  cursor: pointer;
+}
+
+.mermaid-kind-list > button:hover,
+.mermaid-kind-list > button:focus-visible {
+  background: var(--proof-blue-soft);
+  outline: 0;
+}
+
+.mermaid-kind-list > button > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.mermaid-kind-list small {
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.mermaid-kind-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  border: 1px solid color-mix(in srgb, var(--proof-blue) 34%, var(--rule));
+  border-radius: 4px;
+}
+
+.mermaid-kind-empty {
+  width: min(100%, 760px);
+  min-height: 170px;
+  margin: 0 auto;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: var(--ink-700);
+  border-block: 1px solid var(--rule);
+}
+
+.mermaid-kind-empty button {
+  min-height: 44px;
+  padding-inline: 14px;
+  color: var(--proof-blue-dark);
+  background: transparent;
+  border: 1px solid var(--proof-blue);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mermaid-form-builder {
+  padding: clamp(16px, 2.5vw, 30px);
+}
+
+.mermaid-form-intro {
+  margin-block-end: 22px;
+  padding-block-end: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border-block-end: 1px solid var(--rule);
+}
+
+.mermaid-form-intro button,
+.mermaid-form-add {
+  min-height: 44px;
+  padding: 7px 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--proof-blue-dark);
+  background: transparent;
+  border: 1px solid var(--proof-blue);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mermaid-form-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.mermaid-form-intro button:disabled {
+  color: var(--ink-500);
+  border-color: var(--rule);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.mermaid-form-title {
+  margin-block-end: 18px;
+  display: grid;
+  gap: 6px;
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mermaid-form-title input,
+.mermaid-form-row input,
+.mermaid-option-field input,
+.mermaid-option-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 10px;
+  color: var(--ink-950);
+  background: var(--input-bg);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-family: IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif;
+  font-size: 12px;
+}
+
+.mermaid-form-title input:focus,
+.mermaid-form-row input:focus,
+.mermaid-option-field input:focus,
+.mermaid-option-field select:focus {
+  border-color: var(--proof-blue);
+  box-shadow: 0 0 0 3px var(--proof-blue-soft);
+  outline: 0;
+}
+
+.mermaid-form-row .has-error input,
+.mermaid-option-field.has-error input,
+.mermaid-option-field.has-error select {
+  border-color: var(--error);
+  background: var(--error-soft);
+}
+
+.mermaid-c4-notice,
+.mermaid-form-issues {
+  margin-block-end: 18px;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  color: var(--ink-700);
+  background: var(--proof-blue-soft);
+  border-block: 1px solid color-mix(in srgb, var(--proof-blue) 42%, var(--rule));
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.mermaid-c4-notice strong,
+.mermaid-form-issues strong {
+  display: block;
+  color: var(--ink-950);
+}
+
+.mermaid-form-issues {
+  color: var(--error);
+  background: var(--error-soft);
+  border-color: color-mix(in srgb, var(--error) 42%, var(--rule));
+}
+
+.mermaid-form-settings,
+.mermaid-structure-outline {
+  margin-block-end: 18px;
+  border-block: 1px solid var(--rule);
+}
+
+.mermaid-form-settings > summary,
+.mermaid-structure-outline > summary,
+.mermaid-row-details > summary {
+  min-height: 44px;
+  padding: 8px 2px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink-700);
+  list-style: none;
+  cursor: pointer;
+}
+
+.mermaid-form-settings > summary::-webkit-details-marker,
+.mermaid-structure-outline > summary::-webkit-details-marker,
+.mermaid-row-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.mermaid-form-settings > summary > span {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.mermaid-form-settings > summary strong,
+.mermaid-structure-outline > summary {
+  color: var(--ink-950);
+  font-size: 11px;
+}
+
+.mermaid-form-settings > summary small,
+.mermaid-structure-outline > summary small,
+.mermaid-row-details > summary small {
+  color: var(--ink-500);
+  font-size: 9px;
+}
+
+.mermaid-form-settings > summary > svg:last-child {
+  transition: transform 160ms ease-out;
+}
+
+.mermaid-form-settings[open] > summary > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.mermaid-option-grid {
+  padding: 12px 0 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px;
+}
+
+.mermaid-option-field {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mermaid-option-field select {
+  appearance: auto;
+}
+
+.mermaid-option-field > small {
+  color: var(--ink-500);
+  font-size: 9px;
+  font-weight: 400;
+  line-height: 1.7;
+}
+
+.mermaid-option-check {
+  min-height: 44px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink-700);
+  background: var(--input-bg);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mermaid-option-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--proof-blue);
+}
+
+.mermaid-structure-outline ol {
+  max-height: 160px;
+  margin: 0;
+  padding: 0 22px 12px 0;
+  overflow: auto;
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+.mermaid-layout-control {
+  margin: 0 0 18px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border: 0;
+}
+
+.mermaid-layout-control legend {
+  margin-block-end: 7px;
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mermaid-layout-control button {
+  min-height: 64px;
+  padding: 9px 11px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-700);
+  background: var(--paper-50);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.mermaid-layout-control button:hover,
+.mermaid-layout-control button:focus-visible {
+  border-color: var(--proof-blue);
+  outline: 0;
+}
+
+.mermaid-layout-control button.is-active {
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  border-color: var(--proof-blue);
+}
+
+.mermaid-layout-control button > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.mermaid-layout-control small {
+  color: var(--ink-700);
+  font-size: 9px;
+}
+
+.mermaid-layout-glyph {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  display: block;
+}
+
+.mermaid-layout-glyph::before,
+.mermaid-layout-glyph::after {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  content: "";
+  background: currentColor;
+  border-radius: 3px;
+}
+
+.mermaid-layout-glyph.is-horizontal::before {
+  inset: 11px auto auto 1px;
+}
+
+.mermaid-layout-glyph.is-horizontal::after {
+  inset: 11px 1px auto auto;
+}
+
+.mermaid-layout-glyph.is-vertical::before {
+  inset: 1px auto auto 11px;
+}
+
+.mermaid-layout-glyph.is-vertical::after {
+  inset: auto auto 1px 11px;
+}
+
+.mermaid-layout-glyph {
+  background:
+    linear-gradient(currentColor, currentColor) center / 18px 1px no-repeat;
+}
+
+.mermaid-layout-glyph.is-vertical {
+  transform: rotate(90deg);
+}
+
+.mermaid-axis-guide {
+  margin-block-end: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-block: 1px solid var(--rule);
+}
+
+.mermaid-axis-guide > span {
+  min-width: 0;
+  padding: 10px 12px;
+  display: grid;
+  gap: 3px;
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.mermaid-axis-guide > span + span {
+  border-inline-start: 1px solid var(--rule);
+}
+
+.mermaid-axis-guide strong {
+  color: var(--ink-950);
+}
+
+.mermaid-form-table {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.mermaid-form-row-shell {
+  min-width: 0;
+  padding-block-end: 7px;
+  border-block-end: 1px solid var(--rule);
+}
+
+.mermaid-form-row-shell.is-dragging {
+  background: var(--proof-blue-soft);
+  opacity: 0.72;
+}
+
+.mermaid-form-table-head,
+.mermaid-form-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(110px, 1fr) minmax(74px, 0.45fr) 140px;
+  align-items: start;
+  gap: 7px;
+}
+
+.mermaid-form-table.without-value .mermaid-form-table-head,
+.mermaid-form-table.without-value .mermaid-form-row {
+  grid-template-columns: minmax(110px, 1fr) minmax(110px, 1fr) 140px;
+}
+
+.mermaid-form-table.has-value .mermaid-form-table-head,
+.mermaid-form-table.has-value .mermaid-form-row {
+  grid-template-columns: minmax(110px, 1fr) minmax(110px, 1fr) minmax(74px, 0.45fr) 140px;
+}
+
+.mermaid-form-table.value-is-text .mermaid-form-table-head,
+.mermaid-form-table.value-is-text .mermaid-form-row {
+  grid-template-columns: minmax(100px, 0.8fr) minmax(100px, 0.8fr) minmax(150px, 1.25fr) 140px;
+}
+
+.mermaid-form-table.is-pie .mermaid-form-table-head span:nth-child(2),
+.mermaid-form-table.is-pie .mermaid-form-row > .mermaid-form-value:nth-child(2) {
+  grid-column: 2 / 4;
+}
+
+.mermaid-form-table-head {
+  padding-inline: 1px;
+  color: var(--ink-500);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.mermaid-form-row label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.mermaid-form-value input {
+  text-align: center;
+}
+
+.mermaid-form-row-actions {
+  display: grid;
+  grid-template-columns: 36px repeat(2, 44px);
+  justify-content: end;
+  gap: 4px;
+}
+
+.mermaid-row-drag {
+  width: 36px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-500);
+  cursor: grab;
+  touch-action: none;
+}
+
+.mermaid-row-drag:active {
+  cursor: grabbing;
+}
+
+.mermaid-form-row-actions button {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-700);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mermaid-form-row-actions .mermaid-form-remove {
+  color: var(--error);
+}
+
+.mermaid-form-row-actions button:disabled {
+  color: var(--ink-500);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.mermaid-row-details {
+  margin-block-start: 8px;
+}
+
+.mermaid-row-details > summary,
+.mermaid-row-details-heading {
+  width: 100%;
+  min-height: 44px;
+  padding: 7px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-block: 1px solid var(--rule);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.mermaid-row-details > summary > span,
+.mermaid-row-details-heading > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.mermaid-row-details > summary strong,
+.mermaid-row-details-heading strong {
+  color: var(--ink-950);
+  font-size: 12px;
+}
+
+.mermaid-row-details > summary small,
+.mermaid-row-details-heading small {
+  color: var(--ink-500);
+  font-size: 9px;
+}
+
+.mermaid-row-details > summary > svg {
+  flex: 0 0 auto;
+  transition: transform 160ms ease-out;
+}
+
+.mermaid-row-details[open] > summary > svg {
+  transform: rotate(180deg);
+}
+
+.mermaid-row-details.is-essential {
+  margin-block-start: 12px;
+  padding-inline: 12px;
+  background: var(--paper-100);
+  border-block: 1px solid var(--rule-strong);
+}
+
+.mermaid-row-details.is-essential > .mermaid-row-details-heading {
+  padding-inline: 0;
+  color: var(--proof-blue-dark);
+  border: 0;
+}
+
+.mermaid-row-details > summary:hover,
+.mermaid-row-details > summary:focus-visible {
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  outline: 0;
+}
+
+.mermaid-row-details .mermaid-option-grid {
+  padding: 8px 0 10px;
+}
+
+.mermaid-inline-error {
+  color: var(--error) !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  line-height: 1.65;
+}
+
+.mermaid-form-add {
+  margin-block-start: 12px;
+}
+
+.mermaid-form-footnote {
+  margin: 18px 0 0;
+  color: var(--ink-500);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.mermaid-advanced-note {
+  margin: 18px 0 0;
+  padding-block: 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  color: var(--ink-700);
+  border-block: 1px solid var(--rule);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.mermaid-advanced-note span {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.mermaid-last-valid {
+  position: absolute;
+  z-index: 2;
+  inset-block-start: 12px;
+  inset-inline-start: 12px;
+  padding: 5px 8px;
+  color: var(--saving);
+  background: var(--paper-50);
+  border: 1px solid color-mix(in srgb, var(--saving) 46%, var(--rule));
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .mermaid-studio-divider span {
@@ -7340,7 +8471,7 @@ html.theme-is-changing .save-type-options label {
 
 .mermaid-sample-header span {
   color: var(--ink-500);
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .mermaid-sample-header button {
@@ -7380,7 +8511,7 @@ html.theme-is-changing .save-type-options label {
   background: transparent;
   border: 0;
   outline: 0;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .mermaid-sample-list {
@@ -7421,7 +8552,7 @@ html.theme-is-changing .save-type-options label {
 .mermaid-sample-list p {
   margin: 0;
   color: var(--ink-500);
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .mermaid-docs-link {
@@ -7466,7 +8597,7 @@ html.theme-is-changing .save-type-options label {
 .mermaid-discard-dialog p {
   margin: 6px 0 0;
   color: var(--ink-700);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.9;
 }
 
@@ -7506,20 +8637,37 @@ html.theme-is-changing .save-type-options label {
 @media (max-width: 820px) {
   .mermaid-studio-header {
     min-height: 62px;
-    align-items: flex-start;
+    align-items: center;
+    flex-wrap: wrap;
   }
 
   .mermaid-studio-identity span,
-  .mermaid-studio-header-rule,
-  .mermaid-validation,
-  .mermaid-studio-samples-toggle span {
+  .mermaid-studio-header-rule {
     display: none;
   }
 
   .mermaid-studio-back {
-    width: 36px;
+    width: 44px;
     padding: 0;
     font-size: 0;
+  }
+
+  .mermaid-validation {
+    min-height: 32px;
+    font-size: 9px;
+  }
+
+  .mermaid-apply-wrap small {
+    display: none;
+  }
+
+  .mermaid-studio-error {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .mermaid-error-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
   .mermaid-studio-workspace {
@@ -7540,6 +8688,102 @@ html.theme-is-changing .save-type-options label {
   }
 
   .mermaid-studio-editor-footer {
+    display: none;
+  }
+
+  .mermaid-kind-picker {
+    padding: 18px;
+  }
+
+  .mermaid-form-builder {
+    padding: 14px;
+  }
+
+  .mermaid-form-intro {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mermaid-form-head-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 620px) {
+  .mermaid-studio-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .mermaid-studio-samples-toggle {
+    flex: 1;
+  }
+
+  .mermaid-apply-wrap {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .mermaid-mode-switch button {
+    min-width: 44px;
+    font-size: 9px;
+  }
+
+  .mermaid-kind-groups {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .mermaid-form-table-head {
+    display: none;
+  }
+
+  .mermaid-form-table.without-value .mermaid-form-row,
+  .mermaid-form-table.has-value .mermaid-form-row {
+    padding-block-end: 10px;
+    grid-template-columns: minmax(0, 1fr) 140px;
+    border-block-end: 1px solid var(--rule);
+  }
+
+  .mermaid-form-row label,
+  .mermaid-form-table.is-pie .mermaid-form-row > .mermaid-form-value:nth-child(2) {
+    grid-column: 1;
+  }
+
+  .mermaid-form-row-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .mermaid-option-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mermaid-form-head-actions button {
+    flex: 1 1 90px;
+  }
+
+  .mermaid-advanced-note {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .mermaid-layout-control,
+  .mermaid-axis-guide {
+    grid-template-columns: 1fr;
+  }
+
+  .mermaid-axis-guide > span + span {
+    border-block-start: 1px solid var(--rule);
+    border-inline-start: 0;
+  }
+
+  .mermaid-preview-tools {
+    gap: 2px;
+  }
+
+  .mermaid-preview-tools output,
+  .mermaid-pan-indicator {
     display: none;
   }
 }

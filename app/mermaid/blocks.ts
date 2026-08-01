@@ -83,8 +83,7 @@ export function mermaidBlockAtOffset(
 ) {
   if (offset === undefined) return undefined;
   return blocks.find(
-    (block) =>
-      offset >= block.startOffset - 1 && offset <= block.endOffset + 1,
+    (block) => offset >= block.startOffset && offset < block.endOffset,
   );
 }
 
