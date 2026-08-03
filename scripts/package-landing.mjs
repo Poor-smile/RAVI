@@ -41,6 +41,9 @@ await mkdir(outputRoot, { recursive: true });
 await cp(join(sourceRoot, "assets"), join(outputRoot, "assets"), {
   recursive: true,
 });
+await cp(join(sourceRoot, "downloads"), join(outputRoot, "downloads"), {
+  recursive: true,
+});
 await Promise.all([
   writeFile(join(outputRoot, "index.html"), bundledHtml, "utf8"),
   cp(join(sourceRoot, "style.css"), join(outputRoot, "style.css")),

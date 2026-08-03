@@ -4,6 +4,12 @@ import {
   PersianMermaidInputError,
   prepareMermaidForRender,
 } from "./persian-adapter";
+import {
+  estimateMermaidComplexity,
+  type MermaidComplexity,
+  withSvgComplexity,
+} from "./complexity";
+import { recordMermaidMeasure } from "./performance";
 
 export type MermaidTheme = "light" | "dark";
 
@@ -13,12 +19,41 @@ export type MermaidRenderError = {
   line?: number;
   column?: number;
   suggestion?: string;
-  kind: "syntax" | "limit" | "timeout" | "security" | "unknown";
+  kind:
+    | "syntax"
+    | "limit"
+    | "timeout"
+    | "renderer-crash"
+    | "security"
+    | "cancelled"
+    | "unknown";
 };
 
+export type MermaidRenderMetrics = Partial<{
+  queueWait: number;
+  rendererStartup: number;
+  parse: number;
+  layoutRender: number;
+  sanitize: number;
+  transfer: number;
+  display: number;
+  total: number;
+}>;
+
 export type MermaidRenderResult =
-  | { ok: true; svg: string; fromCache: boolean }
-  | { ok: false; error: MermaidRenderError };
+  | {
+      ok: true;
+      svg: string;
+      fromCache: boolean;
+      complexity: MermaidComplexity;
+      metrics: MermaidRenderMetrics;
+    }
+  | {
+      ok: false;
+      error: MermaidRenderError;
+      complexity?: MermaidComplexity;
+      metrics?: MermaidRenderMetrics;
+    };
 
 export const MERMAID_LIMITS = {
   characters: 40_000,
@@ -26,12 +61,9 @@ export const MERMAID_LIMITS = {
   renderTimeoutMs: 5_000,
 } as const;
 
-const renderCache = new Map<string, string>();
-const MAX_CACHE_ENTRIES = 80;
 let renderSequence = 0;
-let renderQueue = Promise.resolve();
 
-function hashText(value: string) {
+export function hashText(value: string) {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index);
@@ -78,7 +110,7 @@ export function mermaidRenderKey(code: string, theme: MermaidTheme) {
   return `${theme}:${hashText(code)}`;
 }
 
-function parseError(error: unknown, code: string): MermaidRenderError {
+export function parseMermaidError(error: unknown, code: string): MermaidRenderError {
   if (error instanceof PersianMermaidInputError) {
     return {
       kind: "syntax",
@@ -120,7 +152,7 @@ function parseError(error: unknown, code: string): MermaidRenderError {
   };
 }
 
-function limitError(code: string): MermaidRenderError | null {
+export function mermaidLimitError(code: string): MermaidRenderError | null {
   const lines = code.split(/\r?\n/u).length;
   if (code.length > MERMAID_LIMITS.characters) {
     return {
@@ -188,7 +220,7 @@ export function sanitizeMermaidSvg(
 ) {
   const parser = new DOMParser();
   let documentNode = parser.parseFromString(svg, "image/svg+xml");
-  let root = documentNode.documentElement;
+  let root: Element = documentNode.documentElement;
   if (documentNode.querySelector("parsererror")) {
     const htmlDocument = parser.parseFromString(svg, "text/html");
     const htmlSvg = htmlDocument.querySelector("svg");
@@ -276,9 +308,30 @@ export function sanitizeMermaidSvg(
   return new XMLSerializer().serializeToString(root);
 }
 
-async function renderUncached(code: string, theme: MermaidTheme) {
-  const prepared = prepareMermaidForRender(code);
+export async function renderMermaidInCurrentContext(
+  code: string,
+  theme: MermaidTheme,
+  initialComplexity = estimateMermaidComplexity(code),
+): Promise<MermaidRenderResult> {
+  const limited = mermaidLimitError(code);
+  if (limited) return { ok: false, error: limited, complexity: initialComplexity };
+  const startedAt = performance.now();
+  const traceId = `${hashText(code)}-${Date.now().toString(36)}`;
+  let prepared: ReturnType<typeof prepareMermaidForRender>;
+  try {
+    prepared = prepareMermaidForRender(code);
+  } catch (error) {
+    return {
+      ok: false,
+      error: parseMermaidError(error, code),
+      complexity: initialComplexity,
+      metrics: { parse: performance.now() - startedAt, total: performance.now() - startedAt },
+    };
+  }
+  const startupAt = performance.now();
   const mermaidModule = await import("mermaid");
+  const rendererStartup = performance.now() - startupAt;
+  recordMermaidMeasure(traceId, "rendererStartup", startupAt, rendererStartup);
   const mermaid = mermaidModule.default;
   mermaid.initialize({
     startOnLoad: false,
@@ -291,84 +344,90 @@ async function renderUncached(code: string, theme: MermaidTheme) {
     deterministicIDSeed: hashText(`${theme}:${prepared.code}`),
     flowchart: { htmlLabels: false, useMaxWidth: true },
   });
-  await mermaid.parse(prepared.code, { suppressErrors: false });
-  renderSequence += 1;
-  // Mermaid 11.16's experimental Block renderer serializes its layout tree
-  // while that tree still contains DOM nodes. React adds circular Fiber links
-  // to those nodes, so protect only this queued render and restore the native
-  // prototype immediately afterwards.
-  const { svg } = await renderWithSerializableElements(
-    prepared.kind === "block",
-    () =>
-      mermaid.render(
-        `raavi-mermaid-${hashText(code)}-${renderSequence}`,
-        prepared.code,
-      ),
-  );
-  return sanitizeMermaidSvg(svg, {
-    title: accessibleTitle(code, prepared.kind),
-    labelMap: prepared.labelMap,
-  });
+  try {
+    const parseAt = performance.now();
+    await mermaid.parse(prepared.code, { suppressErrors: false });
+    const parse = performance.now() - parseAt;
+    recordMermaidMeasure(traceId, "parse", parseAt, parse);
+    renderSequence += 1;
+    // The isolated context still protects Block diagrams from Mermaid's DOM
+    // serialization bug; its prototype is restored before the job completes.
+    const renderAt = performance.now();
+    const { svg } = await renderWithSerializableElements(
+      prepared.kind === "block",
+      () =>
+        mermaid.render(
+          `raavi-mermaid-${hashText(code)}-${renderSequence}`,
+          prepared.code,
+        ),
+    );
+    const layoutRender = performance.now() - renderAt;
+    recordMermaidMeasure(traceId, "layoutRender", renderAt, layoutRender);
+    const sanitizeAt = performance.now();
+    let sanitized: string;
+    try {
+      sanitized = sanitizeMermaidSvg(svg, {
+        title: accessibleTitle(code, prepared.kind),
+        labelMap: prepared.labelMap,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        error: {
+          kind: "security",
+          message: "خروجی نمودار با قواعد امنیتی راوی سازگار نبود.",
+          technical: error instanceof Error ? error.message : String(error),
+          suggestion: "کد نمودار را ساده‌تر کنید و پیوند یا محتوای خارجی را حذف کنید.",
+        },
+        complexity: initialComplexity,
+        metrics: {
+          rendererStartup,
+          parse,
+          layoutRender,
+          sanitize: performance.now() - sanitizeAt,
+          total: performance.now() - startedAt,
+        },
+      };
+    }
+    const sanitize = performance.now() - sanitizeAt;
+    recordMermaidMeasure(traceId, "sanitize", sanitizeAt, sanitize);
+    recordMermaidMeasure(
+      traceId,
+      "total",
+      startedAt,
+      performance.now() - startedAt,
+    );
+    return {
+      ok: true,
+      svg: sanitized,
+      fromCache: false,
+      complexity: withSvgComplexity(initialComplexity, sanitized),
+      metrics: {
+        rendererStartup,
+        parse,
+        layoutRender,
+        sanitize,
+        total: performance.now() - startedAt,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: parseMermaidError(error, code),
+      complexity: initialComplexity,
+      metrics: {
+        rendererStartup,
+        total: performance.now() - startedAt,
+      },
+    };
+  }
 }
 
 export async function renderMermaid(
   code: string,
   theme: MermaidTheme,
+  options: import("./render-service").MermaidRenderRequestOptions = {},
 ): Promise<MermaidRenderResult> {
-  const limited = limitError(code);
-  if (limited) return { ok: false, error: limited };
-  const key = mermaidRenderKey(code, theme);
-  const cached = renderCache.get(key);
-  if (cached) return { ok: true, svg: cached, fromCache: true };
-
-  let resolveResult: (svg: string) => void = () => {};
-  let rejectResult: (error: unknown) => void = () => {};
-  const queuedResult = new Promise<string>((resolve, reject) => {
-    resolveResult = resolve;
-    rejectResult = reject;
-  });
-  const queuedRender = renderQueue.then(async () => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      timer = setTimeout(
-        () => rejectResult(new Error("RAAVI_MERMAID_RENDER_TIMEOUT")),
-        MERMAID_LIMITS.renderTimeoutMs,
-      );
-      const svg = await renderUncached(code, theme);
-      resolveResult(svg);
-    } catch (error) {
-      rejectResult(error);
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  });
-  renderQueue = queuedRender.then(
-    () => undefined,
-    () => undefined,
-  );
-
-  try {
-    const svg = await queuedResult;
-    if (renderCache.size >= MAX_CACHE_ENTRIES) {
-      const oldest = renderCache.keys().next().value;
-      if (oldest) renderCache.delete(oldest);
-    }
-    renderCache.set(key, svg);
-    return { ok: true, svg, fromCache: false };
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message === "RAAVI_MERMAID_RENDER_TIMEOUT"
-    ) {
-      return {
-        ok: false,
-        error: {
-          kind: "timeout",
-          message: "رندر نمودار بیش از حد طول کشید و متوقف شد.",
-          technical: `مهلت رندر ${MERMAID_LIMITS.renderTimeoutMs} میلی‌ثانیه است.`,
-        },
-      };
-    }
-    return { ok: false, error: parseError(error, code) };
-  }
+  const { scheduleMermaidRender } = await import("./render-service");
+  return scheduleMermaidRender(code, theme, options);
 }

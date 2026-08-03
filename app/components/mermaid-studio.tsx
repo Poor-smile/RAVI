@@ -45,9 +45,15 @@ import {
 } from "../mermaid/simple-builder";
 import { DEFAULT_MERMAID_CODE, MERMAID_SAMPLES } from "../mermaid/samples";
 import { MermaidTheme } from "../mermaid/renderer";
-import { useMermaidRender } from "../mermaid/use-mermaid-render";
+import {
+  mermaidSvgAccessibleName,
+  useMermaidBlobUrl,
+  useMermaidRender,
+} from "../mermaid/use-mermaid-render";
+import { recordMermaidMeasure } from "../mermaid/performance";
 import { useMermaidViewport } from "../mermaid/use-mermaid-viewport";
 import { AccessibleModal } from "./accessible-modal";
+import { useBackLayer } from "./back-layer-provider";
 import { MermaidCodeEditor } from "./mermaid-code-editor";
 import { MermaidSimpleBuilder } from "./mermaid-simple-builder";
 
@@ -100,6 +106,7 @@ export function MermaidStudio({
   onApply,
   onClose,
   returnFocusRef,
+  backNavigationEnabled = false,
 }: {
   open: boolean;
   isTopLayer: boolean;
@@ -112,6 +119,7 @@ export function MermaidStudio({
   ) => MermaidApplyResult;
   onClose: (session: MermaidStudioSession) => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  backNavigationEnabled?: boolean;
 }) {
   const recoveredCode = useMemo(
     () => recoverStudioCode(fileName, session),
@@ -124,6 +132,8 @@ export function MermaidStudio({
   const dialogRef = useRef<HTMLDivElement>(null);
   const backButtonRef = useRef<HTMLButtonElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const renderSurfaceRef = useRef<HTMLImageElement>(null);
+  const displayStartedRef = useRef(0);
   const lastValidCodeRef = useRef(session.initialCode || DEFAULT_MERMAID_CODE);
   const [code, setCode] = useState(recoveredCode);
   const initialCode = session.initialCode || DEFAULT_MERMAID_CODE;
@@ -143,13 +153,17 @@ export function MermaidStudio({
   const [confirmClose, setConfirmClose] = useState(false);
   const [applyError, setApplyError] = useState("");
   const [focusErrorRequest, setFocusErrorRequest] = useState(0);
-  const renderState = useMermaidRender(code, theme, 320, renderNonce);
+  const renderState = useMermaidRender(code, theme, 250, renderNonce, true, {
+    documentId: fileName,
+    blockId: session.id,
+    priority: "interactive",
+  });
   const simpleIssues = useMemo(
     () => workspaceMode === "simple" && simpleDraft ? validateSimpleDiagramDraft(simpleDraft) : [],
     [simpleDraft, workspaceMode],
   );
   const hasSimpleIssues = simpleIssues.length > 0;
-  const viewport = useMermaidViewport();
+  const viewport = useMermaidViewport({ contentRef: renderSurfaceRef });
   const { resetView: resetViewport, zoomBy: zoomViewportBy } = viewport;
   const dirty = code !== initialCode;
   const applyLabel =
@@ -190,6 +204,7 @@ export function MermaidStudio({
         event.stopPropagation();
         if (confirmClose) setConfirmClose(false);
         else if (samplesOpen) setSamplesOpen(false);
+        else if (previewFullscreen) setPreviewFullscreen(false);
         else if (dirty) setConfirmClose(true);
         else {
           try {
@@ -230,6 +245,7 @@ export function MermaidStudio({
     fileName,
     onClose,
     open,
+    previewFullscreen,
     samplesOpen,
     session,
     resetViewport,
@@ -276,6 +292,31 @@ export function MermaidStudio({
     clearDraft();
     onClose(session);
   };
+
+  useBackLayer(
+    "mermaid:studio",
+    open,
+    requestClose,
+    backNavigationEnabled,
+  );
+  useBackLayer(
+    "mermaid:preview-fullscreen",
+    open && previewFullscreen,
+    () => setPreviewFullscreen(false),
+    backNavigationEnabled,
+  );
+  useBackLayer(
+    "mermaid:samples",
+    open && samplesOpen,
+    () => setSamplesOpen(false),
+    backNavigationEnabled,
+  );
+  useBackLayer(
+    "mermaid:confirm-close",
+    open && confirmClose,
+    () => setConfirmClose(false),
+    backNavigationEnabled,
+  );
 
   const discardAndClose = () => {
     clearDraft();
@@ -402,6 +443,14 @@ export function MermaidStudio({
   const activeSvg = awaitingKind
     ? ""
     : renderState.svg || renderState.lastValidSvg;
+  const activeBlobUrl = useMermaidBlobUrl(activeSvg);
+  const activeAccessibleName = useMemo(
+    () => mermaidSvgAccessibleName(activeSvg),
+    [activeSvg],
+  );
+  useEffect(() => {
+    if (activeBlobUrl) displayStartedRef.current = performance.now();
+  }, [activeBlobUrl]);
   const showingLastValid =
     !awaitingKind &&
     renderState.status === "invalid" &&
@@ -498,10 +547,12 @@ export function MermaidStudio({
             {!applyError && renderState.error?.suggestion && (
               <p>{renderState.error.suggestion}</p>
             )}
-            {!applyError && renderState.error?.technical && (
+            {!applyError &&
+              renderState.error?.technical &&
+              /[\u0600-\u06ff]/u.test(renderState.error.technical) && (
               <details>
                 <summary>جزئیات فنی</summary>
-                <pre dir="ltr">{renderState.error.technical}</pre>
+                <pre>{renderState.error.technical}</pre>
               </details>
             )}
           </div>
@@ -654,13 +705,22 @@ export function MermaidStudio({
             {...viewport.viewportHandlers}
           >
             {showingLastValid && <span className="mermaid-last-valid">آخرین نسخهٔ سالم</span>}
-            {activeSvg ? (
-              <div
+            {activeBlobUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                ref={renderSurfaceRef}
                 className="mermaid-studio-svg mermaid-render-surface"
                 data-mermaid-render-key={renderState.renderKey}
-                style={{ transform: viewport.transform }}
-                // Mermaid runs in strict mode and the SVG is sanitized again locally.
-                dangerouslySetInnerHTML={{ __html: activeSvg }}
+                src={activeBlobUrl}
+                alt={activeAccessibleName}
+                draggable={false}
+                onLoad={() =>
+                  recordMermaidMeasure(
+                    session.id,
+                    "display",
+                    displayStartedRef.current || performance.now(),
+                  )
+                }
               />
             ) : (
               <div className="mermaid-studio-empty">

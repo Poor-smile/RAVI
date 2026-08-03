@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import "../app/globals.css";
 import Page from "../app/page";
+import { MermaidRendererHost } from "../app/components/mermaid-renderer-host";
 import "./raavi-desktop";
 
 const storageKey = "raavi:theme:v1";
@@ -23,4 +24,8 @@ try {
 const root = document.getElementById("root");
 if (!root) throw new Error("Raavi root element is missing.");
 
-createRoot(root).render(<Page />);
+const isMermaidRenderer = new URLSearchParams(window.location.search).has(
+  "raavi-mermaid-renderer",
+);
+
+createRoot(root).render(isMermaidRenderer ? <MermaidRendererHost /> : <Page />);

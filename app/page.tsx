@@ -43,6 +43,7 @@ import {
   ListTree,
   Lock,
   LockOpen,
+  Menu,
   MessageCircle,
   MessageSquareText,
   Minus,
@@ -79,6 +80,7 @@ import {
   PointerEvent as ReactPointerEvent,
   Suspense,
   isValidElement,
+  type RefObject,
   type ReactNode,
   useCallback,
   useEffect,
@@ -93,19 +95,13 @@ import ReactMarkdown, {
 } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import packageMetadata from "../package.json";
-import { AboutDialog } from "./components/about-dialog";
+import { useBackLayer } from "./components/back-layer-provider";
 import {
   AccessibleModal,
   useModalFocus,
   useModalStack,
 } from "./components/accessible-modal";
-import {
-  NewDocumentDialog,
-  NewDocumentSpec,
-  titleFromDocumentName,
-} from "./components/new-document-dialog";
-import { SupportDialog } from "./components/support-dialog";
-import { MermaidDiagram } from "./components/mermaid-diagram";
+import type { NewDocumentSpec } from "./components/new-document-dialog";
 import type {
   MermaidApplyResult,
   MermaidStudioSession,
@@ -114,7 +110,6 @@ import {
   commandAriaKeyShortcuts,
   commandTitle,
 } from "./components/command-tooltip";
-import { ShortcutHelpDialog } from "./components/shortcut-help-dialog";
 import type { MarkdownCodeEditorHandle } from "./components/markdown-code-editor";
 import { useCommandSystem } from "./hooks/use-command-system";
 import {
@@ -165,11 +160,74 @@ const MermaidStudio = lazy(() =>
     default: module.MermaidStudio,
   })),
 );
+const MermaidDiagram = lazy(() =>
+  import("./components/mermaid-diagram").then((module) => ({
+    default: module.MermaidDiagram,
+  })),
+);
 const MarkdownCodeEditor = lazy(() =>
   import("./components/markdown-code-editor").then((module) => ({
     default: module.MarkdownCodeEditor,
   })),
 );
+const NewDocumentDialog = lazy(() =>
+  import("./components/new-document-dialog").then((module) => ({
+    default: module.NewDocumentDialog,
+  })),
+);
+const AboutDialog = lazy(() =>
+  import("./components/about-dialog").then((module) => ({
+    default: module.AboutDialog,
+  })),
+);
+const SupportDialog = lazy(() =>
+  import("./components/support-dialog").then((module) => ({
+    default: module.SupportDialog,
+  })),
+);
+const ShortcutHelpDialog = lazy(() =>
+  import("./components/shortcut-help-dialog").then((module) => ({
+    default: module.ShortcutHelpDialog,
+  })),
+);
+
+function DeferredDialogFallback({
+  id,
+  title,
+  isTopLayer,
+  onClose,
+  returnFocusRef,
+}: {
+  id: string;
+  title: string;
+  isTopLayer: boolean;
+  onClose: () => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = `deferred-dialog-${id}-title`;
+  const descriptionId = `deferred-dialog-${id}-description`;
+
+  return (
+    <AccessibleModal
+      open
+      isTopLayer={isTopLayer}
+      onClose={onClose}
+      dialogRef={dialogRef}
+      returnFocusRef={returnFocusRef}
+      backdropClassName="save-modal-backdrop deferred-dialog-backdrop"
+      dialogClassName="deferred-dialog-loading"
+      labelledBy={titleId}
+      describedBy={descriptionId}
+    >
+      <RefreshCw size={22} aria-hidden="true" />
+      <div role="status" aria-live="polite">
+        <strong id={titleId}>{title}</strong>
+        <span id={descriptionId}>این بخش فقط هنگام نیاز بارگذاری می‌شود.</span>
+      </div>
+    </AccessibleModal>
+  );
+}
 
 const STORAGE_KEY = "raavi:document:v1";
 const LOCAL_DOCUMENT_DB_NAME = "raavi-local-documents";
@@ -260,7 +318,7 @@ function detectDesktopInstallRecommendation(): DesktopInstallRecommendation {
       description:
         "برای اتصال پوشه‌ها و دسترسی سریع‌تر به نوشته‌ها، نسخه Windows را روی همین دستگاه نصب کنید.",
       actionLabel: "دانلود برای Windows",
-      href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.3.1-x64.exe",
+    href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.4.1-x64.exe",
     };
   }
 
@@ -1500,6 +1558,10 @@ export default function Home() {
   const [readingResumeNotice, setReadingResumeNotice] =
     useState<ReadingResumeNotice | null>(null);
   const [mobilePane, setMobilePane] = useState<MobilePane>("preview");
+  const [isCompactLayout, setIsCompactLayout] = useState(false);
+  const [mobileHeaderMenuOpen, setMobileHeaderMenuOpen] = useState(false);
+  const [mobileEditorToolsExpanded, setMobileEditorToolsExpanded] =
+    useState(false);
   const [editorAssistantTab, setEditorAssistantTab] =
     useState<EditorAssistantTab | null>(null);
   const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
@@ -1581,6 +1643,9 @@ export default function Home() {
   const newDocumentButtonRef = useRef<HTMLButtonElement>(null);
   const brandButtonRef = useRef<HTMLButtonElement>(null);
   const supportButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileHeaderMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileHeaderMenuRef = useRef<HTMLDivElement>(null);
+  const mobileHeaderMenuCloseRef = useRef<HTMLButtonElement>(null);
   const mermaidReturnFocusRef = useRef<HTMLElement | null>(null);
   const saveFileNameRef = useRef<HTMLInputElement>(null);
   const saveModalRef = useRef<HTMLDivElement>(null);
@@ -1629,7 +1694,12 @@ export default function Home() {
     node: Node;
     offset: number;
   } | null>(null);
-  const diagramReadingAnchorRef = useRef<ReadingPositionRecord | null>(null);
+  const diagramReadingAnchorRef = useRef<{
+    record: ReadingPositionRecord | null;
+    documentKey: string;
+    root: HTMLElement | null;
+    scrollTop: number;
+  } | null>(null);
   const lastExpandedPreviewPercentRef = useRef(50);
   const paneDragCleanupRef = useRef<(() => void) | null>(null);
   const scrollSyncFrameRef = useRef<number | null>(null);
@@ -2784,20 +2854,70 @@ export default function Home() {
     (fullscreen: boolean) => {
       if (!readingMode) return;
       if (fullscreen) {
-        diagramReadingAnchorRef.current =
-          captureCurrentReadingPosition() ?? lastReadingAnchorRef.current;
+        const context = getReadingScrollContext();
+        diagramReadingAnchorRef.current = {
+          record:
+            captureCurrentReadingPosition() ?? lastReadingAnchorRef.current,
+          documentKey: readingDocumentStateRef.current.documentKey,
+          root: context?.root ?? null,
+          scrollTop: context
+            ? context.root === document.scrollingElement
+              ? window.scrollY
+              : context.root.scrollTop
+            : 0,
+        };
         return;
       }
-      const anchor = diagramReadingAnchorRef.current;
+      const snapshot = diagramReadingAnchorRef.current;
       diagramReadingAnchorRef.current = null;
-      if (anchor) {
-        scheduleReadingRestore(anchor, {
+      if (!snapshot) return;
+
+      const restoreExactScroll = () => {
+        if (
+          snapshot.documentKey !==
+          readingDocumentStateRef.current.documentKey
+        ) {
+          return;
+        }
+        const root = snapshot.root ?? getReadingScrollContext()?.root;
+        if (!root) return;
+        readingRestoreInProgressRef.current = true;
+        readingRestoreExpectedScrollTopRef.current = snapshot.scrollTop;
+        if (root === document.scrollingElement) {
+          window.scrollTo({ top: snapshot.scrollTop, behavior: "auto" });
+        } else if (root.isConnected) {
+          root.scrollTop = snapshot.scrollTop;
+        }
+      };
+
+      restoreExactScroll();
+      if (snapshot.record) {
+        scheduleReadingRestore(snapshot.record, {
           retries: 4,
           protectPending: true,
+          settle: true,
         });
       }
+
+      let exactRestoreFramesRemaining = 8;
+      const holdExactScrollThroughFullscreenExit = () => {
+        restoreExactScroll();
+        exactRestoreFramesRemaining -= 1;
+        if (exactRestoreFramesRemaining > 0) {
+          window.requestAnimationFrame(holdExactScrollThroughFullscreenExit);
+          return;
+        }
+        const captured = captureCurrentReadingPosition();
+        if (captured) lastReadingAnchorRef.current = captured;
+      };
+      window.requestAnimationFrame(holdExactScrollThroughFullscreenExit);
     },
-    [captureCurrentReadingPosition, readingMode, scheduleReadingRestore],
+    [
+      captureCurrentReadingPosition,
+      getReadingScrollContext,
+      readingMode,
+      scheduleReadingRestore,
+    ],
   );
 
   useLayoutEffect(() => {
@@ -3279,6 +3399,7 @@ export default function Home() {
       setComposerText("");
       setAnnotationPanelOpen(false);
       setActiveLibraryPath("");
+      setMobileEditorToolsExpanded(false);
       setMobilePane("preview");
       setReadingMode(nextReadingMode);
       setReadingHeaderVisible(true);
@@ -3673,11 +3794,17 @@ export default function Home() {
     const mediaQuery = window.matchMedia("(max-width: 820px)");
     const syncLibraryMode = (initialize = false) => {
       const isModal = mediaQuery.matches;
+      setIsCompactLayout(isModal);
       setLibraryIsModal(isModal);
       if (isModal) {
         setLibraryOpen(false);
+        setMobileHeaderMenuOpen(false);
+        setMobileEditorToolsExpanded(false);
       } else if (initialize) {
         setLibraryOpen(Boolean(window.raaviDesktop));
+      } else {
+        setMobileHeaderMenuOpen(false);
+        setMobileEditorToolsExpanded(false);
       }
     };
     const handleLibraryModeChange = () => syncLibraryMode();
@@ -3708,6 +3835,10 @@ export default function Home() {
   useEffect(() => {
     syncLayer("mermaid", Boolean(mermaidStudioSession));
   }, [mermaidStudioSession, syncLayer]);
+
+  useEffect(() => {
+    syncLayer("mobileMenu", mobileHeaderMenuOpen);
+  }, [mobileHeaderMenuOpen, syncLayer]);
 
   useEffect(() => {
     syncLayer("save", saveModalOpen);
@@ -4527,9 +4658,13 @@ export default function Home() {
 
   const createNewDocument = useCallback(
     async (spec: NewDocumentSpec) => {
-      const initialContent = spec.includeTitle
-        ? `# ${titleFromDocumentName(spec.baseName)}\n`
-        : "";
+      let initialContent = "";
+      if (spec.includeTitle) {
+        const { titleFromDocumentName } = await import(
+          "./components/new-document-dialog"
+        );
+        initialContent = `# ${titleFromDocumentName(spec.baseName)}\n`;
+      }
       const initialAnnotations: RaaviAnnotation[] = [];
       const initialAssets: RaaviImageAsset[] = [];
       const raavi = makeRaaviDocument(
@@ -4597,6 +4732,7 @@ export default function Home() {
           },
           `«${spec.fileName}» ساخته شد؛ ویرایش را شروع کنید.`,
         );
+        setMobileEditorToolsExpanded(false);
         setMobilePane("editor");
         setNewDocumentModalOpen(false);
         requestAnimationFrame(() =>
@@ -5707,6 +5843,7 @@ export default function Home() {
   };
 
   const toggleReadingMode = () => {
+    setMobileEditorToolsExpanded(false);
     if (readingMode) {
       leaveReadingMode();
       return;
@@ -5722,6 +5859,7 @@ export default function Home() {
         setReadingMode(true);
         setReadingHeaderVisible(true);
         setLibraryOpen(false);
+        setMobileEditorToolsExpanded(false);
         setMobilePane("preview");
       },
       { retries: 4 },
@@ -5753,6 +5891,7 @@ export default function Home() {
       readingPositionsRef.current[currentDocumentKey] ??
       lastReadingAnchorRef.current;
     setEditorSelectionMenuPosition(null);
+    setMobileEditorToolsExpanded(false);
     setMobilePane("preview");
     if (savedPosition) scheduleReadingRestore(savedPosition);
     requestAnimationFrame(() =>
@@ -5816,6 +5955,7 @@ export default function Home() {
   const focusAnnotationPanel = () => {
     preserveReadingViewport(() => {
       if (readingMode) setReadingMode(false);
+      setMobileEditorToolsExpanded(false);
       setMobilePane("preview");
       setAnnotationPanelOpen(true);
     });
@@ -5833,6 +5973,10 @@ export default function Home() {
     }
     if (topLayer === "about") {
       setAboutModalOpen(false);
+      return;
+    }
+    if (topLayer === "mobileMenu") {
+      setMobileHeaderMenuOpen(false);
       return;
     }
     if (topLayer === "support") {
@@ -5885,6 +6029,18 @@ export default function Home() {
       closeAnnotationPanel(true);
       return;
     }
+    if (editorAssistantTab) {
+      setEditorAssistantTab(null);
+      return;
+    }
+    if (mobileEditorToolsExpanded) {
+      setMobileEditorToolsExpanded(false);
+      return;
+    }
+    if (isCompactLayout && readingMode && readingOutlineOpen) {
+      toggleReadingOutline();
+      return;
+    }
     if (readingMode) leaveReadingMode();
   };
 
@@ -5896,6 +6052,8 @@ export default function Home() {
       selectionDraft ||
       activeAnnotationId ||
       annotationPanelOpen ||
+      editorAssistantTab ||
+      mobileEditorToolsExpanded ||
       readingMode,
   );
 
@@ -6038,13 +6196,30 @@ export default function Home() {
         );
         if (block) {
           return (
-            <MermaidDiagram
-              block={block}
-              theme={themeMode}
-              onEdit={openMermaidStudio}
-              onFullscreenChange={handleDiagramFullscreenChange}
-              readingMode={readingMode}
-            />
+            <Suspense
+              fallback={
+                <figure className="mermaid-diagram is-loading" dir="auto">
+                  <div className="mermaid-diagram-canvas">
+                    <div
+                      className="mermaid-diagram-placeholder"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <Network size={24} aria-hidden="true" />
+                      <span>در حال آماده‌سازی نمودار…</span>
+                    </div>
+                  </div>
+                </figure>
+              }
+            >
+              <MermaidDiagram
+                block={block}
+                theme={themeMode}
+                onEdit={openMermaidStudio}
+                onFullscreenChange={handleDiagramFullscreenChange}
+                readingMode={readingMode}
+              />
+            </Suspense>
           );
         }
         return <pre>{children}</pre>;
@@ -6165,21 +6340,152 @@ export default function Home() {
     [content, markdownComponents],
   );
 
+  const effectivePaneMode: DesktopPaneMode = isCompactLayout
+    ? "split"
+    : desktopPaneMode;
+  const mobileEditorToolsVisible =
+    isCompactLayout &&
+    !readingMode &&
+    mobilePane === "editor" &&
+    mobileEditorToolsExpanded;
+
+  useBackLayer(
+    "mode:reading",
+    readingMode,
+    leaveReadingMode,
+    isCompactLayout,
+  );
+  useBackLayer(
+    "reading:outline",
+    readingMode && readingOutlineOpen,
+    toggleReadingOutline,
+    isCompactLayout,
+  );
+  useBackLayer(
+    "panel:annotations",
+    annotationPanelOpen,
+    () => closeAnnotationPanel(true),
+    isCompactLayout,
+  );
+  useBackLayer(
+    "annotation:active",
+    Boolean(activeAnnotationId),
+    () => setActiveAnnotationId(""),
+    isCompactLayout,
+  );
+  useBackLayer(
+    "annotation:selection",
+    Boolean(selectionDraft),
+    () => {
+      setSelectionDraft(null);
+      setSelectionHighlightRects([]);
+      clearNativeSelection();
+      requestAnimationFrame(() =>
+        previewArticleRef.current?.focus({ preventScroll: true }),
+      );
+    },
+    isCompactLayout,
+  );
+  useBackLayer(
+    "annotation:composer",
+    Boolean(composerKind),
+    cancelAnnotationComposer,
+    isCompactLayout,
+  );
+  useBackLayer(
+    "editor:selection-menu",
+    Boolean(editorSelectionMenuPosition),
+    () => {
+      setEditorSelectionMenuPosition(null);
+      requestAnimationFrame(() => editorRef.current?.focus());
+    },
+    isCompactLayout,
+  );
+  useBackLayer(
+    "editor:assistant",
+    Boolean(editorAssistantTab),
+    () => setEditorAssistantTab(null),
+    isCompactLayout,
+  );
+  useBackLayer(
+    "editor:mobile-tools",
+    mobileEditorToolsVisible,
+    () => setMobileEditorToolsExpanded(false),
+    isCompactLayout,
+  );
+  useBackLayer(
+    "modal:about",
+    aboutModalOpen,
+    () => setAboutModalOpen(false),
+    isCompactLayout,
+  );
+  useBackLayer(
+    "modal:support",
+    supportModalOpen,
+    () => setSupportModalOpen(false),
+    isCompactLayout,
+  );
+  useBackLayer(
+    "modal:shortcuts",
+    shortcutHelpOpen,
+    closeShortcutHelp,
+    isCompactLayout,
+  );
+  useBackLayer(
+    "modal:save",
+    saveModalOpen,
+    () => setSaveModalOpen(false),
+    isCompactLayout,
+  );
+  useBackLayer(
+    "modal:image",
+    imageModalOpen,
+    () => setImageModalOpen(false),
+    isCompactLayout,
+  );
+  useBackLayer(
+    "modal:new-document",
+    newDocumentModalOpen,
+    () => {
+      if (!newDocumentCreating) setNewDocumentModalOpen(false);
+    },
+    isCompactLayout,
+  );
+  useBackLayer(
+    "modal:library",
+    libraryOpen,
+    () => setLibraryOpen(false),
+    isCompactLayout,
+  );
+  useBackLayer(
+    "modal:mobile-menu",
+    mobileHeaderMenuOpen,
+    () => setMobileHeaderMenuOpen(false),
+    isCompactLayout,
+  );
+  useBackLayer(
+    "modal:mermaid-shell",
+    Boolean(mermaidStudioSession),
+    () => {
+      if (mermaidStudioSession) closeMermaidStudio(mermaidStudioSession);
+    },
+    isCompactLayout,
+  );
   const editorPaneCollapsed =
-    !readingMode && !libraryIsModal && desktopPaneMode === "preview";
+    !readingMode && !isCompactLayout && desktopPaneMode === "preview";
   const previewPaneCollapsed =
-    !readingMode && !libraryIsModal && desktopPaneMode === "editor";
+    !readingMode && !isCompactLayout && desktopPaneMode === "editor";
   const workspacePaneStyle = {
     "--preview-pane-track":
-      desktopPaneMode === "editor"
+      effectivePaneMode === "editor"
         ? "0fr"
-        : desktopPaneMode === "preview"
+        : effectivePaneMode === "preview"
           ? "100fr"
           : `${previewPanePercent}fr`,
     "--editor-pane-track":
-      desktopPaneMode === "preview"
+      effectivePaneMode === "preview"
         ? "0fr"
-        : desktopPaneMode === "editor"
+        : effectivePaneMode === "editor"
           ? "100fr"
           : `${100 - previewPanePercent}fr`,
   } as React.CSSProperties;
@@ -6190,7 +6496,6 @@ export default function Home() {
       ? "versions"
       : "history"
     : libraryTab;
-
   return (
     <div
       className={`app-shell ${readingMode ? "is-reading" : ""} ${
@@ -6214,6 +6519,7 @@ export default function Home() {
           newDocumentModalOpen ||
           saveModalOpen ||
           shortcutHelpOpen ||
+          mobileHeaderMenuOpen ||
           (libraryOpen && libraryIsModal)
             ? true
             : undefined
@@ -6312,7 +6618,7 @@ export default function Home() {
           </span>
           <button
             ref={supportButtonRef}
-            className="button button--support"
+            className="button button--support topbar-action--secondary"
             type="button"
             onClick={() => setSupportModalOpen(true)}
             aria-label="حمایت از راوی"
@@ -6325,12 +6631,15 @@ export default function Home() {
           </button>
           <button
             ref={libraryTriggerRef}
-            className={`button button--quiet library-trigger mobile-library-trigger ${
+            className={`button button--quiet library-trigger mobile-library-trigger topbar-action--library ${
               libraryOpen ? "is-active" : ""
             }`}
             type="button"
             onClick={() => setLibraryOpen((current) => !current)}
-            aria-label="کتابخانه"
+            aria-label={
+              libraryOpen ? "بستن کتابخانه" : "باز کردن کتابخانه"
+            }
+            title={libraryOpen ? "بستن کتابخانه" : "باز کردن کتابخانه"}
             aria-controls="library-panel"
             aria-expanded={libraryOpen}
             aria-keyshortcuts={commandAriaKeyShortcuts(
@@ -6346,7 +6655,7 @@ export default function Home() {
           </button>
           <button
             ref={newDocumentButtonRef}
-            className="button button--quiet new-document-trigger"
+            className="button button--quiet new-document-trigger topbar-action--secondary"
             type="button"
             onClick={openNewDocumentModal}
             disabled={saveState === "saving"}
@@ -6366,7 +6675,7 @@ export default function Home() {
             <span>فایل جدید</span>
           </button>
           <button
-            className="button button--primary"
+            className="button button--primary topbar-action--open"
             type="button"
             onClick={() => void openDocumentPicker()}
             aria-keyshortcuts={commandAriaKeyShortcuts(
@@ -6383,7 +6692,7 @@ export default function Home() {
             <span>باز کردن فایل</span>
           </button>
           <button
-            className="button button--ink"
+            className="button button--ink topbar-action--save"
             type="button"
             onClick={() => void saveCurrentFile()}
             disabled={saveState === "saving"}
@@ -6401,7 +6710,9 @@ export default function Home() {
             <span>ذخیره</span>
           </button>
           <button
-            className={`button button--quiet ${readingMode ? "is-active" : ""}`}
+            className={`button button--quiet topbar-action--reading ${
+              readingMode ? "is-active" : ""
+            }`}
             type="button"
             onClick={toggleReadingMode}
             aria-pressed={readingMode}
@@ -6422,8 +6733,152 @@ export default function Home() {
             )}
             <span>{readingMode ? "بازگشت به میز" : "حالت مطالعه"}</span>
           </button>
+          <button
+            ref={mobileHeaderMenuButtonRef}
+            className="button button--quiet mobile-topbar-menu-trigger"
+            type="button"
+            onClick={() => {
+              setMobileEditorToolsExpanded(false);
+              setMobileHeaderMenuOpen(true);
+            }}
+            aria-label="بازکردن منوی راوی"
+            aria-haspopup="dialog"
+            aria-expanded={mobileHeaderMenuOpen}
+            title="منوی راوی"
+          >
+            <Menu size={19} aria-hidden="true" />
+          </button>
         </div>
       </header>
+
+      <input
+        ref={fileInputRef}
+        className="visually-hidden"
+        type="file"
+        accept=".md,.markdown,.ravi,text/markdown,application/json"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void readFile(file);
+          event.currentTarget.value = "";
+        }}
+        tabIndex={-1}
+      />
+
+      <AccessibleModal
+        open={mobileHeaderMenuOpen}
+        isTopLayer={topLayer === "mobileMenu"}
+        onClose={() => setMobileHeaderMenuOpen(false)}
+        dialogRef={mobileHeaderMenuRef}
+        initialFocusRef={mobileHeaderMenuCloseRef}
+        returnFocusRef={mobileHeaderMenuButtonRef}
+        backdropClassName="mobile-topbar-menu-backdrop"
+        dialogClassName="mobile-topbar-menu"
+        labelledBy="mobile-topbar-menu-title"
+      >
+        <div className="mobile-topbar-menu-header">
+          <div>
+            <span>دسترسی سریع</span>
+            <strong id="mobile-topbar-menu-title">منوی راوی</strong>
+          </div>
+          <button
+            ref={mobileHeaderMenuCloseRef}
+            type="button"
+            onClick={() => setMobileHeaderMenuOpen(false)}
+            aria-label="بستن منوی راوی"
+          >
+            <X size={19} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="mobile-topbar-menu-grid">
+          <button
+            type="button"
+            onClick={() => {
+              setMobileHeaderMenuOpen(false);
+              void openDocumentPicker();
+            }}
+          >
+            <Upload size={20} aria-hidden="true" />
+            <span>
+              <strong>بازکردن فایل</strong>
+              <small>از همین دستگاه</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={saveState === "saving"}
+            onClick={() => {
+              setMobileHeaderMenuOpen(false);
+              openNewDocumentModal();
+            }}
+          >
+            <FilePlus2 size={20} aria-hidden="true" />
+            <span>
+              <strong>سند تازه</strong>
+              <small>شروع یک نوشته</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMobileHeaderMenuOpen(false);
+              toggleReadingMode();
+            }}
+          >
+            <BookOpen size={20} aria-hidden="true" />
+            <span>
+              <strong>حالت مطالعه</strong>
+              <small>خواندن بدون مزاحمت</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            disabled={Boolean(themeTransition)}
+            aria-pressed={themeMode === "dark"}
+            onClick={() => {
+              setMobileHeaderMenuOpen(false);
+              toggleThemePreservingReading();
+            }}
+          >
+            {themeMode === "light" ? (
+              <Moon size={20} aria-hidden="true" />
+            ) : (
+              <Sun size={20} aria-hidden="true" />
+            )}
+            <span>
+              <strong>{themeMode === "light" ? "تم تاریک" : "تم روشن"}</strong>
+              <small>تغییر فضای میز</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMobileHeaderMenuOpen(false);
+              setSupportModalOpen(true);
+            }}
+          >
+            <Heart size={20} aria-hidden="true" />
+            <span>
+              <strong>حمایت از راوی</strong>
+              <small>ادامهٔ توسعهٔ رایگان</small>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMobileHeaderMenuOpen(false);
+              setAboutModalOpen(true);
+            }}
+          >
+            <span className="mobile-topbar-menu-mark" aria-hidden="true">
+              ر
+            </span>
+            <span>
+              <strong>دربارهٔ راوی</strong>
+              <small>نسخه و تغییرات</small>
+            </span>
+          </button>
+        </div>
+      </AccessibleModal>
 
       <div
         className="proofbar"
@@ -6435,6 +6890,7 @@ export default function Home() {
           newDocumentModalOpen ||
           saveModalOpen ||
           shortcutHelpOpen ||
+          mobileHeaderMenuOpen ||
           (libraryOpen && libraryIsModal)
             ? true
             : undefined
@@ -6496,7 +6952,10 @@ export default function Home() {
             role="tab"
             aria-selected={mobilePane === "preview"}
             type="button"
-            onClick={() => setMobilePane("preview")}
+            onClick={() => {
+              setMobileEditorToolsExpanded(false);
+              setMobilePane("preview");
+            }}
           >
             پیش‌نمایش
           </button>
@@ -6514,6 +6973,7 @@ export default function Home() {
             newDocumentModalOpen ||
             saveModalOpen ||
             shortcutHelpOpen ||
+            mobileHeaderMenuOpen ||
             (libraryOpen && libraryIsModal)
               ? true
               : undefined
@@ -6536,7 +6996,8 @@ export default function Home() {
           supportModalOpen ||
           newDocumentModalOpen ||
           saveModalOpen ||
-          shortcutHelpOpen
+          shortcutHelpOpen ||
+          mobileHeaderMenuOpen
             ? true
             : undefined
         }
@@ -6552,10 +7013,12 @@ export default function Home() {
                 : "reading-outline-is-collapsed"
               : ""
           } ${
-            !readingMode ? `pane-layout-is-${desktopPaneMode}` : ""
-          } ${paneDragging ? "is-resizing-panes" : ""}`}
+            !readingMode ? `pane-layout-is-${effectivePaneMode}` : ""
+          } ${paneDragging ? "is-resizing-panes" : ""} ${
+            mobileEditorToolsVisible ? "mobile-editor-tools-is-open" : ""
+          }`}
           style={workspacePaneStyle}
-          data-pane-layout={desktopPaneMode}
+          data-pane-layout={effectivePaneMode}
           data-collapse-candidate={paneCollapseCandidate ?? undefined}
           inert={libraryOpen && libraryIsModal ? true : undefined}
           onDragEnter={(event) => {
@@ -6566,18 +7029,6 @@ export default function Home() {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-        <input
-          ref={fileInputRef}
-          className="visually-hidden"
-          type="file"
-          accept=".md,.markdown,.ravi,text/markdown,application/json"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void readFile(file);
-            event.currentTarget.value = "";
-          }}
-          tabIndex={-1}
-        />
         <input
           ref={imageInputRef}
           className="visually-hidden"
@@ -6934,11 +7385,36 @@ export default function Home() {
               <button
                 className="format-tool-expand"
                 type="button"
-                onClick={() => collapseDesktopPane("preview")}
-                aria-label="نمایش تمام‌صفحهٔ ویرایشگر و همهٔ ابزارها"
-                title="نمایش همهٔ ابزارها در ویرایشگر تمام‌صفحه"
+                onClick={() => {
+                  if (isCompactLayout) {
+                    setMobileEditorToolsExpanded((current) => !current);
+                    return;
+                  }
+                  collapseDesktopPane("preview");
+                }}
+                aria-expanded={
+                  isCompactLayout ? mobileEditorToolsVisible : undefined
+                }
+                aria-label={
+                  isCompactLayout
+                    ? mobileEditorToolsVisible
+                      ? "بستن ابزارهای بیشتر ویرایش"
+                      : "نمایش ابزارهای بیشتر ویرایش"
+                    : "نمایش تمام‌صفحهٔ ویرایشگر و همهٔ ابزارها"
+                }
+                title={
+                  isCompactLayout
+                    ? mobileEditorToolsVisible
+                      ? "بستن ابزارهای بیشتر"
+                      : "نمایش ابزارهای بیشتر"
+                    : "نمایش همهٔ ابزارها در ویرایشگر تمام‌صفحه"
+                }
               >
-                <Ellipsis size={18} aria-hidden="true" />
+                {mobileEditorToolsVisible ? (
+                  <X size={18} aria-hidden="true" />
+                ) : (
+                  <Ellipsis size={18} aria-hidden="true" />
+                )}
               </button>
             </div>
           </div>
@@ -7171,6 +7647,8 @@ export default function Home() {
               className="editor-shortcut-help"
               type="button"
               onClick={openShortcutHelp}
+              aria-haspopup="dialog"
+              aria-expanded={shortcutHelpOpen}
             >
               <Keyboard size={14} aria-hidden="true" />
               نمایش همهٔ میان‌برها
@@ -7768,13 +8246,14 @@ export default function Home() {
               <div className="library-header-actions">
                 <button
                   ref={libraryCloseRef}
-                  className="library-collapse"
+                  className="library-close"
                   type="button"
                   onClick={() => setLibraryOpen(false)}
-                  aria-label="جمع‌کردن سایدبار"
-                  title="جمع‌کردن سایدبار"
+                  aria-label="بستن کتابخانه"
+                  title="بستن کتابخانه"
                 >
-                  <PanelRightClose size={19} aria-hidden="true" />
+                  <X size={18} aria-hidden="true" />
+                  <span>بستن کتابخانه</span>
                 </button>
               </div>
             </div>
@@ -7801,7 +8280,7 @@ export default function Home() {
                 isWebLibrary ? "library-tabs--single" : ""
               }`}
               role="tablist"
-              aria-label="بخش‌های سایدبار"
+              aria-label="بخش‌های کتابخانه"
             >
               <button
                 ref={historyTabRef}
@@ -8256,41 +8735,100 @@ export default function Home() {
             onApply={applyMermaidStudio}
             onClose={closeMermaidStudio}
             returnFocusRef={mermaidReturnFocusRef}
+            backNavigationEnabled={isCompactLayout}
           />
         </Suspense>
       )}
 
-      <NewDocumentDialog
-        open={newDocumentModalOpen}
-        isTopLayer={topLayer === "new"}
-        isDesktop={commandEnvironment.surface === "electron"}
-        hasUnsavedChanges={effectiveSaveState !== "saved"}
-        creating={newDocumentCreating}
-        creationError={newDocumentError}
-        returnFocusRef={newDocumentButtonRef}
-        onClose={() => {
-          if (newDocumentCreating) return;
-          setNewDocumentModalOpen(false);
-          setNewDocumentError("");
-        }}
-        onCreate={(spec) => void createNewDocument(spec)}
-        onSaveCurrent={saveBeforeCreatingNew}
-      />
+      {newDocumentModalOpen && (
+        <Suspense
+          fallback={
+            <DeferredDialogFallback
+              id="new-document"
+              title="فرم ساخت فایل در حال آماده‌شدن است"
+              isTopLayer={topLayer === "new"}
+              onClose={() => {
+                if (newDocumentCreating) return;
+                setNewDocumentModalOpen(false);
+                setNewDocumentError("");
+              }}
+              returnFocusRef={
+                isCompactLayout
+                  ? mobileHeaderMenuButtonRef
+                  : newDocumentButtonRef
+              }
+            />
+          }
+        >
+          <NewDocumentDialog
+            open
+            isTopLayer={topLayer === "new"}
+            isDesktop={commandEnvironment.surface === "electron"}
+            hasUnsavedChanges={effectiveSaveState !== "saved"}
+            creating={newDocumentCreating}
+            creationError={newDocumentError}
+            returnFocusRef={
+              isCompactLayout ? mobileHeaderMenuButtonRef : newDocumentButtonRef
+            }
+            onClose={() => {
+              if (newDocumentCreating) return;
+              setNewDocumentModalOpen(false);
+              setNewDocumentError("");
+            }}
+            onCreate={(spec) => void createNewDocument(spec)}
+            onSaveCurrent={saveBeforeCreatingNew}
+          />
+        </Suspense>
+      )}
 
-      <AboutDialog
-        open={aboutModalOpen}
-        isTopLayer={topLayer === "about"}
-        version={packageMetadata.version}
-        returnFocusRef={brandButtonRef}
-        onClose={() => setAboutModalOpen(false)}
-      />
+      {aboutModalOpen && (
+        <Suspense
+          fallback={
+            <DeferredDialogFallback
+              id="about"
+              title="دربارهٔ راوی در حال آماده‌شدن است"
+              isTopLayer={topLayer === "about"}
+              onClose={() => setAboutModalOpen(false)}
+              returnFocusRef={brandButtonRef}
+            />
+          }
+        >
+          <AboutDialog
+            open
+            isTopLayer={topLayer === "about"}
+            version={packageMetadata.version}
+            returnFocusRef={brandButtonRef}
+            onClose={() => setAboutModalOpen(false)}
+          />
+        </Suspense>
+      )}
 
-      <SupportDialog
-        open={supportModalOpen}
-        isTopLayer={topLayer === "support"}
-        returnFocusRef={supportButtonRef}
-        onClose={() => setSupportModalOpen(false)}
-      />
+      {supportModalOpen && (
+        <Suspense
+          fallback={
+            <DeferredDialogFallback
+              id="support"
+              title="راه‌های حمایت در حال آماده‌شدن است"
+              isTopLayer={topLayer === "support"}
+              onClose={() => setSupportModalOpen(false)}
+              returnFocusRef={
+                isCompactLayout ? mobileHeaderMenuButtonRef : supportButtonRef
+              }
+            />
+          }
+        >
+          <SupportDialog
+            open
+            isTopLayer={topLayer === "support"}
+            returnFocusRef={
+              isCompactLayout ? mobileHeaderMenuButtonRef : supportButtonRef
+            }
+            onClose={() => {
+              setSupportModalOpen(false);
+            }}
+          />
+        </Suspense>
+      )}
 
       <AccessibleModal
         open={imageModalOpen}
@@ -8609,12 +9147,25 @@ export default function Home() {
             </form>
       </AccessibleModal>
 
-      <ShortcutHelpDialog
-        open={shortcutHelpOpen}
-        isTopLayer={topLayer === "shortcuts"}
-        environment={commandEnvironment}
-        onClose={closeShortcutHelp}
-      />
+      {shortcutHelpOpen && (
+        <Suspense
+          fallback={
+            <DeferredDialogFallback
+              id="shortcuts"
+              title="راهنمای میان‌برها در حال آماده‌شدن است"
+              isTopLayer={topLayer === "shortcuts"}
+              onClose={closeShortcutHelp}
+            />
+          }
+        >
+          <ShortcutHelpDialog
+            open
+            isTopLayer={topLayer === "shortcuts"}
+            environment={commandEnvironment}
+            onClose={closeShortcutHelp}
+          />
+        </Suspense>
+      )}
 
       {hoverPreview && hoveredAnnotation && (
         <div

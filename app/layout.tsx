@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BackLayerProvider } from "./components/back-layer-provider";
 import "./globals.css";
 
 const themeBootScript = `
@@ -37,7 +38,9 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <BackLayerProvider>{children}</BackLayerProvider>
+      </body>
     </html>
   );
 }

@@ -101,7 +101,7 @@ test("desktop server renders the packaged app and its assets", async () => {
     );
     assert.match(
       response.headers.get("content-security-policy") ?? "",
-      /connect-src 'self';/,
+      /connect-src 'self' blob:;/,
     );
     const html = await response.text();
     assert.match(html, /راوی/);

@@ -3,5 +3,11 @@
   "identifier": "default",
   "description": "Permissions for the Raavi main window",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:allow-open-url"]
+  "permissions": [
+    "core:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
+    "opener:allow-open-url"
+  ]
 }

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "mermaid-renderer",
+  "description": "Minimal event permissions for restartable hidden Mermaid renderer WebViews",
+  "windows": ["mermaid-renderer-*"],
+  "permissions": ["core:event:default"]
+}

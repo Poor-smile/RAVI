@@ -412,11 +412,15 @@ test.describe("Electron Mermaid parity", () => {
             .toContain("scale(1)");
         }
 
-        const studioRender = await studioSurface.evaluate((surface) => {
-          const svg = surface.querySelector(":scope > svg");
+        const studioRender = await studioSurface.evaluate(async (surface) => {
+          const svg = await fetch((surface as HTMLImageElement).src).then((response) =>
+            response.text(),
+          );
           return {
-            svg: svg?.outerHTML ?? "",
-            text: svg?.textContent ?? "",
+            svg,
+            text: new DOMParser()
+              .parseFromString(svg, "image/svg+xml")
+              .documentElement.textContent ?? "",
           };
         });
         const normalizedStudioText = studioRender.text.replace(/\s+/gu, " ");
@@ -434,11 +438,15 @@ test.describe("Electron Mermaid parity", () => {
           `.mermaid-render-surface[data-mermaid-render-key="${expectedKey}"]`,
         );
         await expect(documentSurface).toBeVisible();
-        const documentRender = await documentSurface.evaluate((surface) => {
-          const svg = surface.querySelector(":scope > svg");
+        const documentRender = await documentSurface.evaluate(async (surface) => {
+          const svg = await fetch((surface as HTMLImageElement).src).then((response) =>
+            response.text(),
+          );
           return {
-            svg: svg?.outerHTML ?? "",
-            text: svg?.textContent ?? "",
+            svg,
+            text: new DOMParser()
+              .parseFromString(svg, "image/svg+xml")
+              .documentElement.textContent ?? "",
           };
         });
 
@@ -584,7 +592,7 @@ test.describe("Electron Mermaid parity", () => {
         (surface) => (surface as HTMLElement).style.transform,
       );
       expect(fittedTransform).toMatch(
-        /^translate\(-?\d+(?:\.\d+)?px, -?\d+(?:\.\d+)?px\) scale\((?:0?\.\d+|1)\)$/,
+        /^translate3d\(-?\d+(?:\.\d+)?px, -?\d+(?:\.\d+)?px, 0px\) scale\((?:0?\.\d+|1)\)$/,
       );
       await expect(fullscreenOutput).toHaveAttribute(
         "aria-label",
@@ -1414,14 +1422,17 @@ test.describe("Electron keyboard integration", () => {
       await expect(originalPinButton).toHaveAttribute("aria-pressed", "false");
 
       const collapseSidebar = sidebar.getByRole("button", {
-        name: "جمع‌کردن سایدبار",
+        name: "بستن کتابخانه",
         exact: true,
       });
       await collapseSidebar.click();
       await expect(sidebar).toBeHidden();
       const reopenSidebar = topbar.locator(".mobile-library-trigger");
       await expect(reopenSidebar).toBeVisible();
-      await expect(reopenSidebar).toHaveAttribute("aria-label", "کتابخانه");
+      await expect(reopenSidebar).toHaveAttribute(
+        "aria-label",
+        "باز کردن کتابخانه",
+      );
       await reopenSidebar.click();
       await expect(sidebar).toBeVisible();
 
@@ -1651,22 +1662,31 @@ test.describe("Electron keyboard integration", () => {
       await expect(selectionTarget).toHaveText(
         "این متن برای بررسی ماندگاری محدودهٔ انتخاب‌شده است.",
       );
-      const selectionTargetBox = await selectionTarget.boundingBox();
-      expect(selectionTargetBox).not.toBeNull();
-      await selectionTarget.selectText();
       await expect
-        .poll(() => window.evaluate(() => window.getSelection()?.toString()))
+        .poll(async () => {
+          await markdownBody.locator("p").selectText();
+          return window.evaluate(() => window.getSelection()?.toString());
+        })
         .toBe("این متن برای بررسی ماندگاری محدودهٔ انتخاب‌شده است.");
-      await selectionTarget.dispatchEvent("mouseup", {
-        clientX: selectionTargetBox!.x + selectionTargetBox!.width / 2,
-        clientY: selectionTargetBox!.y + selectionTargetBox!.height / 2,
-      });
-
+      const selectionTargetBox = await markdownBody.locator("p").boundingBox();
+      expect(selectionTargetBox).not.toBeNull();
       const selectionMenu = window.getByRole("toolbar", {
         name: "ابزار متن انتخاب‌شده",
       });
+      await expect
+        .poll(async () => {
+          const currentTarget = markdownBody.locator("p");
+          const currentBox = await currentTarget.boundingBox();
+          if (!currentBox) return false;
+          await currentTarget.selectText();
+          await currentTarget.dispatchEvent("mouseup", {
+            clientX: currentBox.x + currentBox.width / 2,
+            clientY: currentBox.y + currentBox.height / 2,
+          });
+          return selectionMenu.isVisible();
+        })
+        .toBe(true);
       const selectionFeedback = window.locator(".selection-range-feedback");
-      await expect(selectionMenu).toBeVisible();
       await expect(selectionFeedback.first()).toBeVisible();
 
       await selectionMenu.getByRole("button", { name: "کپی" }).click();

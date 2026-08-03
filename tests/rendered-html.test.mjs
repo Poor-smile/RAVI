@@ -167,7 +167,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /role="tablist"/);
   assert.match(page, /library-history-panel/);
   assert.match(page, /library-catalog-panel/);
-  assert.match(page, /جمع‌کردن سایدبار/);
+  assert.match(page, /بستن کتابخانه/);
+  assert.match(page, /باز کردن کتابخانه/);
+  assert.match(page, /بخش‌های کتابخانه/);
   assert.match(page, /سنجاق‌شده‌ها/);
   assert.match(page, /raavi:library-pins:v1/);
   assert.match(page, /useState\(false\);[\s\S]*setLibraryOpen\(Boolean\(window\.raaviDesktop\)\)/);

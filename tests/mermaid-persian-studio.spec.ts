@@ -57,6 +57,9 @@ test.describe("Persian Mermaid Studio", () => {
       await studio.getByRole("button", { name: "کد پیشرفته", exact: true }).click();
       await expect(studio.locator(".mermaid-code-editor .cm-content")).toContainText("flowchart TB");
       await studio.getByRole("button", { name: "ساخت آسان", exact: true }).click();
+      const beforeSequenceKey = await flowchartSurface.getAttribute(
+        "data-mermaid-render-key",
+      );
       await studio.getByRole("button", { name: "تغییر نوع", exact: true }).click();
 
       const typeSearch = studio.getByRole("searchbox", { name: "جست‌وجوی نوع نمودار" });
@@ -66,18 +69,31 @@ test.describe("Persian Mermaid Studio", () => {
       await expect(studio.getByRole("region", { name: "ساخت آسان توالی" })).toBeVisible();
       await expect(studio.getByLabel("راهنمای کنترل عرض و طول نمودار")).toContainText("کنترل عرض");
       await expect(studio.getByRole("button", { name: "انتقال ردیف ۲ به بالا" })).toBeEnabled();
-      await expect(studio.locator(".mermaid-render-surface")).toContainText(
-        "پیش‌نمایش آماده است",
-      );
+      await expect
+        .poll(() => flowchartSurface.getAttribute("data-mermaid-render-key"))
+        .not.toBe(beforeSequenceKey);
+      const sequenceSvg = await studio
+        .locator("img.mermaid-render-surface")
+        .evaluate(async (image) => fetch((image as HTMLImageElement).src).then((response) => response.text()));
+      expect(sequenceSvg).toContain("پیش‌نمایش آماده است");
       await window.screenshot({ path: testInfo.outputPath("sequence-builder.png") });
+      const beforeSankeyKey = await flowchartSurface.getAttribute(
+        "data-mermaid-render-key",
+      );
       await studio.getByRole("button", { name: "تغییر نوع", exact: true }).click();
       await studio.getByRole("searchbox", { name: "جست‌وجوی نوع نمودار" }).fill("");
       await studio.getByRole("button", { name: /^جریان سنکی/ }).click();
       await expect(studio.getByRole("region", { name: "ساخت آسان جریان سنکی" })).toBeVisible();
-      const surface = studio.locator(".mermaid-render-surface");
-      await expect(surface).toContainText("ورودی");
-      await expect(surface).toContainText("مطالعه");
-      await expect(surface).toContainText("۸");
+      const surface = studio.locator("img.mermaid-render-surface");
+      await expect
+        .poll(() => surface.getAttribute("data-mermaid-render-key"))
+        .not.toBe(beforeSankeyKey);
+      const sankeySvg = await surface.evaluate(async (image) =>
+        fetch((image as HTMLImageElement).src).then((response) => response.text()),
+      );
+      expect(sankeySvg).toContain("ورودی");
+      expect(sankeySvg).toContain("مطالعه");
+      expect(sankeySvg).toContain("۸");
 
       await studio.getByRole("button", { name: "کد پیشرفته", exact: true }).click();
       const code = studio.locator(".mermaid-code-editor .cm-content");

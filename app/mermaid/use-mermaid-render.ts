@@ -1,9 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createMermaidBlobUrl } from "./blob-url";
+import type { MermaidComplexity } from "./complexity";
 import {
-  MermaidRenderError,
-  MermaidTheme,
+  getCachedMermaidRender,
+  pinMermaidRender,
+  unpinMermaidRender,
+  type MermaidRenderRequestOptions,
+} from "./render-service";
+import {
+  type MermaidRenderError,
+  type MermaidRenderMetrics,
+  type MermaidTheme,
   mermaidRenderKey,
   renderMermaid,
 } from "./renderer";
@@ -14,6 +23,8 @@ export type MermaidRenderState = {
   lastValidSvg: string;
   renderKey: string;
   error: MermaidRenderError | null;
+  complexity: MermaidComplexity | null;
+  metrics: MermaidRenderMetrics;
 };
 
 const INITIAL_STATE: MermaidRenderState = {
@@ -22,30 +33,62 @@ const INITIAL_STATE: MermaidRenderState = {
   lastValidSvg: "",
   renderKey: "",
   error: null,
+  complexity: null,
+  metrics: {},
 };
-
-const MERMAID_RENDER_CACHE_LIMIT = 80;
-const mermaidRenderCache = new Map<string, string>();
 
 function cachedRenderState(code: string, theme: MermaidTheme) {
   const renderKey = mermaidRenderKey(code, theme);
-  const svg = mermaidRenderCache.get(renderKey);
-  if (!svg) return INITIAL_STATE;
+  const entry = getCachedMermaidRender(code, theme);
+  if (!entry) return INITIAL_STATE;
   return {
     status: "valid",
-    svg,
-    lastValidSvg: svg,
+    svg: entry.svg,
+    lastValidSvg: entry.svg,
     renderKey,
     error: null,
+    complexity: entry.complexity,
+    metrics: { total: 0 },
   } satisfies MermaidRenderState;
 }
 
-function rememberRenderedSvg(renderKey: string, svg: string) {
-  mermaidRenderCache.delete(renderKey);
-  mermaidRenderCache.set(renderKey, svg);
-  if (mermaidRenderCache.size <= MERMAID_RENDER_CACHE_LIMIT) return;
-  const oldestKey = mermaidRenderCache.keys().next().value;
-  if (typeof oldestKey === "string") mermaidRenderCache.delete(oldestKey);
+export function useMermaidBlobUrl(svg: string) {
+  const [url, setUrl] = useState("");
+
+  useEffect(() => {
+    const blob = createMermaidBlobUrl(svg);
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setUrl(blob?.url ?? "");
+    });
+    return () => {
+      active = false;
+      blob?.revoke();
+    };
+  }, [svg]);
+
+  return url;
+}
+
+export function mermaidSvgAccessibleName(svg: string) {
+  if (!svg) return "نمودار Mermaid";
+  const attribute = svg.match(/\saria-label=(?:"([^"]*)"|'([^']*)')/iu);
+  const title = svg.match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/iu);
+  const encoded = (attribute?.[1] ?? attribute?.[2] ?? title?.[1] ?? "").trim();
+  if (!encoded) return "نمودار Mermaid";
+  return encoded
+    .replace(/<[^>]*>/gu, "")
+    .replace(/&#x([\da-f]+);/giu, (_, value: string) =>
+      String.fromCodePoint(Number.parseInt(value, 16)),
+    )
+    .replace(/&#(\d+);/gu, (_, value: string) =>
+      String.fromCodePoint(Number.parseInt(value, 10)),
+    )
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
 }
 
 export function useMermaidRender(
@@ -54,11 +97,25 @@ export function useMermaidRender(
   debounceMs = 0,
   renderNonce = 0,
   enabled = true,
+  requestOptions: MermaidRenderRequestOptions = {},
 ) {
   const [state, setState] = useState<MermaidRenderState>(() =>
     cachedRenderState(code, theme),
   );
   const requestRef = useRef(0);
+  const {
+    documentId,
+    blockId,
+    priority,
+    force = false,
+    bypassCache = false,
+  } = requestOptions;
+
+  useEffect(() => {
+    if (!state.renderKey || state.status !== "valid") return;
+    pinMermaidRender(state.renderKey);
+    return () => unpinMermaidRender(state.renderKey);
+  }, [state.renderKey, state.status]);
 
   useEffect(() => {
     const request = requestRef.current + 1;
@@ -66,7 +123,12 @@ export function useMermaidRender(
     if (!enabled) {
       const idleTimer = window.setTimeout(() => {
         if (requestRef.current === request) {
-          setState(cachedRenderState(code, theme));
+          setState((current) => {
+            const cached = cachedRenderState(code, theme);
+            return cached.status === "valid"
+              ? cached
+              : { ...current, status: "idle", svg: "", error: null };
+          });
         }
       }, 0);
       return () => window.clearTimeout(idleTimer);
@@ -79,55 +141,75 @@ export function useMermaidRender(
           error: {
             kind: "syntax",
             message: "برای دیدن پیش‌نمایش، کد Mermaid را وارد کنید.",
-            technical: "Empty Mermaid source",
+            technical: "منبع نمودار خالی است.",
           },
         }));
         return;
       }
       const renderKey = mermaidRenderKey(code, theme);
-      const cachedSvg = mermaidRenderCache.get(renderKey);
-      if (cachedSvg && renderNonce === 0) {
-        setState((current) =>
-          current.status === "valid" &&
-          current.svg === cachedSvg &&
-          current.renderKey === renderKey
-            ? current
-            : {
-                status: "valid",
-                svg: cachedSvg,
-                lastValidSvg: cachedSvg,
-                renderKey,
-                error: null,
-              },
-        );
+      const cached =
+        renderNonce === 0 && !bypassCache
+          ? getCachedMermaidRender(code, theme)
+          : undefined;
+      if (cached) {
+        setState({
+          status: "valid",
+          svg: cached.svg,
+          lastValidSvg: cached.svg,
+          renderKey,
+          error: null,
+          complexity: cached.complexity,
+          metrics: { total: 0 },
+        });
         return;
       }
       setState((current) => ({ ...current, status: "loading", error: null }));
-      void renderMermaid(code, theme).then((result) => {
+      void renderMermaid(code, theme, {
+        documentId,
+        blockId,
+        priority,
+        generation: request,
+        force: force || renderNonce > 0,
+        bypassCache: bypassCache || renderNonce > 0,
+      }).then((result) => {
         if (requestRef.current !== request) return;
         if (result.ok) {
-          const nextRenderKey = mermaidRenderKey(code, theme);
-          rememberRenderedSvg(nextRenderKey, result.svg);
           setState({
             status: "valid",
             svg: result.svg,
             lastValidSvg: result.svg,
-            renderKey: nextRenderKey,
+            renderKey,
             error: null,
+            complexity: result.complexity,
+            metrics: result.metrics,
           });
           return;
         }
+        if (result.error.kind === "cancelled") return;
         setState((current) => ({
           ...current,
           status: "invalid",
           svg: "",
           error: result.error,
+          complexity: result.complexity ?? current.complexity,
+          metrics: result.metrics ?? {},
         }));
       });
     }, debounceMs);
 
     return () => window.clearTimeout(timer);
-  }, [code, debounceMs, enabled, renderNonce, theme]);
+  }, [
+    blockId,
+    bypassCache,
+    code,
+    debounceMs,
+    documentId,
+    enabled,
+    force,
+    priority,
+    renderNonce,
+    theme,
+  ]);
 
   return state;
 }

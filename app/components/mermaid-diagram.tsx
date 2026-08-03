@@ -14,6 +14,7 @@ import {
 import {
   memo,
   MouseEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -21,8 +22,21 @@ import {
 } from "react";
 import { MermaidBlock } from "../mermaid/blocks";
 import { MermaidTheme } from "../mermaid/renderer";
-import { useMermaidRender } from "../mermaid/use-mermaid-render";
+import {
+  mermaidSvgAccessibleName,
+  useMermaidBlobUrl,
+  useMermaidRender,
+} from "../mermaid/use-mermaid-render";
 import { useMermaidViewport } from "../mermaid/use-mermaid-viewport";
+import { useMermaidVirtualization } from "../mermaid/use-mermaid-virtualization";
+import { recordMermaidMeasure } from "../mermaid/performance";
+
+function readableErrorDetail(technical: string, suggestion?: string) {
+  if (suggestion) return suggestion;
+  return /[\u0600-\u06ff]/u.test(technical)
+    ? technical
+    : "کد نمودار را بررسی کنید یا دوباره رندر بگیرید.";
+}
 
 export const MermaidDiagram = memo(function MermaidDiagram({
   block,
@@ -39,20 +53,49 @@ export const MermaidDiagram = memo(function MermaidDiagram({
 }) {
   const figureRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const surfaceRef = useRef<HTMLDivElement>(null);
-  const [renderRequested, setRenderRequested] = useState(!readingMode);
+  const surfaceRef = useRef<HTMLImageElement>(null);
+  const displayStartedRef = useRef(0);
+  const [renderNonce, setRenderNonce] = useState(0);
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
   const [fallbackFullscreen, setFallbackFullscreen] = useState(false);
+  const fullscreen = nativeFullscreen || fallbackFullscreen;
+  const reportedFullscreenRef = useRef(false);
+  const reportFullscreenChange = useCallback(
+    (nextFullscreen: boolean) => {
+      if (reportedFullscreenRef.current === nextFullscreen) return;
+      reportedFullscreenRef.current = nextFullscreen;
+      onFullscreenChange?.(nextFullscreen);
+    },
+    [onFullscreenChange],
+  );
+  const virtualization = useMermaidVirtualization(
+    figureRef,
+    readingMode,
+    fullscreen,
+  );
   const renderState = useMermaidRender(
     block.code,
     theme,
     0,
-    0,
-    renderRequested,
+    renderNonce,
+    virtualization.mounted,
+    {
+      documentId: "workspace",
+      blockId: block.id,
+      priority: virtualization.priority,
+    },
   );
   const svg = renderState.svg || renderState.lastValidSvg;
-  const fullscreen = nativeFullscreen || fallbackFullscreen;
-  const viewport = useMermaidViewport({ enabled: fullscreen });
+  const blobUrl = useMermaidBlobUrl(virtualization.mounted ? svg : "");
+  const accessibleName = useMemo(() => mermaidSvgAccessibleName(svg), [svg]);
+
+  useEffect(() => {
+    if (blobUrl) displayStartedRef.current = performance.now();
+  }, [blobUrl]);
+  const viewport = useMermaidViewport({
+    enabled: fullscreen,
+    contentRef: surfaceRef,
+  });
   const { resetView: resetViewport } = viewport;
   const statusLabel = useMemo(() => {
     if (renderState.status === "loading") return "در حال ساخت نمودار";
@@ -61,54 +104,43 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   }, [renderState.status]);
   const svgSurface = useMemo(
     () =>
-      svg ? (
-        <div
+      blobUrl ? (
+        // Blob-backed SVG must remain an ordinary image; Next/Image cannot
+        // optimize or safely proxy component-owned object URLs.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           ref={surfaceRef}
           className="mermaid-svg mermaid-render-surface"
           data-mermaid-render-key={renderState.renderKey}
-          style={fullscreen ? { transform: viewport.transform } : undefined}
-          // Mermaid runs in strict mode and the SVG is sanitized again locally.
-          dangerouslySetInnerHTML={{ __html: svg }}
+          src={blobUrl}
+          alt={accessibleName}
+          draggable={false}
+          onLoad={() =>
+            recordMermaidMeasure(
+              block.id,
+              "display",
+              displayStartedRef.current || performance.now(),
+            )
+          }
         />
       ) : null,
-    [fullscreen, renderState.renderKey, svg, viewport.transform],
+    [accessibleName, blobUrl, block.id, renderState.renderKey],
   );
-
-  useEffect(() => {
-    if (renderRequested) return;
-    const figure = figureRef.current;
-    if (!figure || typeof IntersectionObserver === "undefined") {
-      setRenderRequested(true);
-      return;
-    }
-    const scrollRoot = readingMode
-      ? figure.closest<HTMLElement>(".workspace--reading")
-      : figure.closest<HTMLElement>(".preview-scroll");
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        setRenderRequested(true);
-        observer.disconnect();
-      },
-      {
-        root: scrollRoot,
-        rootMargin: "150% 0px",
-      },
-    );
-    observer.observe(figure);
-    return () => observer.disconnect();
-  }, [readingMode, renderRequested]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isOpen = document.fullscreenElement === figureRef.current;
       setNativeFullscreen(isOpen);
-      onFullscreenChange?.(isOpen);
+      reportFullscreenChange(isOpen);
     };
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () =>
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, [onFullscreenChange]);
+  }, [reportFullscreenChange]);
+
+  useEffect(() => {
+    reportFullscreenChange(fullscreen);
+  }, [fullscreen, reportFullscreenChange]);
 
   useEffect(() => {
     if (!fullscreen) return;
@@ -120,7 +152,6 @@ export const MermaidDiagram = memo(function MermaidDiagram({
       event.stopPropagation();
       event.stopImmediatePropagation();
       if (fallbackFullscreen) {
-        onFullscreenChange?.(false);
         setFallbackFullscreen(false);
       } else if (document.fullscreenElement === figureRef.current) {
         void document.exitFullscreen();
@@ -153,16 +184,14 @@ export const MermaidDiagram = memo(function MermaidDiagram({
     const figure = figureRef.current;
     if (!figure) return;
     if (fallbackFullscreen) {
-      onFullscreenChange?.(false);
       setFallbackFullscreen(false);
       return;
     }
     if (document.fullscreenElement === figure) {
-      onFullscreenChange?.(false);
       await document.exitFullscreen();
       return;
     }
-    onFullscreenChange?.(true);
+    reportFullscreenChange(true);
     try {
       await figure.requestFullscreen();
     } catch {
@@ -210,8 +239,12 @@ export const MermaidDiagram = memo(function MermaidDiagram({
       >
         {svgSurface ?? (renderState.status !== "invalid" ? (
           <div className="mermaid-diagram-placeholder" role="status">
-            <LoaderCircle size={22} aria-hidden="true" />
-            <span>در حال ساخت نمودار…</span>
+            {virtualization.mounted && <LoaderCircle size={22} aria-hidden="true" />}
+            <span>
+              {virtualization.mounted
+                ? "در حال ساخت نمودار…"
+                : "نمودار هنگام نزدیک‌شدن به محدودهٔ دید نمایش داده می‌شود."}
+            </span>
           </div>
         ) : null)}
         {readingMode && renderState.status === "invalid" && renderState.error && (
@@ -222,8 +255,18 @@ export const MermaidDiagram = memo(function MermaidDiagram({
             <AlertTriangle size={17} aria-hidden="true" />
             <span>
               <strong>{renderState.error.message}</strong>
-              <small dir="ltr">{renderState.error.technical}</small>
+              <small>
+                {readableErrorDetail(
+                  renderState.error.technical,
+                  renderState.error.suggestion,
+                )}
+              </small>
             </span>
+            {renderState.complexity?.level === "extreme" && (
+              <button type="button" onClick={() => setRenderNonce((value) => value + 1)}>
+                رندر کامل
+              </button>
+            )}
             <button type="button" onClick={() => onEdit(block)}>
               اصلاح در استودیو
             </button>
@@ -322,8 +365,18 @@ export const MermaidDiagram = memo(function MermaidDiagram({
           <AlertTriangle size={17} aria-hidden="true" />
           <span>
             <strong>{renderState.error.message}</strong>
-            <small dir="ltr">{renderState.error.technical}</small>
+            <small>
+              {readableErrorDetail(
+                renderState.error.technical,
+                renderState.error.suggestion,
+              )}
+            </small>
           </span>
+          {renderState.complexity?.level === "extreme" && (
+            <button type="button" onClick={() => setRenderNonce((value) => value + 1)}>
+              رندر کامل
+            </button>
+          )}
           <button type="button" onClick={() => onEdit(block)}>
             اصلاح در استودیو
           </button>

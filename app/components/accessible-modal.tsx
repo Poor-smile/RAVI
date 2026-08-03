@@ -16,6 +16,7 @@ export type ModalLayerId =
   | "image"
   | "library"
   | "mermaid"
+  | "mobileMenu"
   | "new"
   | "save"
   | "support"
