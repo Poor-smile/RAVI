@@ -260,7 +260,7 @@ function detectDesktopInstallRecommendation(): DesktopInstallRecommendation {
       description:
         "برای اتصال پوشه‌ها و دسترسی سریع‌تر به نوشته‌ها، نسخه Windows را روی همین دستگاه نصب کنید.",
       actionLabel: "دانلود برای Windows",
-      href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.3.0-x64.exe",
+      href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.3.1-x64.exe",
     };
   }
 
@@ -2544,6 +2544,7 @@ export default function Home() {
         announce?: boolean;
         retries?: number;
         protectPending?: boolean;
+        settle?: boolean;
       } = {},
     ) => {
       if (
@@ -2570,7 +2571,7 @@ export default function Home() {
       );
 
       const retries = options.retries ?? 8;
-      const settleRestore = Boolean(options.announce);
+      const settleRestore = Boolean(options.announce || options.settle);
       const startedAt = performance.now();
       let stableLayoutSamples = 0;
       let previousLayoutSignature = "";
@@ -2689,7 +2690,9 @@ export default function Home() {
 
           readingRestoreTimerRef.current = window.setTimeout(
             () => requestIsCurrent() && run(attempt + 1),
-            settleRestore
+            options.settle && elapsed < 600
+              ? 16
+              : settleRestore
               ? attempt === 0
                 ? 60
                 : 120
@@ -2724,6 +2727,7 @@ export default function Home() {
       options?: {
         retries?: number;
         anchor?: ReadingPositionRecord | null;
+        settle?: boolean;
       },
     ) => {
       const anchor =
@@ -2739,6 +2743,7 @@ export default function Home() {
         scheduleReadingRestore(anchor, {
           retries: options?.retries ?? 3,
           protectPending: true,
+          settle: options?.settle,
         });
       }
     },
@@ -5687,7 +5692,7 @@ export default function Home() {
             setLibraryOpen(true);
           }
         },
-        { anchor: readingAnchor, retries: 8 },
+        { anchor: readingAnchor, settle: true },
       );
       requestAnimationFrame(() =>
         returnTarget?.isConnected

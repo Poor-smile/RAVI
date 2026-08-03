@@ -1281,9 +1281,11 @@ test.describe("reading continuity audit", () => {
       await expect(page.locator(".markdown-body h2")).toHaveCount(
         AUDIT_CHAPTER_COUNT,
       );
-      await expect(page.locator(".mermaid-render-surface")).toHaveCount(8, {
-        timeout: 15_000,
-      });
+      await expect(page.locator(".mermaid-diagram")).toHaveCount(8);
+      await page.locator(".mermaid-diagram").first().scrollIntoViewIfNeeded();
+      await expect(
+        page.locator(".mermaid-diagram").first().locator(".mermaid-render-surface"),
+      ).toHaveCount(1, { timeout: 15_000 });
 
       const probe = await page.evaluate(async () => {
         const root = document.querySelector<HTMLElement>(".workspace")!;
@@ -1292,7 +1294,23 @@ test.describe("reading continuity audit", () => {
         let reverseJumps = 0;
         let headerClassChanges = 0;
         let removedMermaidSurfaces = 0;
-        let minimumSvgCount = Number.POSITIVE_INFINITY;
+        const initialSvgCount = document.querySelectorAll(
+          ".mermaid-render-surface",
+        ).length;
+        let minimumSvgCount = initialSvgCount;
+        const article = document.querySelector<HTMLElement>(".markdown-body")!;
+        const initialArticleHeight = article.getBoundingClientRect().height;
+        let maximumArticleHeightDelta = 0;
+        const diagrams = Array.from(
+          document.querySelectorAll<HTMLElement>(".mermaid-diagram"),
+        );
+        const initialDiagramHeights = new Map(
+          diagrams.map((diagram) => [
+            diagram,
+            diagram.getBoundingClientRect().height,
+          ]),
+        );
+        let maximumDiagramHeightDelta = 0;
 
         const sampleMermaid = () => {
           minimumSvgCount = Math.min(
@@ -1324,12 +1342,32 @@ test.describe("reading continuity audit", () => {
             }
           }
         });
+        const articleResizeObserver = new ResizeObserver(() => {
+          maximumArticleHeightDelta = Math.max(
+            maximumArticleHeightDelta,
+            Math.abs(
+              article.getBoundingClientRect().height - initialArticleHeight,
+            ),
+          );
+        });
+        const diagramResizeObserver = new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            const diagram = entry.target as HTMLElement;
+            const initialHeight = initialDiagramHeights.get(diagram) ?? 0;
+            maximumDiagramHeightDelta = Math.max(
+              maximumDiagramHeightDelta,
+              Math.abs(diagram.getBoundingClientRect().height - initialHeight),
+            );
+          }
+        });
         root.addEventListener("scroll", handleScroll, { passive: true });
         headerObserver.observe(header, {
           attributes: true,
           attributeFilter: ["class"],
         });
         surfaceObserver.observe(document.body, { childList: true, subtree: true });
+        articleResizeObserver.observe(article);
+        diagrams.forEach((diagram) => diagramResizeObserver.observe(diagram));
 
         for (let step = 0; step < 18; step += 1) {
           root.dispatchEvent(
@@ -1349,18 +1387,26 @@ test.describe("reading continuity audit", () => {
         root.removeEventListener("scroll", handleScroll);
         headerObserver.disconnect();
         surfaceObserver.disconnect();
+        articleResizeObserver.disconnect();
+        diagramResizeObserver.disconnect();
         return {
           reverseJumps,
           headerClassChanges,
           removedMermaidSurfaces,
+          initialSvgCount,
           minimumSvgCount,
+          maximumArticleHeightDelta,
+          maximumDiagramHeightDelta,
         };
       });
 
       expect(probe.reverseJumps).toBe(0);
       expect(probe.headerClassChanges).toBeLessThanOrEqual(2);
       expect(probe.removedMermaidSurfaces).toBe(0);
-      expect(probe.minimumSvgCount).toBe(8);
+      expect(probe.initialSvgCount).toBeGreaterThan(0);
+      expect(probe.minimumSvgCount).toBe(probe.initialSvgCount);
+      expect(probe.maximumDiagramHeightDelta).toBeLessThanOrEqual(2);
+      expect(probe.maximumArticleHeightDelta).toBeLessThanOrEqual(32);
     } finally {
       await activeApp?.close();
       await closeAuditMediaServer(auditMedia.server);

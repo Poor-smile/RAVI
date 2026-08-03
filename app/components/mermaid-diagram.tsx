@@ -40,9 +40,16 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   const figureRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const [renderRequested, setRenderRequested] = useState(!readingMode);
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
   const [fallbackFullscreen, setFallbackFullscreen] = useState(false);
-  const renderState = useMermaidRender(block.code, theme);
+  const renderState = useMermaidRender(
+    block.code,
+    theme,
+    0,
+    0,
+    renderRequested,
+  );
   const svg = renderState.svg || renderState.lastValidSvg;
   const fullscreen = nativeFullscreen || fallbackFullscreen;
   const viewport = useMermaidViewport({ enabled: fullscreen });
@@ -66,6 +73,31 @@ export const MermaidDiagram = memo(function MermaidDiagram({
       ) : null,
     [fullscreen, renderState.renderKey, svg, viewport.transform],
   );
+
+  useEffect(() => {
+    if (renderRequested) return;
+    const figure = figureRef.current;
+    if (!figure || typeof IntersectionObserver === "undefined") {
+      setRenderRequested(true);
+      return;
+    }
+    const scrollRoot = readingMode
+      ? figure.closest<HTMLElement>(".workspace--reading")
+      : figure.closest<HTMLElement>(".preview-scroll");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setRenderRequested(true);
+        observer.disconnect();
+      },
+      {
+        root: scrollRoot,
+        rootMargin: "150% 0px",
+      },
+    );
+    observer.observe(figure);
+    return () => observer.disconnect();
+  }, [readingMode, renderRequested]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -171,15 +203,32 @@ export const MermaidDiagram = memo(function MermaidDiagram({
           fullscreen ? "is-viewport-active" : ""
         } ${viewport.panning ? "is-panning" : ""}`}
         aria-label={statusLabel}
-        aria-busy={renderState.status === "loading"}
+        aria-busy={
+          renderState.status === "idle" || renderState.status === "loading"
+        }
         {...(fullscreen ? viewport.viewportHandlers : {})}
       >
-        {svgSurface ?? (renderState.status === "loading" ? (
+        {svgSurface ?? (renderState.status !== "invalid" ? (
           <div className="mermaid-diagram-placeholder" role="status">
             <LoaderCircle size={22} aria-hidden="true" />
             <span>در حال ساخت نمودار…</span>
           </div>
         ) : null)}
+        {readingMode && renderState.status === "invalid" && renderState.error && (
+          <div
+            className="mermaid-inline-error mermaid-inline-error--in-canvas"
+            role="status"
+          >
+            <AlertTriangle size={17} aria-hidden="true" />
+            <span>
+              <strong>{renderState.error.message}</strong>
+              <small dir="ltr">{renderState.error.technical}</small>
+            </span>
+            <button type="button" onClick={() => onEdit(block)}>
+              اصلاح در استودیو
+            </button>
+          </div>
+        )}
         {readingMode && fullscreen && svg && (
           <div
             className="mermaid-diagram-viewport-tools mermaid-preview-tools"
@@ -268,7 +317,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
           </button>
         )}
       </div>
-      {renderState.status === "invalid" && renderState.error && (
+      {!readingMode && renderState.status === "invalid" && renderState.error && (
         <figcaption className="mermaid-inline-error" role="status">
           <AlertTriangle size={17} aria-hidden="true" />
           <span>

@@ -53,6 +53,7 @@ export function useMermaidRender(
   theme: MermaidTheme,
   debounceMs = 0,
   renderNonce = 0,
+  enabled = true,
 ) {
   const [state, setState] = useState<MermaidRenderState>(() =>
     cachedRenderState(code, theme),
@@ -62,6 +63,14 @@ export function useMermaidRender(
   useEffect(() => {
     const request = requestRef.current + 1;
     requestRef.current = request;
+    if (!enabled) {
+      const idleTimer = window.setTimeout(() => {
+        if (requestRef.current === request) {
+          setState(cachedRenderState(code, theme));
+        }
+      }, 0);
+      return () => window.clearTimeout(idleTimer);
+    }
     const timer = window.setTimeout(() => {
       if (!code.trim()) {
         setState((current) => ({
@@ -118,7 +127,7 @@ export function useMermaidRender(
     }, debounceMs);
 
     return () => window.clearTimeout(timer);
-  }, [code, debounceMs, renderNonce, theme]);
+  }, [code, debounceMs, enabled, renderNonce, theme]);
 
   return state;
 }

@@ -321,23 +321,34 @@ export async function renderMermaid(
   const cached = renderCache.get(key);
   if (cached) return { ok: true, svg: cached, fromCache: true };
 
-  const queued = renderQueue.then(() => renderUncached(code, theme));
-  renderQueue = queued.then(
+  let resolveResult: (svg: string) => void = () => {};
+  let rejectResult: (error: unknown) => void = () => {};
+  const queuedResult = new Promise<string>((resolve, reject) => {
+    resolveResult = resolve;
+    rejectResult = reject;
+  });
+  const queuedRender = renderQueue.then(async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      timer = setTimeout(
+        () => rejectResult(new Error("RAAVI_MERMAID_RENDER_TIMEOUT")),
+        MERMAID_LIMITS.renderTimeoutMs,
+      );
+      const svg = await renderUncached(code, theme);
+      resolveResult(svg);
+    } catch (error) {
+      rejectResult(error);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  });
+  renderQueue = queuedRender.then(
     () => undefined,
     () => undefined,
   );
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const svg = await Promise.race([
-      queued,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error("RAAVI_MERMAID_RENDER_TIMEOUT")),
-          MERMAID_LIMITS.renderTimeoutMs,
-        );
-      }),
-    ]);
+    const svg = await queuedResult;
     if (renderCache.size >= MAX_CACHE_ENTRIES) {
       const oldest = renderCache.keys().next().value;
       if (oldest) renderCache.delete(oldest);
@@ -359,7 +370,5 @@ export async function renderMermaid(
       };
     }
     return { ok: false, error: parseError(error, code) };
-  } finally {
-    if (timer) clearTimeout(timer);
   }
 }
