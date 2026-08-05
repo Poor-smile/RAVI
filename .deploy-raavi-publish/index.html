@@ -2720,6 +2720,30 @@ code {
   let changelogLoadId = 0;
   let changelogReturnFocus = null;
 
+  const fallbackMarkdown = `# Markdown فارسی را ساده شروع کنید
+
+اگر فایل معرفی از هاست در دسترس نباشد، این نمونهٔ داخلی همچنان امکان ویرایش و پیش‌نمایش را فعال نگه می‌دارد.
+
+> متن را تغییر دهید؛ نتیجه همان لحظه در برگهٔ پیش‌نمایش دیده می‌شود.
+
+## همین‌جا امتحان کنید
+
+- ویرایش و پیش‌نمایش زنده
+- نمایش درست فارسی و انگلیسی
+- بدون ارسال محتوای نوشته
+
+| قابلیت | نتیجه |
+| --- | --- |
+| جهت متن | فارسی راست‌به‌چپ و کد چپ‌به‌راست |
+| حریم خصوصی | ویرایش فقط در همین مرورگر |
+
+\`\`\`js
+const direction = isCode ? "ltr" : "rtl";
+console.log("راوی آماده است");
+\`\`\`
+
+[باز کردن نسخهٔ وب راوی](https://raviweb.poorsmile.ir/)`;
+
   const faNumber = new Intl.NumberFormat("fa-IR");
 
   function escapeHtml(value) {
@@ -3302,14 +3326,12 @@ code {
       updatePreview();
     })
     .catch(() => {
-      source.value = "";
-      source.disabled = true;
-      resetButton.disabled = true;
-      stats.textContent = "فایل معرفی بارگذاری نشد";
+      initialMarkdown = fallbackMarkdown.trim();
+      source.value = initialMarkdown;
+      source.disabled = false;
+      updatePreview();
       status.textContent =
-        "برای اجرای نمونه، پوشهٔ لندینگ باید از طریق هاست یا سرور محلی باز شود.";
-      preview.innerHTML =
-        '<p class="markdown-error">فایل <code>landing.md</code> در دسترس نیست. مطمئن شوید همهٔ فایل‌های پوشهٔ لندینگ کنار هم آپلود شده‌اند.</p>';
+        "نسخهٔ داخلی نمونه نمایش داده شد؛ فایل landing.md در دسترس نبود، اما ویرایش و پیش‌نمایش همچنان فعال است.";
     });
 })();
 
