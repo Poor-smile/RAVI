@@ -1,6 +1,6 @@
 [package]
 name = "raavi"
-version = "1.4.1"
+version = "1.5.0"
 description = "Persian Markdown viewer and editor"
 authors = ["Raavi"]
 edition = "2024"
@@ -21,3 +21,8 @@ tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
 time = { version = "0.3", features = ["formatting"] }
 walkdir = "2"
+percent-encoding = "2"
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38.2"
+windows = "0.61"

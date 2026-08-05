@@ -2596,8 +2596,9 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "raavi"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
+ "percent-encoding",
  "serde",
  "serde_json",
  "tauri",
@@ -2607,6 +2608,8 @@ dependencies = [
  "tauri-plugin-single-instance",
  "time",
  "walkdir",
+ "webview2-com",
+ "windows",
 ]
 
 [[package]]

@@ -408,6 +408,7 @@ html.theme-is-changing .reading-outline,
 html.theme-is-changing .reading-outline-header,
 html.theme-is-changing .shortcut-modal,
 html.theme-is-changing .save-modal,
+html.theme-is-changing .export-modal,
 html.theme-is-changing .about-modal,
 html.theme-is-changing .support-modal,
 html.theme-is-changing .save-type-options label {
@@ -786,6 +787,8 @@ html.reading-layout-is-changing .work-pane {
 .save-indicator:focus-visible,
 .save-modal button:focus-visible,
 .save-modal input:focus-visible,
+.export-modal button:focus-visible,
+.export-modal input:focus-visible,
 .recent-file:focus-visible,
 .library-tabs button:focus-visible,
 .library-tab-actions button:focus-visible {
@@ -3619,6 +3622,11 @@ html.reading-layout-is-changing .work-pane {
   margin-top: 0;
 }
 
+.markdown-body[data-raavi-frontmatter] > hr:first-child,
+.markdown-body[data-raavi-frontmatter] > hr:first-child + h2 {
+  display: none;
+}
+
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
@@ -4919,7 +4927,8 @@ html.reading-layout-is-changing .work-pane {
   }
 }
 
-.save-modal-backdrop {
+.save-modal-backdrop,
+.export-modal-backdrop {
   position: fixed;
   z-index: 80;
   inset: 0;
@@ -5415,6 +5424,319 @@ html.reading-layout-is-changing .work-pane {
 }
 
 .save-modal-actions .button--quiet {
+  color: var(--ink-700);
+  border-color: var(--rule);
+}
+
+.export-modal {
+  width: min(620px, 100%);
+  max-height: min(780px, calc(100dvh - 32px));
+  overflow: auto;
+  color: var(--ink-950);
+  background: var(--paper-50);
+  border: 1px solid var(--ink-500);
+  box-shadow: 0 30px 90px rgba(10, 14, 11, 0.34);
+  animation: paperOpen 260ms var(--ease-paper) both;
+}
+
+.export-modal-header {
+  min-height: 82px;
+  padding: 14px 18px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  color: var(--chrome-fg);
+  background: var(--chrome-950);
+}
+
+.export-modal-mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: var(--on-accent);
+  background: var(--proof-blue);
+}
+
+.export-modal-header > div {
+  display: grid;
+}
+
+.export-modal-header > div span {
+  color: var(--chrome-muted);
+  font-size: 9px;
+}
+
+.export-modal-header strong {
+  font-size: 20px;
+}
+
+.export-modal-header > button {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  color: var(--chrome-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.export-modal-header > button:hover:not(:disabled) {
+  color: var(--chrome-fg);
+  background: var(--chrome-700);
+}
+
+.export-modal-header > button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.export-modal-body {
+  padding: 20px;
+}
+
+.export-modal-body > p:first-child {
+  margin: 0 0 16px;
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+.export-format-options {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  border: 0;
+}
+
+.export-format-options legend {
+  margin-bottom: 7px;
+  color: var(--ink-950);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.export-format-options label {
+  min-height: 122px;
+  padding: 13px;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  color: var(--ink-700);
+  background: var(--paper-100);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.export-format-options label:hover,
+.export-format-options label.is-selected {
+  color: var(--ink-950);
+  background: var(--proof-blue-soft);
+  border-color: var(--proof-blue);
+}
+
+.export-format-options input {
+  margin-top: 16px;
+  accent-color: var(--proof-blue);
+}
+
+.export-format-options label > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.export-format-options strong {
+  font-size: 11px;
+}
+
+.export-format-options small {
+  color: var(--ink-700);
+  font-size: var(--type-ui-meta);
+  line-height: 1.8;
+}
+
+.export-format-icon {
+  position: relative;
+  width: 42px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  color: var(--proof-blue-dark);
+  background: var(--paper-50);
+  border: 1px solid color-mix(in srgb, var(--proof-blue) 32%, var(--rule));
+}
+
+.export-format-icon b {
+  position: absolute;
+  inset: auto auto 2px 3px;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 9px;
+}
+
+.export-result-name {
+  min-height: 48px;
+  margin-top: 12px;
+  padding: 8px 11px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink-700);
+  background: var(--paper-100);
+  border: 1px solid var(--rule);
+  font-size: 11px;
+}
+
+.export-result-name strong {
+  overflow: hidden;
+  color: var(--ink-950);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-result-name svg {
+  color: var(--success);
+}
+
+.export-progress,
+.export-review,
+.export-error {
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid var(--rule);
+}
+
+.export-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+}
+
+.export-progress > svg,
+.export-modal-actions .lucide-loader-circle {
+  animation: mermaidSpin 900ms linear infinite;
+}
+
+.export-progress > span {
+  display: grid;
+  gap: 2px;
+}
+
+.export-progress strong,
+.export-progress small {
+  font-size: 11px;
+}
+
+.export-progress small {
+  color: var(--ink-700);
+}
+
+.export-review {
+  color: var(--ink-950);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+.export-review-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.export-review-heading > svg {
+  flex: none;
+  color: var(--warning-text);
+}
+
+.export-review-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.export-review-heading strong {
+  font-size: 11px;
+}
+
+.export-review-heading span,
+.export-review li {
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.export-review ul {
+  margin: 10px 30px 0 0;
+  padding: 0;
+}
+
+.export-diagram-confirmation {
+  margin-top: 12px;
+  padding-top: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border-top: 1px solid var(--warning-border);
+  cursor: pointer;
+}
+
+.export-diagram-confirmation input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--proof-blue-dark);
+}
+
+.export-diagram-confirmation > span {
+  display: grid;
+  gap: 3px;
+}
+
+.export-diagram-confirmation strong {
+  color: var(--ink-950);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.export-diagram-confirmation small {
+  color: var(--ink-700);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.export-error {
+  display: flex;
+  gap: 9px;
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 7%, var(--paper-50));
+  border-color: color-mix(in srgb, var(--error) 34%, var(--rule));
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.export-error svg {
+  flex: none;
+}
+
+.export-modal-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.export-modal-actions .button--quiet {
   color: var(--ink-700);
   border-color: var(--rule);
 }
@@ -6414,6 +6736,7 @@ html.reading-layout-is-changing .work-pane {
   .topbar:not(.reading-topbar) .theme-toggle,
   .topbar:not(.reading-topbar) .topbar-action--secondary,
   .topbar:not(.reading-topbar) .topbar-action--open,
+  .topbar:not(.reading-topbar) .topbar-action--export,
   .topbar:not(.reading-topbar) .topbar-action--reading {
     display: none;
   }
@@ -6868,7 +7191,8 @@ html.reading-layout-is-changing .work-pane {
     flex: 1;
   }
 
-  .save-modal-backdrop {
+  .save-modal-backdrop,
+  .export-modal-backdrop {
     padding: 10px;
   }
 
@@ -6907,6 +7231,26 @@ html.reading-layout-is-changing .work-pane {
 
   .save-modal-body {
     padding: 16px;
+  }
+
+  .export-modal-body {
+    padding: 16px;
+  }
+
+  .export-format-options {
+    grid-template-columns: 1fr;
+  }
+
+  .export-format-options label {
+    min-height: 104px;
+  }
+
+  .export-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .export-modal-actions .button {
+    width: 100%;
   }
 
   .save-type-options {
@@ -9148,10 +9492,20 @@ html.reading-layout-is-changing .work-pane {
   }
 }
 
+.raavi-print-document {
+  display: none;
+}
+
 @media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
   .topbar,
   .proofbar,
   .error-banner,
+  .library-panel,
   .editor-pane,
   .registration-spine,
   .reading-outline,
@@ -9162,6 +9516,7 @@ html.reading-layout-is-changing .work-pane {
     .mermaid-diagram-action,
     .mermaid-diagram-viewport-tools,
     .mermaid-diagram-hint,
+    .selection-range-feedback,
     .toast {
     display: none !important;
   }
@@ -9169,7 +9524,9 @@ html.reading-layout-is-changing .work-pane {
   .about-modal-backdrop,
   .support-modal-backdrop,
   .mobile-topbar-menu-backdrop,
-  .mermaid-studio-backdrop {
+  .mermaid-studio-backdrop,
+  .save-modal-backdrop,
+  .export-modal-backdrop {
     display: none !important;
   }
 
@@ -9189,11 +9546,24 @@ html.reading-layout-is-changing .work-pane {
     border: 0;
   }
 
+  .workspace .preview-pane {
+    display: block !important;
+  }
+
   .markdown-body {
     width: 100%;
     max-width: none;
     padding: 0;
     color: black;
+  }
+
+  .raavi-print-checkbox {
+    display: inline-block;
+    margin-inline: 0 7px;
+    color: black;
+    font-size: 16px;
+    line-height: 1;
+    transform: translateY(2px);
   }
 
   .mermaid-diagram {
@@ -9205,10 +9575,43 @@ html.reading-layout-is-changing .work-pane {
 
   .mermaid-diagram-canvas {
     overflow: visible;
-    padding: 12mm 0;
+    padding: 8mm;
   }
 
   .mermaid-svg {
-    max-height: 230mm;
+    max-height: 210mm;
+    object-fit: contain;
   }
+
+  html[data-raavi-print-document],
+  html[data-raavi-print-document] body {
+    margin: 0 !important;
+    padding: 0 !important;
+    color: black;
+    background: white !important;
+  }
+
+  html[data-raavi-print-document] body > :not(#raavi-print-root) {
+    display: none !important;
+  }
+
+  html[data-raavi-print-document] #raavi-print-root {
+    display: block !important;
+    width: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    color: black;
+    background: white;
+  }
+
+  html[data-raavi-print-document] #raavi-print-root > .markdown-body {
+    display: block !important;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
 }

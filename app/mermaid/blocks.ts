@@ -23,55 +23,72 @@ function hashText(value: string) {
   return (hash >>> 0).toString(36);
 }
 
-function lineNumberAt(source: string, offset: number) {
-  let line = 1;
-  for (let index = 0; index < offset; index += 1) {
-    if (source.charCodeAt(index) === 10) line += 1;
-  }
-  return line;
-}
-
 export function findMermaidBlocks(markdown: string): MermaidBlock[] {
   const blocks: MermaidBlock[] = [];
-  const openingPattern =
-    /^( {0,3})(`{3,}|~{3,})[ \t]*mermaid(?:[ \t]+[^\r\n]*)?[ \t]*(?:\r?\n|$)/gimu;
+  let offset = 0;
+  let lineNumber = 1;
+  let activeFence:
+    | {
+        marker: "`" | "~";
+        length: number;
+        isMermaid: boolean;
+        startOffset: number;
+        openingEnd: number;
+        startLine: number;
+      }
+    | undefined;
 
-  for (const opening of markdown.matchAll(openingPattern)) {
-    const startOffset = opening.index;
-    const marker = opening[2];
-    const markerCharacter = marker[0];
-    const openingEnd = startOffset + opening[0].length;
-    const closingPattern = new RegExp(
-      `^ {0,3}${markerCharacter === "`" ? "`" : "~"}{${
-        marker.length
-      },}[ \\t]*(?:\\r?\\n|$)`,
-      "gmu",
-    );
-    closingPattern.lastIndex = openingEnd;
-    const closing = closingPattern.exec(markdown);
-    if (!closing) continue;
+  while (offset < markdown.length) {
+    const newline = markdown.indexOf("\n", offset);
+    const lineEnd = newline < 0 ? markdown.length : newline + 1;
+    const line = markdown.slice(offset, newline < 0 ? lineEnd : newline).replace(/\r$/u, "");
 
-    const closingStart = closing.index;
-    const endOffset = closingStart + closing[0].length;
-    const rawCode = markdown.slice(openingEnd, closingStart);
-    const code = rawCode.replace(/\r?\n$/u, "");
-    const codeEndOffset = openingEnd + code.length;
-    const raw = markdown.slice(startOffset, endOffset);
-    const startLine = lineNumberAt(markdown, startOffset);
-    const endLine = lineNumberAt(markdown, Math.max(startOffset, endOffset - 1));
+    if (activeFence) {
+      const closing = line.match(/^( {0,3})(`{3,}|~{3,})[ \t]*$/u);
+      if (
+        closing &&
+        closing[2][0] === activeFence.marker &&
+        closing[2].length >= activeFence.length
+      ) {
+        if (activeFence.isMermaid) {
+          const rawCode = markdown.slice(activeFence.openingEnd, offset);
+          const code = rawCode.replace(/\r?\n$/u, "");
+          const raw = markdown.slice(activeFence.startOffset, lineEnd);
+          blocks.push({
+            id: `mermaid-${activeFence.startOffset}-${hashText(raw)}`,
+            code,
+            startOffset: activeFence.startOffset,
+            endOffset: lineEnd,
+            codeStartOffset: activeFence.openingEnd,
+            codeEndOffset: activeFence.openingEnd + code.length,
+            startLine: activeFence.startLine,
+            endLine: lineNumber,
+            raw,
+          });
+        }
+        activeFence = undefined;
+      }
+    } else {
+      const opening = line.match(/^( {0,3})(`{3,}|~{3,})([^\r\n]*)$/u);
+      if (opening) {
+        const marker = opening[2];
+        const info = opening[3].trim();
+        const validBacktickInfo = marker[0] !== "`" || !info.includes("`");
+        if (validBacktickInfo) {
+          activeFence = {
+            marker: marker[0] as "`" | "~",
+            length: marker.length,
+            isMermaid: /^mermaid(?:[ \t]|$)/iu.test(info),
+            startOffset: offset,
+            openingEnd: lineEnd,
+            startLine: lineNumber,
+          };
+        }
+      }
+    }
 
-    blocks.push({
-      id: `mermaid-${startOffset}-${hashText(raw)}`,
-      code,
-      startOffset,
-      endOffset,
-      codeStartOffset: openingEnd,
-      codeEndOffset,
-      startLine,
-      endLine,
-      raw,
-    });
-    openingPattern.lastIndex = endOffset;
+    offset = lineEnd;
+    lineNumber += 1;
   }
 
   return blocks;

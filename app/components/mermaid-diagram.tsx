@@ -44,12 +44,14 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   onEdit,
   onFullscreenChange,
   readingMode = false,
+  exporting = false,
 }: {
   block: MermaidBlock;
   theme: MermaidTheme;
   onEdit: (block: MermaidBlock) => void;
   onFullscreenChange?: (fullscreen: boolean) => void;
   readingMode?: boolean;
+  exporting?: boolean;
 }) {
   const figureRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -71,7 +73,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   const virtualization = useMermaidVirtualization(
     figureRef,
     readingMode,
-    fullscreen,
+    fullscreen || exporting,
   );
   const renderState = useMermaidRender(
     block.code,
@@ -221,7 +223,9 @@ export const MermaidDiagram = memo(function MermaidDiagram({
       ref={figureRef}
       className={`mermaid-diagram is-${renderState.status} ${
         readingMode ? "is-reading" : ""
-      } ${fallbackFullscreen ? "is-detail-open" : ""}`}
+      } ${exporting ? "is-exporting" : ""} ${
+        fallbackFullscreen ? "is-detail-open" : ""
+      }`}
       dir="auto"
       data-mermaid-block-id={block.id}
       onDoubleClick={editFromDoubleClick}

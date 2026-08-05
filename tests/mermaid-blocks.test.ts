@@ -24,6 +24,27 @@ test("a Mermaid block does not capture an adjacent fenced code block", () => {
   assert.equal(mermaidBlockAtOffset([block], block.endOffset + 1), undefined);
 });
 
+test("ignores a Mermaid example nested inside a longer Markdown fence", () => {
+  const markdown = [
+    "````markdown",
+    "```mermaid",
+    "flowchart LR",
+    "  Example --> Only",
+    "```",
+    "````",
+    "",
+    "```mermaid",
+    "flowchart LR",
+    "  Real --> Diagram",
+    "```",
+  ].join("\n");
+
+  const blocks = findMermaidBlocks(markdown);
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].code, "flowchart LR\n  Real --> Diagram");
+  assert.equal(blocks[0].startLine, 8);
+});
+
 const FLOW = `flowchart LR
   A[شروع] --> B[پایان]`;
 

@@ -350,6 +350,14 @@ test("ships the secure Mermaid Studio and standard-fence workflow", async () => 
   assert.match(blocks, /makeMermaidFence/);
   assert.match(css, /\.mermaid-studio/);
   assert.match(css, /\.mermaid-diagram/);
+  assert.match(
+    css,
+    /@media print[\s\S]*?\.mermaid-diagram-canvas\s*\{[\s\S]*?padding:\s*8mm;/u,
+  );
+  assert.match(
+    css,
+    /@media print[\s\S]*?\.mermaid-svg\s*\{[\s\S]*?max-height:\s*210mm;/u,
+  );
   assert.match(packageJson, /"mermaid": "11\.16\.0"/);
   assert.match(registry, /id: "diagram\.mermaid"/);
   assert.match(registry, /code: "KeyM", alt: true/);

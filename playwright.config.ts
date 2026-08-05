@@ -3,6 +3,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   testMatch: [
+    "export-flow.spec.ts",
     "keyboard-shortcuts.spec.ts",
     "mermaid-persian-studio.spec.ts",
     "mermaid-stability.spec.ts",

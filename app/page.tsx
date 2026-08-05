@@ -22,6 +22,7 @@ import {
   Ellipsis,
   Eye,
   FileArchive,
+  FileDown,
   FilePlus2,
   FileText,
   Folder,
@@ -101,6 +102,14 @@ import {
   useModalFocus,
   useModalStack,
 } from "./components/accessible-modal";
+import {
+  ExportDialog,
+  type ExportDialogStatus,
+  type ExportDialogWarning,
+  type ExportFormat,
+} from "./components/export-dialog";
+import { extractWordFrontmatter } from "./export/frontmatter";
+import { stagePrintDocument } from "./export/print-document";
 import type { NewDocumentSpec } from "./components/new-document-dialog";
 import type {
   MermaidApplyResult,
@@ -318,7 +327,7 @@ function detectDesktopInstallRecommendation(): DesktopInstallRecommendation {
       description:
         "برای اتصال پوشه‌ها و دسترسی سریع‌تر به نوشته‌ها، نسخه Windows را روی همین دستگاه نصب کنید.",
       actionLabel: "دانلود برای Windows",
-    href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.4.1-x64.exe",
+    href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.5.0-x64.exe",
     };
   }
 
@@ -394,6 +403,12 @@ type LibraryTab = "history" | "library" | "versions";
 type LibraryState = "idle" | "scanning" | "ready";
 type DocumentFileType = "markdown" | "ravi";
 type SaveFileType = DocumentFileType;
+type PendingExport = {
+  format: ExportFormat;
+  fileName: string;
+  bytes?: ArrayBuffer;
+  requiresDiagramConfirmation?: boolean;
+};
 type ImageSourceMode = "local" | "url";
 type ReadingHeading = {
   documentIndex: number;
@@ -560,6 +575,13 @@ export type RaaviDesktopAPI = {
     filePath?: string;
     documentType?: DocumentFileType;
   }>;
+  saveWordExport: (
+    fileName: string,
+    bytes: Uint8Array,
+  ) => Promise<{ saved: boolean; filePath?: string }>;
+  exportPdf: (
+    fileName: string,
+  ) => Promise<{ saved: boolean; filePath?: string }>;
   rendererReady: () => void;
   onOpenMarkdownFile: (
     callback: (document: DesktopOpenedDocument) => void,
@@ -1333,6 +1355,94 @@ function saveNameForType(fileName: string, type: SaveFileType) {
   return type === "ravi" ? `${baseName}.ravi` : `${baseName}.md`;
 }
 
+function exportNameForFormat(fileName: string, format: ExportFormat) {
+  const baseName =
+    fileName.trim().replace(/\.(?:md|markdown|ravi|docx|pdf)$/i, "") ||
+    "نوشته-راوی";
+  return `${baseName}.${format === "word" ? "docx" : "pdf"}`;
+}
+
+function downloadExport(bytes: ArrayBuffer, fileName: string) {
+  const blob = new Blob([bytes], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function waitForNextPaint() {
+  return new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
+async function inspectPrintablePreview(root: HTMLElement | null) {
+  const warnings: ExportDialogWarning[] = [];
+  await document.fonts?.ready;
+  await waitForNextPaint();
+
+  const deadline = Date.now() + 12_000;
+  let pendingDiagrams: HTMLElement[] = [];
+  do {
+    const diagrams = Array.from(
+      root?.querySelectorAll<HTMLElement>(".mermaid-diagram") ?? [],
+    );
+    pendingDiagrams = diagrams.filter(
+      (diagram) =>
+        !diagram.classList.contains("is-invalid") &&
+        !diagram.querySelector(".mermaid-svg"),
+    );
+    if (pendingDiagrams.length === 0) break;
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+  } while (Date.now() < deadline);
+
+  const invalidDiagrams =
+    root?.querySelectorAll(".mermaid-diagram.is-invalid").length ?? 0;
+  if (invalidDiagrams > 0) {
+    warnings.push({
+      kind: "diagram",
+      message: `${invalidDiagrams.toLocaleString("fa-IR")} نمودار نامعتبر است و در PDF به‌صورت پیام خطا دیده می‌شود.`,
+    });
+  }
+  if (pendingDiagrams.length > 0) {
+    warnings.push({
+      kind: "diagram",
+      message: `${pendingDiagrams.length.toLocaleString("fa-IR")} نمودار تا پایان زمان آماده‌سازی رندر نشد.`,
+    });
+  }
+
+  const images = Array.from(root?.querySelectorAll<HTMLImageElement>("img") ?? []);
+  await Promise.allSettled(
+    images.map(async (image) => {
+      if (!image.complete) {
+        await new Promise<void>((resolve) => {
+          const finish = () => resolve();
+          image.addEventListener("load", finish, { once: true });
+          image.addEventListener("error", finish, { once: true });
+          window.setTimeout(finish, 5_000);
+        });
+      }
+      await image.decode?.().catch(() => undefined);
+    }),
+  );
+  const failedImages = images.filter((image) => image.naturalWidth === 0).length;
+  const blockedImages =
+    root?.querySelectorAll(".remote-media-blocked").length ?? 0;
+  if (failedImages + blockedImages > 0) {
+    warnings.push({
+      kind: "image",
+      message: `${(failedImages + blockedImages).toLocaleString("fa-IR")} تصویر در دسترس نیست و در PDF نمایش داده نمی‌شود.`,
+    });
+  }
+  return warnings;
+}
+
 function readImageAssetData(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -1519,6 +1629,17 @@ export default function Home() {
     documentSnapshot(SAMPLE_MARKDOWN, [], []),
   );
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("word");
+  const [exportStatus, setExportStatus] =
+    useState<ExportDialogStatus>("idle");
+  const [exportProgressLabel, setExportProgressLabel] = useState("");
+  const [exportWarnings, setExportWarnings] = useState<
+    ExportDialogWarning[]
+  >([]);
+  const [exportDiagramConfirmed, setExportDiagramConfirmed] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [pdfExportActive, setPdfExportActive] = useState(false);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imageSourceMode, setImageSourceMode] =
     useState<ImageSourceMode>("local");
@@ -1640,6 +1761,7 @@ export default function Home() {
   const composerOriginRef = useRef<HTMLButtonElement | null>(null);
   const readingReturnFocusRef = useRef<HTMLElement | null>(null);
   const saveModalCloseRef = useRef<HTMLButtonElement>(null);
+  const exportButtonRef = useRef<HTMLButtonElement>(null);
   const newDocumentButtonRef = useRef<HTMLButtonElement>(null);
   const brandButtonRef = useRef<HTMLButtonElement>(null);
   const supportButtonRef = useRef<HTMLButtonElement>(null);
@@ -1649,6 +1771,7 @@ export default function Home() {
   const mermaidReturnFocusRef = useRef<HTMLElement | null>(null);
   const saveFileNameRef = useRef<HTMLInputElement>(null);
   const saveModalRef = useRef<HTMLDivElement>(null);
+  const pendingExportRef = useRef<PendingExport | null>(null);
   const openedDocumentRef = useRef(false);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const themeCommitTimerRef = useRef<number | null>(null);
@@ -3845,6 +3968,19 @@ export default function Home() {
   }, [saveModalOpen, syncLayer]);
 
   useEffect(() => {
+    syncLayer("export", exportModalOpen);
+  }, [exportModalOpen, syncLayer]);
+
+  useEffect(() => {
+    document.documentElement.toggleAttribute(
+      "data-raavi-pdf-export",
+      pdfExportActive,
+    );
+    return () =>
+      document.documentElement.removeAttribute("data-raavi-pdf-export");
+  }, [pdfExportActive]);
+
+  useEffect(() => {
     syncLayer("image", imageModalOpen);
   }, [imageModalOpen, syncLayer]);
 
@@ -3894,6 +4030,17 @@ export default function Home() {
         background: var(--comment-highlight-bg);
         text-decoration: underline var(--proof-blue-dark) 2px;
         text-underline-offset: 3px;
+      }
+      @media print {
+        ::highlight(raavi-highlight),
+        ::highlight(raavi-comment),
+        ::highlight(raavi-margin),
+        ::highlight(raavi-active),
+        ::highlight(raavi-selection) {
+          color: inherit;
+          background: transparent;
+          text-decoration: none;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -4649,6 +4796,199 @@ export default function Home() {
     effectiveSaveState,
     openSaveFileModal,
   ]);
+
+  const resetExportDialog = useCallback(() => {
+    pendingExportRef.current = null;
+    setExportModalOpen(false);
+    setExportStatus("idle");
+    setExportProgressLabel("");
+    setExportWarnings([]);
+    setExportDiagramConfirmed(false);
+    setExportError("");
+    setPdfExportActive(false);
+  }, []);
+
+  const closeExportDialog = useCallback(() => {
+    if (exportStatus === "preparing" || exportStatus === "saving") return;
+    resetExportDialog();
+  }, [exportStatus, resetExportDialog]);
+
+  const openExportDialog = useCallback(() => {
+    pendingExportRef.current = null;
+    setExportStatus("idle");
+    setExportProgressLabel("");
+    setExportWarnings([]);
+    setExportDiagramConfirmed(false);
+    setExportError("");
+    setPdfExportActive(false);
+    setMobileHeaderMenuOpen(false);
+    setExportModalOpen(true);
+  }, []);
+
+  const commitPreparedExport = useCallback(async () => {
+    const pending = pendingExportRef.current;
+    if (!pending) return;
+    if (pending.requiresDiagramConfirmation && !exportDiagramConfirmed) return;
+    let cleanupPrintDocument: (() => void) | undefined;
+    setExportStatus("saving");
+    setExportError("");
+    setExportProgressLabel(
+      pending.format === "word"
+        ? "در حال تحویل فایل به دستگاه…"
+        : "در حال صفحه‌بندی A4…",
+    );
+
+    try {
+      const desktop = window.raaviDesktop;
+      if (pending.format === "word") {
+        if (!pending.bytes) throw new Error("WORD_EXPORT_EMPTY");
+        if (desktop) {
+          const result = await desktop.saveWordExport(
+            pending.fileName,
+            new Uint8Array(pending.bytes),
+          );
+          if (!result.saved) {
+            setExportStatus("idle");
+            setExportProgressLabel("");
+            return;
+          }
+        } else {
+          downloadExport(pending.bytes, pending.fileName);
+        }
+        resetExportDialog();
+        showNotice(`فایل «${pending.fileName}» ساخته شد.`);
+        return;
+      }
+
+      const stagedPrintDocument = await stagePrintDocument(
+        previewArticleRef.current,
+        pending.fileName,
+      );
+      cleanupPrintDocument = stagedPrintDocument.cleanup;
+      await waitForNextPaint();
+      if (desktop) {
+        const result = await desktop.exportPdf(pending.fileName);
+        if (!result.saved) {
+          pendingExportRef.current = null;
+          setExportStatus("idle");
+          setExportProgressLabel("");
+          setPdfExportActive(false);
+          return;
+        }
+        resetExportDialog();
+        showNotice(`فایل «${pending.fileName}» ساخته شد.`);
+      } else {
+        window.print();
+        resetExportDialog();
+        showNotice("پنجره‌ی چاپ باز شد؛ مقصد را روی «Save as PDF» بگذارید.");
+      }
+    } catch {
+      setPdfExportActive(false);
+      setExportStatus("error");
+      setExportProgressLabel("");
+      setExportError(
+        pending.format === "word"
+          ? "ساخت یا ذخیره‌ی فایل Word انجام نشد. دوباره تلاش کنید."
+          : "ساخت PDF انجام نشد. مسیر ذخیره و دسترسی برنامه را بررسی کنید.",
+      );
+    } finally {
+      cleanupPrintDocument?.();
+    }
+  }, [exportDiagramConfirmed, resetExportDialog, showNotice]);
+
+  const startExport = useCallback(async () => {
+    const nextName = exportNameForFormat(fileName, exportFormat);
+    pendingExportRef.current = null;
+    setExportStatus("preparing");
+    setExportWarnings([]);
+    setExportDiagramConfirmed(false);
+    setExportError("");
+
+    try {
+      const warnings: ExportDialogWarning[] = [];
+      if (annotations.length > 0) {
+        warnings.push({
+          kind: "unsupported",
+          message: `${annotations.length.toLocaleString("fa-IR")} یادداشت و نشانه‌ی نمونه‌خوانی وارد نسخه‌ی تحویلی نمی‌شود.`,
+        });
+      }
+
+      if (exportFormat === "word") {
+        setExportProgressLabel("در حال خواندن ساختار نوشته…");
+        const { createWordExport } = await import("./export/word");
+        const result = await createWordExport({
+          markdown: content,
+          fileName: nextName,
+          imageAssets,
+          onProgress: (stage, completed, total) => {
+            const ratio = total > 0
+              ? ` (${completed.toLocaleString("fa-IR")} از ${total.toLocaleString("fa-IR")})`
+              : "";
+            const labels = {
+              reading: "در حال خواندن ساختار نوشته",
+              diagrams: "در حال آماده‌سازی نمودارها",
+              images: "در حال آماده‌سازی تصویرها",
+              document: "در حال ساخت سند قابل‌ویرایش",
+            } as const;
+            setExportProgressLabel(`${labels[stage]}${ratio}…`);
+          },
+        });
+        warnings.push(...result.warnings);
+        pendingExportRef.current = {
+          format: "word",
+          fileName: nextName,
+          bytes: result.bytes,
+        };
+      } else {
+        setPdfExportActive(true);
+        setExportProgressLabel("در حال آماده‌سازی قلم‌ها، تصاویر و نمودارها…");
+        await waitForNextPaint();
+        warnings.push(...(await inspectPrintablePreview(previewArticleRef.current)));
+        pendingExportRef.current = { format: "pdf", fileName: nextName };
+      }
+
+      const uniqueWarnings = warnings.filter(
+        (warning, index, all) =>
+          all.findIndex((candidate) => candidate.message === warning.message) ===
+          index,
+      );
+      const requiresDiagramConfirmation = uniqueWarnings.some(
+        (warning) => warning.kind === "diagram",
+      );
+      if (pendingExportRef.current) {
+        pendingExportRef.current.requiresDiagramConfirmation =
+          requiresDiagramConfirmation;
+      }
+      if (uniqueWarnings.length > 0) {
+        setExportWarnings(uniqueWarnings);
+        setExportStatus("review");
+        setExportProgressLabel("");
+        return;
+      }
+      await commitPreparedExport();
+    } catch {
+      pendingExportRef.current = null;
+      setPdfExportActive(false);
+      setExportStatus("error");
+      setExportProgressLabel("");
+      setExportError(
+        exportFormat === "word"
+          ? "ساخت فایل Word کامل نشد؛ نمودارها و تصاویر سند را بررسی و دوباره تلاش کنید."
+          : "پیش‌نمایش چاپ آماده نشد؛ دوباره تلاش کنید.",
+      );
+    }
+  }, [annotations, commitPreparedExport, content, exportFormat, fileName, imageAssets]);
+
+  const changeExportFormat = useCallback((format: ExportFormat) => {
+    pendingExportRef.current = null;
+    setExportFormat(format);
+    setExportStatus("idle");
+    setExportWarnings([]);
+    setExportDiagramConfirmed(false);
+    setExportError("");
+    setExportProgressLabel("");
+    setPdfExportActive(false);
+  }, []);
 
   const openNewDocumentModal = useCallback(() => {
     setNewDocumentError("");
@@ -5991,6 +6331,10 @@ export default function Home() {
       setSaveModalOpen(false);
       return;
     }
+    if (topLayer === "export") {
+      closeExportDialog();
+      return;
+    }
     if (topLayer === "image") {
       setImageModalOpen(false);
       return;
@@ -6214,10 +6558,11 @@ export default function Home() {
             >
               <MermaidDiagram
                 block={block}
-                theme={themeMode}
+                theme={pdfExportActive ? "light" : themeMode}
                 onEdit={openMermaidStudio}
                 onFullscreenChange={handleDiagramFullscreenChange}
                 readingMode={readingMode}
+                exporting={pdfExportActive}
               />
             </Suspense>
           );
@@ -6325,7 +6670,12 @@ export default function Home() {
       openMermaidStudio,
       readingMode,
       themeMode,
+      pdfExportActive,
     ],
+  );
+  const previewHasFrontmatter = useMemo(
+    () => extractWordFrontmatter(content).markdown !== content,
+    [content],
   );
   const renderedMarkdownPreview = useMemo(
     () => (
@@ -6438,6 +6788,12 @@ export default function Home() {
     isCompactLayout,
   );
   useBackLayer(
+    "modal:export",
+    exportModalOpen,
+    closeExportDialog,
+    isCompactLayout,
+  );
+  useBackLayer(
     "modal:image",
     imageModalOpen,
     () => setImageModalOpen(false),
@@ -6518,6 +6874,7 @@ export default function Home() {
           supportModalOpen ||
           newDocumentModalOpen ||
           saveModalOpen ||
+          exportModalOpen ||
           shortcutHelpOpen ||
           mobileHeaderMenuOpen ||
           (libraryOpen && libraryIsModal)
@@ -6710,6 +7067,18 @@ export default function Home() {
             <span>ذخیره</span>
           </button>
           <button
+            ref={exportButtonRef}
+            className="button button--quiet topbar-action--export"
+            type="button"
+            onClick={openExportDialog}
+            aria-haspopup="dialog"
+            aria-expanded={exportModalOpen}
+            title="ساخت نسخه‌ی Word یا PDF"
+          >
+            <FileDown size={18} aria-hidden="true" />
+            <span>خروجی</span>
+          </button>
+          <button
             className={`button button--quiet topbar-action--reading ${
               readingMode ? "is-active" : ""
             }`}
@@ -6830,6 +7199,13 @@ export default function Home() {
               <small>خواندن بدون مزاحمت</small>
             </span>
           </button>
+          <button type="button" onClick={openExportDialog}>
+            <FileDown size={20} aria-hidden="true" />
+            <span>
+              <strong>خروجی Word یا PDF</strong>
+              <small>نسخه‌ی آماده‌ی تحویل</small>
+            </span>
+          </button>
           <button
             type="button"
             disabled={Boolean(themeTransition)}
@@ -6889,6 +7265,7 @@ export default function Home() {
           supportModalOpen ||
           newDocumentModalOpen ||
           saveModalOpen ||
+          exportModalOpen ||
           shortcutHelpOpen ||
           mobileHeaderMenuOpen ||
           (libraryOpen && libraryIsModal)
@@ -6972,6 +7349,7 @@ export default function Home() {
             supportModalOpen ||
             newDocumentModalOpen ||
             saveModalOpen ||
+            exportModalOpen ||
             shortcutHelpOpen ||
             mobileHeaderMenuOpen ||
             (libraryOpen && libraryIsModal)
@@ -6996,6 +7374,7 @@ export default function Home() {
           supportModalOpen ||
           newDocumentModalOpen ||
           saveModalOpen ||
+          exportModalOpen ||
           shortcutHelpOpen ||
           mobileHeaderMenuOpen
             ? true
@@ -8174,6 +8553,7 @@ export default function Home() {
                 className={`markdown-body ${
                   hoveredAnnotation ? "has-annotation-hover" : ""
                 }`}
+                data-raavi-frontmatter={previewHasFrontmatter ? "" : undefined}
                 dir={documentTextDirection}
                 tabIndex={-1}
                 aria-label="متن پیش‌نمایش؛ برای جابه‌جایی سریع از میان‌بر تمرکز پیش‌نمایش استفاده کنید"
@@ -8829,6 +9209,27 @@ export default function Home() {
           />
         </Suspense>
       )}
+
+      <ExportDialog
+        open={exportModalOpen}
+        isTopLayer={topLayer === "export"}
+        returnFocusRef={
+          isCompactLayout ? mobileHeaderMenuButtonRef : exportButtonRef
+        }
+        format={exportFormat}
+        fileName={exportNameForFormat(fileName, exportFormat)}
+        status={exportStatus}
+        progressLabel={exportProgressLabel}
+        warnings={exportWarnings}
+        diagramConfirmed={exportDiagramConfirmed}
+        error={exportError}
+        directPdf={commandEnvironment.surface === "electron"}
+        onFormatChange={changeExportFormat}
+        onClose={closeExportDialog}
+        onStart={() => void startExport()}
+        onContinue={() => void commitPreparedExport()}
+        onDiagramConfirmationChange={setExportDiagramConfirmed}
+      />
 
       <AccessibleModal
         open={imageModalOpen}

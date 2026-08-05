@@ -13,6 +13,7 @@ import {
 
 export type ModalLayerId =
   | "about"
+  | "export"
   | "image"
   | "library"
   | "mermaid"

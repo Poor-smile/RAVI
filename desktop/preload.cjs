@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("document:save-ravi", { fileName, document }),
     saveCurrentDocument: (filePath, document) =>
       ipcRenderer.invoke("document:save-current", { filePath, document }),
+    saveWordExport: (fileName, bytes) =>
+      ipcRenderer.invoke("export:save-word", { fileName, bytes }),
+    exportPdf: (fileName) => ipcRenderer.invoke("export:pdf", { fileName }),
     rendererReady: () => ipcRenderer.send("renderer:ready"),
     onOpenMarkdownFile: (callback) => {
       const listener = (_event, document) => callback(document);

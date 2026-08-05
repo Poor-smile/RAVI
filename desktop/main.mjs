@@ -17,6 +17,7 @@ import {
   readLibraryDocument,
   scanMarkdownFolder,
 } from "./server.mjs";
+import { desktopPdfOptions } from "./pdf-options.mjs";
 
 const desktopDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(desktopDirectory, "..");
@@ -26,6 +27,7 @@ const MAX_RECENT_FILES = 20;
 const MAX_HISTORY_DOCUMENTS = 50;
 const MAX_DOCUMENT_VERSIONS = 30;
 const MAX_RENDERER_STATE_BYTES = 48 * 1024 * 1024;
+const MAX_EXPORT_BYTES = 96 * 1024 * 1024;
 const isSmokeTest =
   process.argv.includes("--smoke-test") || process.env.RAAVI_SMOKE_TEST === "1";
 const initialDocumentPath = markdownPathFromArguments(process.argv);
@@ -55,6 +57,15 @@ function safeRaaviName(fileName) {
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
     .trim();
   return /\.ravi$/i.test(cleaned) ? cleaned : `${cleaned}.ravi`;
+}
+
+function safeExportName(fileName, extension, fallback) {
+  const cleaned = String(fileName || fallback)
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .trim();
+  return cleaned.toLocaleLowerCase("en-US").endsWith(extension)
+    ? cleaned
+    : `${cleaned}${extension}`;
 }
 
 function libraryStatePath() {
@@ -605,6 +616,58 @@ async function saveCurrentDocument(_event, payload) {
   return { saved: true, filePath, documentType };
 }
 
+async function saveWordExport(event, payload) {
+  const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  const fileName = safeExportName(
+    payload?.fileName,
+    ".docx",
+    "نوشته-راوی.docx",
+  );
+  const bytes = Buffer.from(payload?.bytes ?? []);
+  if (
+    bytes.length < 4 ||
+    bytes.length > MAX_EXPORT_BYTES ||
+    bytes[0] !== 0x50 ||
+    bytes[1] !== 0x4b
+  ) {
+    throw new Error("Word export payload is invalid.");
+  }
+  const result = await dialog.showSaveDialog(owner, {
+    title: "ذخیره خروجی Word",
+    buttonLabel: "ذخیره فایل",
+    defaultPath: path.join(app.getPath("documents"), fileName),
+    filters: [{ name: "Word", extensions: ["docx"] }],
+  });
+  if (result.canceled || !result.filePath) return { saved: false };
+  const filePath = /\.docx$/i.test(result.filePath)
+    ? result.filePath
+    : `${result.filePath}.docx`;
+  await writeFile(filePath, bytes);
+  return { saved: true, filePath };
+}
+
+async function exportPdf(event, payload) {
+  const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  const fileName = safeExportName(
+    payload?.fileName,
+    ".pdf",
+    "نوشته-راوی.pdf",
+  );
+  const result = await dialog.showSaveDialog(owner, {
+    title: "ذخیره خروجی PDF",
+    buttonLabel: "ذخیره فایل",
+    defaultPath: path.join(app.getPath("documents"), fileName),
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  if (result.canceled || !result.filePath) return { saved: false };
+  const filePath = /\.pdf$/i.test(result.filePath)
+    ? result.filePath
+    : `${result.filePath}.pdf`;
+  const bytes = await event.sender.printToPDF(desktopPdfOptions());
+  await writeFile(filePath, bytes);
+  return { saved: true, filePath };
+}
+
 function registerDesktopHandlers() {
   ipcMain.handle("renderer-state:get", getRendererState);
   ipcMain.handle("renderer-state:save", saveRendererState);
@@ -625,6 +688,8 @@ function registerDesktopHandlers() {
   ipcMain.handle("document:save-markdown", saveMarkdown);
   ipcMain.handle("document:save-ravi", saveRaavi);
   ipcMain.handle("document:save-current", saveCurrentDocument);
+  ipcMain.handle("export:save-word", saveWordExport);
+  ipcMain.handle("export:pdf", exportPdf);
   ipcMain.on("renderer:ready", (event) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;
     rendererReady = true;

@@ -61,6 +61,11 @@ const desktopApi = Object.freeze<RaaviDesktopAPI>({
     invoke("save_raavi", { fileName, document }),
   saveCurrentDocument: (filePath, document) =>
     invoke("save_current_document", { filePath, document }),
+  saveWordExport: (fileName, bytes) =>
+    invoke("save_word_export", bytes, {
+      headers: { "x-raavi-file-name": encodeURIComponent(fileName) },
+    }),
+  exportPdf: (fileName) => invoke("export_pdf", { fileName }),
   rendererReady: () => {
     void openDocumentListenerReady.then(() => invoke("renderer_ready"));
   },

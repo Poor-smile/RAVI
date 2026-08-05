@@ -1,16 +1,28 @@
+use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
-    sync::Mutex,
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Mutex, mpsc},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{
+    AppHandle, Emitter, Manager, State, WebviewWindow,
+    ipc::{InvokeBody, Request},
+};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use walkdir::WalkDir;
+
+#[cfg(windows)]
+use webview2_com::{
+    Microsoft::Web::WebView2::Win32::{ICoreWebView2_7, ICoreWebView2Environment6},
+    PrintToPdfCompletedHandler,
+};
+#[cfg(windows)]
+use windows::core::{Interface, PCWSTR};
 
 const MAX_LIBRARY_FILES: usize = 20_000;
 const MAX_MARKDOWN_SIZE: u64 = 2 * 1024 * 1024;
@@ -18,6 +30,7 @@ const MAX_RAVI_SIZE: u64 = 64 * 1024 * 1024;
 const MAX_RECENT_FILES: usize = 20;
 const MAX_HISTORY_DOCUMENTS: usize = 50;
 const MAX_DOCUMENT_VERSIONS: usize = 30;
+const MAX_EXPORT_SIZE: usize = 96 * 1024 * 1024;
 
 #[derive(Default)]
 struct AccessState {
@@ -120,6 +133,23 @@ struct SaveResult {
     markdown_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     document_type: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportSaveResult {
+    saved: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_path: Option<String>,
+}
+
+impl ExportSaveResult {
+    fn canceled() -> Self {
+        Self {
+            saved: false,
+            file_path: None,
+        }
+    }
 }
 
 impl SaveResult {
@@ -531,6 +561,175 @@ fn dialog_path(value: tauri_plugin_dialog::FilePath) -> Result<PathBuf, String> 
     value.into_path().map_err(|error| error.to_string())
 }
 
+fn export_name_from_request(
+    request: &Request<'_>,
+    fallback: &str,
+    extension: &str,
+) -> Result<String, String> {
+    let encoded = request
+        .headers()
+        .get("x-raavi-file-name")
+        .ok_or_else(|| "Export file name is missing.".to_owned())?
+        .to_str()
+        .map_err(|_| "Export file name is invalid.".to_owned())?;
+    let decoded = percent_decode_str(encoded)
+        .decode_utf8()
+        .map_err(|_| "Export file name is invalid.".to_owned())?;
+    Ok(safe_file_name(&decoded, fallback, extension))
+}
+
+#[tauri::command]
+fn save_word_export(app: AppHandle, request: Request<'_>) -> Result<ExportSaveResult, String> {
+    let name = export_name_from_request(&request, "نوشته-راوی.docx", ".docx")?;
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Word export payload must be binary.".to_owned());
+    };
+    if bytes.len() < 2 || bytes.len() > MAX_EXPORT_SIZE {
+        return Err("Word export payload is empty or too large.".to_owned());
+    }
+    if bytes[0] != b'P' || bytes[1] != b'K' {
+        return Err("Word export payload is not a valid DOCX archive.".to_owned());
+    }
+
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title("ذخیره خروجی Word")
+        .set_file_name(name)
+        .add_filter("Word", &["docx"]);
+    if let Ok(directory) = app.path().document_dir() {
+        dialog = dialog.set_directory(directory);
+    }
+    let Some(selected) = dialog.blocking_save_file() else {
+        return Ok(ExportSaveResult::canceled());
+    };
+    let file = ensure_extension(dialog_path(selected)?, &["docx"], ".docx");
+    fs::write(&file, bytes).map_err(|error| error.to_string())?;
+    Ok(ExportSaveResult {
+        saved: true,
+        file_path: Some(path_text(&file)),
+    })
+}
+
+#[cfg(windows)]
+async fn print_webview_to_pdf(window: WebviewWindow, file: PathBuf) -> Result<(), String> {
+    let (sender, receiver) = mpsc::channel::<Result<(), String>>();
+    let file_text = path_text(&file);
+    window
+        .with_webview(move |webview| {
+            let immediate_sender = sender.clone();
+            let start_result = (|| -> Result<(), String> {
+                let wide_path: Vec<u16> =
+                    file_text.encode_utf16().chain(std::iter::once(0)).collect();
+                unsafe {
+                    let core = webview
+                        .controller()
+                        .CoreWebView2()
+                        .map_err(|error| error.to_string())?
+                        .cast::<ICoreWebView2_7>()
+                        .map_err(|error| error.to_string())?;
+                    let environment = webview
+                        .environment()
+                        .cast::<ICoreWebView2Environment6>()
+                        .map_err(|error| error.to_string())?;
+                    let settings = environment
+                        .CreatePrintSettings()
+                        .map_err(|error| error.to_string())?;
+                    settings
+                        .SetPageWidth(8.267_716_535)
+                        .map_err(|error| error.to_string())?;
+                    settings
+                        .SetPageHeight(11.692_913_386)
+                        .map_err(|error| error.to_string())?;
+                    settings
+                        .SetMarginTop(0.55)
+                        .map_err(|error| error.to_string())?;
+                    settings
+                        .SetMarginBottom(0.55)
+                        .map_err(|error| error.to_string())?;
+                    settings
+                        .SetMarginLeft(0.55)
+                        .map_err(|error| error.to_string())?;
+                    settings
+                        .SetMarginRight(0.55)
+                        .map_err(|error| error.to_string())?;
+                    settings
+                        .SetShouldPrintBackgrounds(true)
+                        .map_err(|error| error.to_string())?;
+                    settings
+                        .SetShouldPrintHeaderAndFooter(false)
+                        .map_err(|error| error.to_string())?;
+
+                    let callback_sender = sender.clone();
+                    let handler = PrintToPdfCompletedHandler::create(Box::new(
+                        move |error_code, succeeded| {
+                            let outcome = if error_code.is_ok() && succeeded {
+                                Ok(())
+                            } else {
+                                Err(format!(
+                                    "WebView2 could not create the PDF ({error_code:?})."
+                                ))
+                            };
+                            let _ = callback_sender.send(outcome);
+                            Ok(())
+                        },
+                    ));
+                    core.PrintToPdf(PCWSTR(wide_path.as_ptr()), &settings, &handler)
+                        .map_err(|error| error.to_string())?;
+                }
+                Ok(())
+            })();
+
+            if let Err(error) = start_result {
+                let _ = immediate_sender.send(Err(error));
+            }
+        })
+        .map_err(|error| error.to_string())?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        receiver
+            .recv_timeout(Duration::from_secs(60))
+            .map_err(|_| "PDF export timed out.".to_owned())?
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[cfg(not(windows))]
+async fn print_webview_to_pdf(_window: WebviewWindow, _file: PathBuf) -> Result<(), String> {
+    Err("Direct PDF export is only available on Windows.".to_owned())
+}
+
+#[tauri::command]
+async fn export_pdf(
+    app: AppHandle,
+    window: WebviewWindow,
+    file_name: String,
+) -> Result<ExportSaveResult, String> {
+    let name = safe_file_name(&file_name, "نوشته-راوی.pdf", ".pdf");
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title("ذخیره خروجی PDF")
+        .set_file_name(name)
+        .add_filter("PDF", &["pdf"]);
+    if let Ok(directory) = app.path().document_dir() {
+        dialog = dialog.set_directory(directory);
+    }
+    let Some(selected) = dialog.blocking_save_file() else {
+        return Ok(ExportSaveResult::canceled());
+    };
+    let file = ensure_extension(dialog_path(selected)?, &["pdf"], ".pdf");
+    if let Err(error) = print_webview_to_pdf(window, file.clone()).await {
+        let _ = fs::remove_file(&file);
+        return Err(error);
+    }
+    Ok(ExportSaveResult {
+        saved: true,
+        file_path: Some(path_text(&file)),
+    })
+}
+
 #[tauri::command]
 async fn get_library_state(
     app: AppHandle,
@@ -916,6 +1115,8 @@ pub fn run() {
             save_markdown,
             save_raavi,
             save_current_document,
+            save_word_export,
+            export_pdf,
             renderer_ready,
         ])
         .run(tauri::generate_context!())

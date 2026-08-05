@@ -11,6 +11,23 @@ import {
   readMarkdownFile,
   scanMarkdownFolder,
 } from "../desktop/server.mjs";
+import { desktopPdfOptions } from "../desktop/pdf-options.mjs";
+
+test("desktop PDF output explicitly disables browser headers and footers", () => {
+  const options = desktopPdfOptions();
+
+  assert.equal(options.displayHeaderFooter, false);
+  assert.equal(options.landscape, false);
+  assert.equal(options.pageSize, "A4");
+  assert.equal(options.printBackground, true);
+  assert.equal(options.preferCSSPageSize, true);
+  assert.deepEqual(options.margins, {
+    top: 0.55,
+    bottom: 0.55,
+    left: 0.55,
+    right: 0.55,
+  });
+});
 
 test("desktop activation recognizes Markdown and Raavi file arguments", () => {
   assert.equal(
