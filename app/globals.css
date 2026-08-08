@@ -6495,6 +6495,10 @@ html.reading-layout-is-changing .work-pane {
   transform: none;
 }
 
+.workspace--reading.reading-outline-is-collapsed .preview-pane {
+  margin-inline: auto;
+}
+
 .workspace--reading .pane-header {
   position: sticky;
   z-index: 4;

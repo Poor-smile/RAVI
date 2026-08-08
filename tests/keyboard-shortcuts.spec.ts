@@ -1119,6 +1119,19 @@ test.describe("Electron keyboard integration", () => {
       );
       await readingOutlineToggle.click();
       await expect(readingOutline).toHaveCount(0);
+      await expect(workspace).toHaveClass(/reading-outline-is-collapsed/);
+      await expect
+        .poll(async () => {
+          const [workspaceBox, previewBox] = await Promise.all([
+            workspace.boundingBox(),
+            previewPane.boundingBox(),
+          ]);
+          if (!workspaceBox || !previewBox) return Number.POSITIVE_INFINITY;
+          const workspaceCenter = workspaceBox.x + workspaceBox.width / 2;
+          const previewCenter = previewBox.x + previewBox.width / 2;
+          return Math.abs(workspaceCenter - previewCenter);
+        })
+        .toBeLessThanOrEqual(1);
       const headerOutlineToggle = readingHeader.getByRole("button", {
         name: "بازکردن فهرست فصل‌ها",
         exact: true,

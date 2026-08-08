@@ -327,7 +327,7 @@ function detectDesktopInstallRecommendation(): DesktopInstallRecommendation {
       description:
         "برای اتصال پوشه‌ها و دسترسی سریع‌تر به نوشته‌ها، نسخه Windows را روی همین دستگاه نصب کنید.",
       actionLabel: "دانلود برای Windows",
-    href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.5.0-x64.exe",
+    href: "https://ravi.poorsmile.ir/downloads/Raavi-Setup-1.5.2-x64.exe",
     };
   }
 
