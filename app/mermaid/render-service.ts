@@ -104,7 +104,12 @@ function publishDebug(last?: {
   key: string;
   result: MermaidRenderResult;
 }) {
-  if (typeof window === "undefined" || process.env.NODE_ENV === "production") return;
+  if (
+    typeof window === "undefined" ||
+    (typeof process !== "undefined" && process.env.NODE_ENV === "production")
+  ) {
+    return;
+  }
   (window as unknown as Record<string, unknown>).__RAAVI_MERMAID_DEBUG__ = {
     cache: cache.stats(),
     restartCount: transport.restartCount,

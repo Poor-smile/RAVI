@@ -27,13 +27,11 @@
 
 `0C363E8F39D479F4B983A7C5DFA8B43D40DE3039B8F0FA98FBF7D168AA59BCA2`
 
-نسخهٔ Windows x64 در مسیر `downloads/Raavi-Setup-1.5.2-x64.exe` منتشر شده است. SHA256 این فایل:
+نسخهٔ رسمی Windows x64 با Electron و نصب‌کنندهٔ NSIS در مسیر `downloads/Raavi-Setup-2.0.0-x64.exe` منتشر شده است. SHA256 این فایل:
 
-`ED17DD92A39090364D1DA2DF77A3EA2488B980F7C852A55AC7911891D24EF059`
+`FD196BB7BC8978820EA402B4C7924076FCFE5D8A487C6F648FF8692356CD44E0`
 
-نسخهٔ قابل‌حمل Windows x64 در مسیر `downloads/Raavi-Portable-1.5.2-x64.exe` منتشر شده است. SHA256 این فایل:
-
-`CFB9638119E716731E575AF1711EC188CB03B61E1BCB5E49EFF4D0E0DE3C7528`
+Tauri و فایل Portable بخشی از مسیر انتشار Windows نسخهٔ ۲ نیستند.
 
 تا زمانی که خروجی رسمی آماده نشده، دکمهٔ macOS عمداً غیرفعال است. پس از آماده‌شدن فایل بعدی:
 

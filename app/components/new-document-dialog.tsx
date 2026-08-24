@@ -2,18 +2,16 @@
 
 import {
   AlertTriangle,
-  Check,
-  FileArchive,
   FilePlus2,
   FileText,
   FolderOpen,
   Save,
   X,
-} from "lucide-react";
+} from "@/app/icons/material-symbols";
 import { RefObject, useMemo, useRef, useState } from "react";
 import { AccessibleModal } from "./accessible-modal";
 
-export type NewDocumentFileType = "markdown" | "ravi";
+export type NewDocumentFileType = "markdown";
 
 export type NewDocumentSpec = {
   baseName: string;
@@ -51,7 +49,7 @@ export function validateNewDocumentName(value: string) {
 }
 
 function extensionForType(fileType: NewDocumentFileType) {
-  return fileType === "ravi" ? ".ravi" : ".md";
+  return fileType === "markdown" ? ".md" : ".md";
 }
 
 export function titleFromDocumentName(baseName: string) {
@@ -197,7 +195,7 @@ function NewDocumentDialogContent({
               onChange={(event) => {
                 setBaseName(
                   event.target.value.replace(
-                    /\.(?:md|markdown|ravi)$/iu,
+                    /\.(?:md|markdown)$/iu,
                     "",
                   ),
                 );
@@ -252,25 +250,8 @@ function NewDocumentDialogContent({
             <span>
               <strong>Markdown (.md)</strong>
               <small>
-                انتخاب سبک برای متن خالص؛ یادداشت‌ها و هایلایت‌ها داخل این
-                فایل ذخیره نمی‌شوند.
-              </small>
-            </span>
-          </label>
-          <label className={fileType === "ravi" ? "is-selected" : ""}>
-            <input
-              type="radio"
-              name="new-document-file-type"
-              value="ravi"
-              checked={fileType === "ravi"}
-              onChange={() => setFileType("ravi")}
-            />
-            <FileArchive size={21} aria-hidden="true" />
-            <span>
-              <strong>سند راوی (.ravi)</strong>
-              <small>
-                مناسب اشتراک متن همراه با هایلایت، کامنت، حاشیه و تاریخچهٔ
-                نسخه‌ها.
+                متن، یادداشت‌ها و هایلایت‌ها در همین فایل استاندارد و قابل‌حمل
+                ذخیره می‌شوند.
               </small>
             </span>
           </label>
@@ -293,11 +274,7 @@ function NewDocumentDialogContent({
 
         <div className="new-document-result" aria-live="polite">
           <span className="new-document-result-icon" aria-hidden="true">
-            {fileType === "ravi" ? (
-              <FileArchive size={20} />
-            ) : (
-              <FileText size={20} />
-            )}
+            <FileText size={20} />
           </span>
           <span>
             <small>فایل آمادهٔ ساخت</small>
@@ -311,15 +288,6 @@ function NewDocumentDialogContent({
           </span>
         </div>
 
-        {fileType === "ravi" && (
-          <div className="new-document-ravi-note">
-            <Check size={17} aria-hidden="true" />
-            <span>
-              در برنامهٔ ویندوز، نسخهٔ خوانای Markdown نیز با همین نام کنار
-              فایل راوی ساخته می‌شود.
-            </span>
-          </div>
-        )}
 
         {creationError && (
           <p className="new-document-creation-error" role="alert">

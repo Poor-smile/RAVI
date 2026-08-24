@@ -13,6 +13,54 @@ import { recordMermaidMeasure } from "./performance";
 
 export type MermaidTheme = "light" | "dark";
 
+// Keep generated SVGs inside the same Foundation palette as the surrounding
+// document. Mermaid resolves these values while rendering, so CSS custom
+// properties cannot be used inside the isolated SVG output.
+export const MERMAID_THEME_VARIABLES = {
+  light: {
+    background: "#fcfdf9",
+    primaryColor: "#fcfdf9",
+    primaryTextColor: "#171b18",
+    primaryBorderColor: "#cbd0c6",
+    secondaryColor: "#e9efff",
+    secondaryTextColor: "#1742bd",
+    secondaryBorderColor: "#2557e5",
+    tertiaryColor: "#f5f6f0",
+    tertiaryTextColor: "#171b18",
+    tertiaryBorderColor: "#cbd0c6",
+    lineColor: "#50584f",
+    textColor: "#171b18",
+    titleColor: "#171b18",
+    edgeLabelBackground: "#fcfdf9",
+    clusterBkg: "#f5f6f0",
+    clusterBorder: "#cbd0c6",
+    noteBkgColor: "#f5f6f0",
+    noteTextColor: "#171b18",
+    noteBorderColor: "#cbd0c6",
+  },
+  dark: {
+    background: "#181e1a",
+    primaryColor: "#101612",
+    primaryTextColor: "#f2f5f1",
+    primaryBorderColor: "#101612",
+    secondaryColor: "#202e50",
+    secondaryTextColor: "#adc3ff",
+    secondaryBorderColor: "#86a8ff",
+    tertiaryColor: "#141a16",
+    tertiaryTextColor: "#f2f5f1",
+    tertiaryBorderColor: "#354039",
+    lineColor: "#f0f4ef",
+    textColor: "#f2f5f1",
+    titleColor: "#f2f5f1",
+    edgeLabelBackground: "#181e1a",
+    clusterBkg: "#141a16",
+    clusterBorder: "#354039",
+    noteBkgColor: "#141a16",
+    noteTextColor: "#f2f5f1",
+    noteBorderColor: "#354039",
+  },
+} as const;
+
 export type MermaidRenderError = {
   message: string;
   technical: string;
@@ -303,7 +351,7 @@ export function sanitizeMermaidSvg(
   root.removeAttribute("width");
   root.setAttribute(
     "style",
-    "max-width:100%;height:auto;font-family:IRANSansX,IRANSans,Vazirmatn,Tahoma,Arial,sans-serif;",
+    "width:100%;height:100%;font-family:IRANSansX,IRANSans,Vazirmatn,Tahoma,Arial,sans-serif;",
   );
   return new XMLSerializer().serializeToString(root);
 }
@@ -336,7 +384,8 @@ export async function renderMermaidInCurrentContext(
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: "strict",
-    theme: theme === "dark" ? "dark" : "default",
+    theme: "base",
+    themeVariables: MERMAID_THEME_VARIABLES[theme],
     fontFamily: "IRANSansX, IRANSans, Vazirmatn, Tahoma, Arial, sans-serif",
     htmlLabels: false,
     suppressErrorRendering: true,

@@ -97,17 +97,23 @@ async function verifyEveryDiagram(
       });
     }
     await expect
-      .poll(() => surface.evaluate((image) => ({
-        complete: image.complete,
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      })))
+      .poll(() => surface.evaluate((image) => {
+        const bitmap = image as HTMLImageElement;
+        return {
+          complete: bitmap.complete,
+          width: bitmap.naturalWidth,
+          height: bitmap.naturalHeight,
+        };
+      }))
       .toMatchObject({ complete: true });
-    const dimensions = await surface.evaluate((image) => ({
-      width: image.naturalWidth,
-      height: image.naturalHeight,
-      renderKey: image.dataset.mermaidRenderKey ?? "",
-    }));
+    const dimensions = await surface.evaluate((image) => {
+      const bitmap = image as HTMLImageElement;
+      return {
+        width: bitmap.naturalWidth,
+        height: bitmap.naturalHeight,
+        renderKey: bitmap.dataset.mermaidRenderKey ?? "",
+      };
+    });
     expect(dimensions.width, `diagram ${index + 1} width`).toBeGreaterThan(0);
     expect(dimensions.height, `diagram ${index + 1} height`).toBeGreaterThan(0);
 
@@ -115,7 +121,7 @@ async function verifyEveryDiagram(
     for (let attempt = 0; attempt < 12 && !svg; attempt += 1) {
       svg = await surface.evaluate(async (image) => {
         try {
-          const response = await fetch(image.src);
+          const response = await fetch((image as HTMLImageElement).src);
           return response.ok ? response.text() : "";
         } catch {
           return "";
@@ -190,11 +196,14 @@ test("renders the ultimate Persian stress document in light and dark themes", as
     await expect(figures).toHaveCount(EXPECTED_DIAGRAMS, { timeout: 20_000 });
     expect(await page.locator(".markdown-body pre code.language-mermaid").count()).toBe(0);
 
-    const themeToggle = page.locator(".theme-toggle");
-    if ((await themeToggle.getAttribute("aria-label")) === "فعال‌کردن تم روشن") {
-      await themeToggle.evaluate((button: HTMLButtonElement) => button.click());
+    const documentRoot = page.locator("html");
+    const toggleTheme = async () => {
+      await page.keyboard.press("Alt+T");
+    };
+    if ((await documentRoot.getAttribute("data-theme")) === "dark") {
+      await toggleTheme();
     }
-    await expect(themeToggle).toHaveAttribute("aria-label", "فعال‌کردن تم تاریک");
+    await expect(documentRoot).toHaveAttribute("data-theme", "light");
     const light = await verifyEveryDiagram(page, "light");
 
     const fullscreenFigure = figures.nth(1);
@@ -207,8 +216,8 @@ test("renders the ultimate Persian stress document in light and dark themes", as
     await expect(fullscreenFigure.locator("img.mermaid-render-surface")).toBeVisible();
     await page.keyboard.press("Escape");
 
-    await themeToggle.evaluate((button: HTMLButtonElement) => button.click());
-    await expect(themeToggle).toHaveAttribute("aria-label", "فعال‌کردن تم روشن");
+    await toggleTheme();
+    await expect(documentRoot).toHaveAttribute("data-theme", "dark");
     await verifyEveryDiagram(page, "dark", light.renderKeys);
   } finally {
     await app?.close();

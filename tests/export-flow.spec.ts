@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { chromium } from "playwright";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -37,6 +37,14 @@ const ACCEPTANCE_COUNTS = {
 } as const;
 
 let server: Awaited<ReturnType<typeof createRaaviServer>>;
+
+async function openExportDialog(page: Page) {
+  // A newly opened document starts in Reading, whose compact chrome does not
+  // expose the desktop overflow menu. The export command remains available
+  // from the shared command registry on every document surface.
+  await page.keyboard.press("Control+Shift+KeyE");
+  await expect(page.getByRole("dialog", { name: "خروجی سند" })).toBeVisible();
+}
 
 test.beforeAll(async () => {
   server = await createRaaviServer({ host: "127.0.0.1", port: 0 });
@@ -83,7 +91,7 @@ test("preserves the ultimate Markdown acceptance counts in Word and PDF", async 
       { timeout: 60_000 },
     );
 
-    await page.locator(".topbar-action--export").click();
+    await openExportDialog(page);
     const exportButton = page.locator(
       ".export-modal-actions .button--primary",
     );
@@ -91,9 +99,10 @@ test("preserves the ultimate Markdown acceptance counts in Word and PDF", async 
     await expect(page.locator(".export-review")).toBeVisible({
       timeout: 120_000,
     });
-    await expect(
-      page.locator('input[name="confirm-diagram-loss"]'),
-    ).toHaveCount(0);
+    const reviewConfirmation = page.locator(
+      'input[name="confirm-export-review"]',
+    );
+    await reviewConfirmation.check();
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 120_000 }),
       exportButton.click(),
@@ -119,9 +128,15 @@ test("preserves the ultimate Markdown acceptance counts in Word and PDF", async 
           ?.length ?? 0,
     };
     expect(wordCounts).toEqual(ACCEPTANCE_COUNTS);
-    await expect(page.locator(".export-modal")).toBeHidden();
+    const successDialog = page.getByRole("dialog", { name: "خروجی آماده است" });
+    await expect(successDialog).toBeVisible();
+    await expect(
+      successDialog.getByRole("button", { name: "نمایش در پوشه" }),
+    ).toHaveCount(0);
+    await expect(successDialog.getByRole("button", { name: "تمام" })).toBeFocused();
+    await successDialog.getByRole("button", { name: "تمام" }).click();
 
-    await page.locator(".topbar-action--export").click();
+    await openExportDialog(page);
     await page.locator('input[value="pdf"]').check();
     await page.locator(".export-modal-actions .button--primary").click();
     await expect(page.locator("html")).toHaveAttribute(
@@ -150,7 +165,7 @@ test("downloads an editable Word file from the export dialog", async () => {
     const page = await browser.newPage();
     await page.goto(server.origin);
 
-    await page.locator(".topbar-action--export").click();
+    await openExportDialog(page);
     await expect(page.locator(".export-modal")).toBeVisible();
     await expect(page.locator('input[value="word"]')).toBeChecked();
 
@@ -164,7 +179,19 @@ test("downloads an editable Word file from the export dialog", async () => {
     const bytes = await readFile(downloadPath!);
     expect(Array.from(bytes.subarray(0, 2))).toEqual([0x50, 0x4b]);
     expect(bytes.byteLength).toBeGreaterThan(2_000);
-    await expect(page.locator(".export-modal")).toBeHidden();
+    await expect(
+      page.getByRole("dialog", { name: "خروجی آماده است" }),
+    ).toBeVisible();
+    const wordSuccessDialog = page.getByRole("dialog", {
+      name: "خروجی آماده است",
+    });
+    await expect(
+      wordSuccessDialog.getByRole("button", { name: "نمایش در پوشه" }),
+    ).toHaveCount(0);
+    await expect(
+      wordSuccessDialog.getByRole("button", { name: "تمام" }),
+    ).toBeFocused();
+    await wordSuccessDialog.getByRole("button", { name: "تمام" }).click();
   } finally {
     await browser.close();
   }
@@ -196,7 +223,12 @@ test("embeds Mermaid as padded SVG with an adaptive high-resolution PNG fallback
       page.locator(".mermaid-diagram .mermaid-render-surface"),
     ).toBeVisible({ timeout: 15_000 });
 
-    await page.locator(".topbar-action--export").click();
+    await openExportDialog(page);
+    await page.locator(".export-modal-actions .button--primary").click();
+    await expect(page.locator(".export-review")).toBeVisible({
+      timeout: 120_000,
+    });
+    await page.locator('input[name="confirm-export-review"]').check();
     const [download] = await Promise.all([
       page.waitForEvent("download"),
       page.locator(".export-modal-actions .button--primary").click(),
@@ -266,8 +298,16 @@ test("prepares the preview and opens the browser PDF print flow", async () => {
       };
     });
     await page.goto(server.origin);
+    await page
+      .locator('input[type="file"][accept*=".md"]')
+      .first()
+      .setInputFiles({
+        name: "print-preview.md",
+        mimeType: "text/markdown",
+        buffer: Buffer.from("# پیش‌نمایش چاپ\n\nمتن نمونه برای خروجی PDF."),
+      });
 
-    await page.locator(".topbar-action--export").click();
+    await openExportDialog(page);
     await page.locator('input[value="pdf"]').check();
     await page.locator(".export-modal-actions .button--primary").click();
 
@@ -321,11 +361,11 @@ test("requires explicit confirmation before exporting a failed Mermaid diagram",
       timeout: 15_000,
     });
 
-    await page.locator(".topbar-action--export").click();
+    await openExportDialog(page);
     await page.locator('input[value="pdf"]').check();
     await page.locator(".export-modal-actions .button--primary").click();
 
-    const confirmation = page.locator('input[name="confirm-diagram-loss"]');
+    const confirmation = page.locator('input[name="confirm-export-review"]');
     const continueButton = page.locator(
       ".export-modal-actions .button--primary",
     );

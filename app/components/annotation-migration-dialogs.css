@@ -1,0 +1,21 @@
+.annotation-system-dialog-backdrop { z-index: 1400; }
+.annotation-system-dialog {
+  width: min(440px, calc(100vw - 28px));
+  overflow: hidden;
+  color: var(--ink-900);
+  background: var(--paper-50);
+  border: 0;
+  border-radius: var(--radius-surface, 14px);
+  box-shadow: 0 30px 90px rgba(17, 25, 20, 0.24);
+  direction: rtl;
+}
+.annotation-system-dialog-body { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.annotation-system-dialog-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; }
+.annotation-system-dialog-icon.is-upgrade { color: var(--proof-blue); background: var(--proof-blue-soft); }
+.annotation-system-dialog-icon.is-error { color: var(--error); background: var(--error-soft); }
+.annotation-system-dialog h2 { margin: 0; font-size: 23px; line-height: 35px; }
+.annotation-system-dialog p { margin: 0; color: var(--ink-700); font-size: 18px; line-height: 36px; }
+.annotation-system-dialog footer { min-height: 68px; padding: 14px; display: flex; gap: 8px; border-top: 1px solid var(--rule); }
+.annotation-system-dialog footer button { min-height: 36px; padding: 0 14px; color: var(--ink-900); background: var(--paper-50); border: 0; border-radius: var(--radius-action); box-shadow: 0 6px 8px rgba(17, 25, 20, 0.14); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.annotation-system-dialog footer button.is-primary { color: var(--proof-blue); background: var(--proof-blue-soft); border: 1px solid var(--focus-ring); box-shadow: none; }
+.annotation-system-dialog footer button.is-danger { color: var(--error); background: var(--error-soft); border: 1px solid var(--error); box-shadow: none; }

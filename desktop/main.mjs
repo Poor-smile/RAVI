@@ -6,8 +6,8 @@ import {
   nativeTheme,
   shell,
 } from "electron";
-import { access, readFile, rename, writeFile } from "node:fs/promises";
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { access, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { readFileSync, renameSync, watch, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -18,13 +18,50 @@ import {
   scanMarkdownFolder,
 } from "./server.mjs";
 import { desktopPdfOptions } from "./pdf-options.mjs";
+import {
+  performLibraryMutation,
+  undoLibraryDelete,
+} from "./library-filesystem.mjs";
+import {
+  canRestoreDocumentAccess,
+  normalizedPathKey,
+} from "./document-access.mjs";
+import {
+  getCodexConnectionStatus,
+  runCodexPrompt,
+  runCodexPersianReview,
+  runCodexSmartAnnotations,
+  startCodexLogin,
+} from "./codex-cli.mjs";
 
 const desktopDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(desktopDirectory, "..");
 const allowedLibraryRoots = new Set();
 const allowedDocumentPaths = new Set();
+const allowedExportPaths = new Set();
+const libraryWatchers = new Map();
+const libraryWatchTimers = new Map();
+const libraryUndoRecords = new Map();
 const MAX_RECENT_FILES = 20;
 const MAX_HISTORY_DOCUMENTS = 50;
+let currentWindowTheme = "light";
+
+function windowIconPath(theme = currentWindowTheme) {
+  return path.join(
+    appRoot,
+    "build",
+    theme === "dark" ? "icon-dark.ico" : "icon.ico",
+  );
+}
+
+function applyWindowTheme(theme) {
+  currentWindowTheme = theme === "dark" ? "dark" : "light";
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.setIcon(windowIconPath());
+  mainWindow.setBackgroundColor(
+    currentWindowTheme === "dark" ? "#141A16" : "#E9E5DC",
+  );
+}
 const MAX_DOCUMENT_VERSIONS = 30;
 const MAX_RENDERER_STATE_BYTES = 48 * 1024 * 1024;
 const MAX_EXPORT_BYTES = 96 * 1024 * 1024;
@@ -41,8 +78,49 @@ let pendingDocumentRequest = initialDocumentPath
   ? { filePath: initialDocumentPath, openInReadingMode: true }
   : null;
 
-function normalizedPathKey(filePath) {
-  return path.resolve(filePath).toLocaleLowerCase("en-US");
+function notifyLibraryChanged(rootPath, reason = "external") {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("library:changed", {
+    rootPath,
+    reason,
+  });
+}
+
+function watchLibraryFolder(rootPath) {
+  const resolvedRoot = path.resolve(rootPath);
+  const key = normalizedPathKey(resolvedRoot);
+  if (libraryWatchers.has(key)) return;
+  try {
+    const watcher = watch(
+      resolvedRoot,
+      { recursive: process.platform === "win32" || process.platform === "darwin" },
+      () => {
+        const currentTimer = libraryWatchTimers.get(key);
+        if (currentTimer) clearTimeout(currentTimer);
+        libraryWatchTimers.set(
+          key,
+          setTimeout(() => {
+            libraryWatchTimers.delete(key);
+            notifyLibraryChanged(resolvedRoot);
+          }, 180),
+        );
+      },
+    );
+    watcher.on("error", () => {
+      watcher.close();
+      libraryWatchers.delete(key);
+    });
+    libraryWatchers.set(key, watcher);
+  } catch {
+    // Manual refresh remains available when recursive watching is unsupported.
+  }
+}
+
+function closeLibraryWatchers() {
+  for (const timer of libraryWatchTimers.values()) clearTimeout(timer);
+  libraryWatchTimers.clear();
+  for (const watcher of libraryWatchers.values()) watcher.close();
+  libraryWatchers.clear();
 }
 
 function safeMarkdownName(fileName) {
@@ -50,13 +128,6 @@ function safeMarkdownName(fileName) {
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
     .trim();
   return /\.(?:md|markdown)$/i.test(cleaned) ? cleaned : `${cleaned}.md`;
-}
-
-function safeRaaviName(fileName) {
-  const cleaned = String(fileName || "نوشته-راوی.ravi")
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
-    .trim();
-  return /\.ravi$/i.test(cleaned) ? cleaned : `${cleaned}.ravi`;
 }
 
 function safeExportName(fileName, extension, fallback) {
@@ -171,6 +242,26 @@ function saveRendererState(_event, snapshot) {
           readingPositions[key] = currentRecord;
         }
       }
+      // A synchronous beforeunload save can interleave while this queued write
+      // is awaiting the filesystem. Re-read immediately before serialization
+      // so an older renderer snapshot never overwrites a newer reading anchor.
+      const latestSnapshot = (await readRendererStateFile()) ?? {};
+      const latestPositions =
+        latestSnapshot.readingPositions &&
+        typeof latestSnapshot.readingPositions === "object" &&
+        !Array.isArray(latestSnapshot.readingPositions)
+          ? latestSnapshot.readingPositions
+          : {};
+      for (const [key, latestRecord] of Object.entries(latestPositions)) {
+        const candidate = readingPositions[key];
+        if (
+          !candidate ||
+          Number(latestRecord?.updatedAt ?? 0) >
+            Number(candidate?.updatedAt ?? 0)
+        ) {
+          readingPositions[key] = latestRecord;
+        }
+      }
       const serialized = JSON.stringify({ ...snapshot, readingPositions });
       if (Buffer.byteLength(serialized, "utf8") > MAX_RENDERER_STATE_BYTES) {
         throw new Error("Renderer state is too large.");
@@ -216,6 +307,23 @@ function saveRendererReadingPositions(_event, readingPositions) {
             Number(incomingRecord?.updatedAt ?? 0)
         ) {
           mergedPositions[key] = currentRecord;
+        }
+      }
+      const latestSnapshot = (await readRendererStateFile()) ?? {};
+      const latestPositions =
+        latestSnapshot.readingPositions &&
+        typeof latestSnapshot.readingPositions === "object" &&
+        !Array.isArray(latestSnapshot.readingPositions)
+          ? latestSnapshot.readingPositions
+          : {};
+      for (const [key, latestRecord] of Object.entries(latestPositions)) {
+        const candidate = mergedPositions[key];
+        if (
+          !candidate ||
+          Number(latestRecord?.updatedAt ?? 0) >
+            Number(candidate?.updatedAt ?? 0)
+        ) {
+          mergedPositions[key] = latestRecord;
         }
       }
       const serialized = JSON.stringify({
@@ -290,18 +398,41 @@ async function rememberLibraryFolder(rootPath) {
     ),
   ].slice(0, 30);
   await writeLibraryState(state);
+  watchLibraryFolder(rootPath);
+}
+
+async function forgetLibraryFolder(_event, rootPath) {
+  const resolvedRoot = path.resolve(String(rootPath));
+  const key = normalizedPathKey(resolvedRoot);
+  const state = await readLibraryState();
+  state.folders = state.folders.filter(
+    (folderPath) => normalizedPathKey(folderPath) !== key,
+  );
+  await writeLibraryState(state);
+
+  allowedLibraryRoots.delete(resolvedRoot);
+  allowedLibraryRoots.delete(key);
+  const timer = libraryWatchTimers.get(key);
+  if (timer) clearTimeout(timer);
+  libraryWatchTimers.delete(key);
+  libraryWatchers.get(key)?.close();
+  libraryWatchers.delete(key);
+
+  return getLibrarySnapshot();
 }
 
 async function recordRecent(filePath, documentType) {
   const resolvedPath = path.resolve(filePath);
   const state = await readLibraryState();
   const key = normalizedPathKey(resolvedPath);
+  const details = await stat(resolvedPath).catch(() => null);
   state.recents = [
     {
       path: resolvedPath,
       name: path.basename(resolvedPath),
       documentType,
       openedAt: new Date().toISOString(),
+      lastModified: details?.mtimeMs,
     },
     ...state.recents.filter(
       (item) => normalizedPathKey(item.path) !== key,
@@ -314,14 +445,89 @@ async function getLibrarySnapshot() {
   const state = await readLibraryState();
   for (const rootPath of state.folders) {
     allowedLibraryRoots.add(path.resolve(rootPath));
+    watchLibraryFolder(rootPath);
   }
+  const recents = await Promise.all(
+    state.recents.map(async (recent) => {
+      const details = await stat(recent.path).catch(() => null);
+      if (details?.isFile()) {
+        allowedDocumentPaths.add(normalizedPathKey(recent.path));
+      }
+      return {
+        ...recent,
+        lastModified: details?.mtimeMs ?? recent.lastModified,
+      };
+    }),
+  );
   return {
     folders: state.folders.map((rootPath) => ({
       rootPath,
       rootName: path.basename(rootPath),
     })),
-    recents: state.recents,
+    recents,
   };
+}
+
+async function ensureDocumentAccess(filePath) {
+  const requestedKey = normalizedPathKey(filePath);
+  if (allowedDocumentPaths.has(requestedKey)) return;
+
+  const state = await readLibraryState();
+  if (!canRestoreDocumentAccess(filePath, state)) {
+    throw Object.assign(
+      new Error("This document must be opened before it can be saved."),
+      { code: "permission" },
+    );
+  }
+
+  let details;
+  try {
+    details = await stat(filePath);
+  } catch (error) {
+    throw Object.assign(new Error("The document is no longer available."), {
+      code: error?.code === "EACCES" || error?.code === "EPERM"
+        ? "permission"
+        : "missing",
+    });
+  }
+  if (!details.isFile()) {
+    throw Object.assign(new Error("The document is no longer a file."), {
+      code: "missing",
+    });
+  }
+
+  allowedDocumentPaths.add(requestedKey);
+}
+
+async function removeRecentFileIfMissing(_event, filePath) {
+  const resolvedPath = path.resolve(String(filePath));
+  try {
+    await access(resolvedPath);
+    return { removed: false, state: await getLibrarySnapshot() };
+  } catch (error) {
+    if (error?.code !== "ENOENT" && error?.code !== "ENOTDIR") throw error;
+  }
+  const state = await readLibraryState();
+  const key = normalizedPathKey(resolvedPath);
+  state.recents = state.recents.filter(
+    (item) => normalizedPathKey(item.path) !== key,
+  );
+  await writeLibraryState(state);
+  return { removed: true, state: await getLibrarySnapshot() };
+}
+
+async function clearRecentFiles() {
+  const state = await readLibraryState();
+  state.recents = [];
+  await writeLibraryState(state);
+  return getLibrarySnapshot();
+}
+
+async function openExternalUrl(_event, value) {
+  const url = String(value ?? "");
+  if (!/^https?:\/\//i.test(url)) return { opened: false };
+  await shell.openExternal(url);
+  return { opened: true };
 }
 
 async function readHistoryState() {
@@ -441,6 +647,129 @@ async function rescanLibraryFolder(_event, rootPath) {
   return scanMarkdownFolder(resolvedRoot);
 }
 
+async function rewriteTrackedDocumentPath(
+  rootPath,
+  previousPath,
+  nextPath,
+  entryKind = "file",
+) {
+  if (!previousPath) return;
+  const previousAbsolute = path.resolve(rootPath, previousPath);
+  const nextAbsolute = nextPath ? path.resolve(rootPath, nextPath) : null;
+  const previousKey = normalizedPathKey(previousAbsolute);
+
+  const remapAbsolute = (candidatePath) => {
+    const candidateKey = normalizedPathKey(candidatePath);
+    const nestedPrefix = `${previousKey}${path.sep}`;
+    const matches =
+      candidateKey === previousKey ||
+      (entryKind === "folder" && candidateKey.startsWith(nestedPrefix));
+    if (!matches) return undefined;
+    if (!nextAbsolute) return null;
+    return `${nextAbsolute}${path.resolve(candidatePath).slice(previousAbsolute.length)}`;
+  };
+
+  for (const documentKey of [...allowedDocumentPaths]) {
+    const mappedPath = remapAbsolute(documentKey);
+    if (mappedPath === undefined) continue;
+    allowedDocumentPaths.delete(documentKey);
+    if (mappedPath) allowedDocumentPaths.add(normalizedPathKey(mappedPath));
+  }
+
+  const libraryState = await readLibraryState();
+  libraryState.recents = libraryState.recents.flatMap((recent) => {
+    const mappedPath = remapAbsolute(recent.path);
+    if (mappedPath === undefined) return [recent];
+    if (!mappedPath) return [];
+    return [
+      {
+        ...recent,
+        path: mappedPath,
+        name: path.basename(mappedPath),
+      },
+    ];
+  });
+  await writeLibraryState(libraryState);
+
+  if (!nextAbsolute) return;
+  const historyState = await readHistoryState();
+  let historyChanged = false;
+  for (const [historyKey, value] of Object.entries(historyState.documents)) {
+    const mappedPath = remapAbsolute(value?.path ?? historyKey);
+    if (!mappedPath) continue;
+    delete historyState.documents[historyKey];
+    historyState.documents[normalizedPathKey(mappedPath)] = {
+      ...value,
+      path: mappedPath,
+    };
+    historyChanged = true;
+  }
+  if (historyChanged) {
+    await writeFile(
+      historyStatePath(),
+      JSON.stringify(historyState, null, 2),
+      "utf8",
+    );
+  }
+}
+
+async function mutateLibrary(_event, payload) {
+  const rootPath = path.resolve(String(payload?.rootPath ?? ""));
+  const allowedRoot = [...allowedLibraryRoots].find(
+    (candidate) => normalizedPathKey(candidate) === normalizedPathKey(rootPath),
+  );
+  if (!allowedRoot) {
+    throw Object.assign(new Error("This library must be selected again."), {
+      code: "permission",
+    });
+  }
+  const { result, undoRecord } = await performLibraryMutation({
+    rootPath: allowedRoot,
+    request: payload?.request ?? {},
+    trashRoot: path.join(app.getPath("userData"), "library-trash"),
+  });
+  if (undoRecord) {
+    libraryUndoRecords.set(undoRecord.token, {
+      ...undoRecord,
+      rootId: result.rootId,
+      createdAt: Date.now(),
+    });
+    for (const [token, record] of libraryUndoRecords) {
+      if (Date.now() - record.createdAt > 10 * 60 * 1000) {
+        libraryUndoRecords.delete(token);
+      }
+    }
+  }
+  await rewriteTrackedDocumentPath(
+    allowedRoot,
+    result.previousPath,
+    result.kind === "delete" ? null : result.nextPath,
+    payload?.request?.entryKind ?? "file",
+  );
+  const scan = await scanMarkdownFolder(allowedRoot);
+  notifyLibraryChanged(allowedRoot, "mutation");
+  return { result, scan };
+}
+
+async function undoLibraryMutation(_event, tokenValue) {
+  const token = String(tokenValue ?? "");
+  const record = libraryUndoRecords.get(token);
+  if (!record) {
+    throw Object.assign(new Error("This undo action has expired."), {
+      code: "missing",
+    });
+  }
+  const result = await undoLibraryDelete(record);
+  libraryUndoRecords.delete(token);
+  await rewriteTrackedDocumentPath(record.rootPath, null, result.nextPath);
+  const scan = await scanMarkdownFolder(record.rootPath);
+  notifyLibraryChanged(record.rootPath, "undo");
+  return {
+    result: { ...result, rootId: record.rootId },
+    scan,
+  };
+}
+
 async function openLibraryDocument(_event, filePath) {
   const documentValue = await readLibraryDocument(
     String(filePath),
@@ -456,6 +785,14 @@ async function openLibraryDocument(_event, filePath) {
   return { ...documentValue, openInReadingMode: false };
 }
 
+async function readLibrarySearchText(_event, filePath) {
+  const documentValue = await readLibraryDocument(
+    String(filePath),
+    allowedLibraryRoots,
+  );
+  return { content: documentValue.content };
+}
+
 async function chooseDocument(event) {
   const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
   const result = await dialog.showOpenDialog(owner, {
@@ -463,7 +800,7 @@ async function chooseDocument(event) {
     buttonLabel: "بازکردن",
     properties: ["openFile"],
     filters: [
-      { name: "سندهای راوی", extensions: ["md", "markdown", "ravi"] },
+      { name: "فایل‌های Markdown", extensions: ["md", "markdown"] },
       { name: "همه‌ی فایل‌ها", extensions: ["*"] },
     ],
   });
@@ -479,6 +816,34 @@ async function openRecentDocument(_event, filePath) {
   );
   if (!recent) throw new Error("Recent file access is not allowed.");
   return enrichDocument(recent.path, { openInReadingMode: false });
+}
+
+async function readDocumentVersions(_event, filePath) {
+  const resolvedPath = path.resolve(String(filePath));
+  const requestedKey = normalizedPathKey(resolvedPath);
+  if (!allowedDocumentPaths.has(requestedKey)) {
+    const state = await readLibraryState();
+    const isRecent = state.recents.some(
+      (item) => normalizedPathKey(item.path) === requestedKey,
+    );
+    const isInLibrary = state.folders.some((rootPath) => {
+      const resolvedRoot = path.resolve(rootPath);
+      const relativePath = path.relative(resolvedRoot, resolvedPath);
+      return relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
+    });
+    if (!isRecent && !isInLibrary) {
+      throw new Error("Document version access is not allowed.");
+    }
+  }
+
+  const documentValue = await readDocumentPath(resolvedPath);
+  if (documentValue.documentType === "markdown") {
+    return historyForPath(resolvedPath);
+  }
+  return {
+    revision: documentValue.revision ?? 1,
+    versions: documentValue.versions ?? [],
+  };
 }
 
 async function saveMarkdown(event, payload) {
@@ -510,110 +875,23 @@ async function saveMarkdown(event, payload) {
   return { saved: true, filePath, documentType: "markdown" };
 }
 
-async function saveRaavi(event, payload) {
-  const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
-  const fileName = safeRaaviName(payload?.fileName);
-  const documentValue = validateDocumentPayload(payload?.document);
-  if (
-    !documentValue.raavi ||
-    documentValue.raavi.format !== "ravi" ||
-    documentValue.raavi.version !== 1
-  ) {
-    throw new Error("Raavi document payload is invalid.");
-  }
-
-  const result = await dialog.showSaveDialog(owner, {
-    title: "ذخیره‌ی فایل راوی",
-    buttonLabel: "ذخیره فایل",
-    defaultPath: path.join(app.getPath("documents"), fileName),
-    filters: [
-      { name: "سند راوی", extensions: ["ravi"] },
-      { name: "همه‌ی فایل‌ها", extensions: ["*"] },
-    ],
-  });
-
-  if (result.canceled || !result.filePath) return { saved: false };
-  const raviPath = /\.ravi$/i.test(result.filePath)
-    ? result.filePath
-    : `${result.filePath}.ravi`;
-  const markdownPath = `${raviPath.replace(/\.ravi$/i, "")}.md`;
-
-  let companionExists = false;
-  try {
-    await access(markdownPath);
-    companionExists = true;
-  } catch {
-    companionExists = false;
-  }
-
-  if (companionExists) {
-    const confirmation = await dialog.showMessageBox(owner, {
-      type: "warning",
-      title: "جایگزینی فایل Markdown",
-      message: "یک فایل Markdown با همین نام کنار فایل راوی وجود دارد.",
-      detail: `برای ذخیره‌ی هر دو فایل، «${path.basename(markdownPath)}» جایگزین می‌شود.`,
-      buttons: ["جایگزین شود", "انصراف"],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true,
-    });
-    if (confirmation.response !== 0) return { saved: false };
-  }
-
-  await writeFile(
-    raviPath,
-    JSON.stringify(documentValue.raavi, null, 2),
-    "utf8",
-  );
-  await writeFile(markdownPath, documentValue.content, "utf8");
-  allowedDocumentPaths.add(normalizedPathKey(raviPath));
-  await recordRecent(raviPath, "ravi");
-  return {
-    saved: true,
-    filePath: raviPath,
-    raviPath,
-    markdownPath,
-    documentType: "ravi",
-  };
-}
-
 async function saveCurrentDocument(_event, payload) {
   const filePath = path.resolve(String(payload?.filePath ?? ""));
-  if (!allowedDocumentPaths.has(normalizedPathKey(filePath))) {
-    throw new Error("This document must be opened before it can be saved.");
-  }
+  await ensureDocumentAccess(filePath);
 
   const documentValue = validateDocumentPayload(payload?.document);
-  const documentType = /\.ravi$/i.test(filePath) ? "ravi" : "markdown";
-  if (documentType === "ravi") {
-    if (
-      !documentValue.raavi ||
-      documentValue.raavi.format !== "ravi" ||
-      documentValue.raavi.version !== 1
-    ) {
-      throw new Error("Raavi document payload is invalid.");
-    }
-    await writeFile(
-      filePath,
-      JSON.stringify(documentValue.raavi, null, 2),
-      "utf8",
-    );
-    await writeFile(
-      `${filePath.replace(/\.ravi$/i, "")}.md`,
-      documentValue.content,
-      "utf8",
-    );
-  } else {
-    await writeFile(filePath, documentValue.content, "utf8");
-    await saveHistoryForPath(
-      filePath,
-      documentValue.revision,
-      documentValue.versions,
-    );
+  if (/\.ravi$/i.test(filePath)) {
+    throw new Error("LEGACY_DOCUMENT_REQUIRES_MARKDOWN_SAVE_AS");
   }
+  await writeFile(filePath, documentValue.content, "utf8");
+  await saveHistoryForPath(
+    filePath,
+    documentValue.revision,
+    documentValue.versions,
+  );
 
-  await recordRecent(filePath, documentType);
-  return { saved: true, filePath, documentType };
+  await recordRecent(filePath, "markdown");
+  return { saved: true, filePath, documentType: "markdown" };
 }
 
 async function saveWordExport(event, payload) {
@@ -643,6 +921,7 @@ async function saveWordExport(event, payload) {
     ? result.filePath
     : `${result.filePath}.docx`;
   await writeFile(filePath, bytes);
+  allowedExportPaths.add(path.resolve(filePath));
   return { saved: true, filePath };
 }
 
@@ -665,7 +944,15 @@ async function exportPdf(event, payload) {
     : `${result.filePath}.pdf`;
   const bytes = await event.sender.printToPDF(desktopPdfOptions());
   await writeFile(filePath, bytes);
+  allowedExportPaths.add(path.resolve(filePath));
   return { saved: true, filePath };
+}
+
+async function revealExport(_event, payload) {
+  const filePath = path.resolve(String(payload?.filePath ?? ""));
+  if (!allowedExportPaths.has(filePath)) return { revealed: false };
+  shell.showItemInFolder(filePath);
+  return { revealed: true };
 }
 
 function registerDesktopHandlers() {
@@ -680,16 +967,49 @@ function registerDesktopHandlers() {
     saveRendererReadingPositionsSync,
   );
   ipcMain.handle("library:get-state", getLibrarySnapshot);
+  ipcMain.handle("library:clear-recents", clearRecentFiles);
+  ipcMain.handle("library:remove-recent-if-missing", removeRecentFileIfMissing);
   ipcMain.handle("library:choose-folder", chooseLibraryFolder);
+  ipcMain.handle("library:disconnect-folder", forgetLibraryFolder);
   ipcMain.handle("library:scan-folder", rescanLibraryFolder);
   ipcMain.handle("library:read-file", openLibraryDocument);
+  ipcMain.handle("library:read-search-text", readLibrarySearchText);
+  ipcMain.handle("library:mutate", mutateLibrary);
+  ipcMain.handle("library:undo", undoLibraryMutation);
   ipcMain.handle("document:choose", chooseDocument);
   ipcMain.handle("document:open-recent", openRecentDocument);
+  ipcMain.handle("document:read-versions", readDocumentVersions);
   ipcMain.handle("document:save-markdown", saveMarkdown);
-  ipcMain.handle("document:save-ravi", saveRaavi);
   ipcMain.handle("document:save-current", saveCurrentDocument);
   ipcMain.handle("export:save-word", saveWordExport);
   ipcMain.handle("export:pdf", exportPdf);
+  ipcMain.handle("export:reveal", revealExport);
+  ipcMain.handle("external:open-url", openExternalUrl);
+  ipcMain.handle("codex:connection-status", getCodexConnectionStatus);
+  ipcMain.handle("codex:start-login", startCodexLogin);
+  ipcMain.handle("codex:run", (_event, payload) => runCodexPrompt(payload));
+  ipcMain.handle("codex:persian-review", (_event, payload) =>
+    runCodexPersianReview(payload),
+  );
+  ipcMain.handle("codex:smart-annotations", (_event, payload) =>
+    runCodexSmartAnnotations(payload),
+  );
+  ipcMain.on("window:set-theme", (event, theme) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return;
+    applyWindowTheme(theme);
+  });
+  ipcMain.on("window:minimize", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  });
+  ipcMain.on("window:toggle-maximize", (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    if (!owner) return;
+    if (owner.isMaximized()) owner.unmaximize();
+    else owner.maximize();
+  });
+  ipcMain.on("window:close", (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
   ipcMain.on("renderer:ready", (event) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;
     rendererReady = true;
@@ -725,7 +1045,7 @@ async function openDocumentPath(filePath, options = {}) {
     if (!isSmokeTest) {
       dialog.showErrorBox(
         "بازکردن فایل ممکن نبود",
-        "فایل باید Markdown یا .ravi معتبر و در اندازه‌ی مجاز باشد.",
+        "فایل باید Markdown معتبر یا یک سند قدیمیِ قابل‌مهاجرت و در اندازه‌ی مجاز باشد.",
       );
     }
   }
@@ -741,8 +1061,9 @@ async function createWindow() {
     minWidth: 1024,
     minHeight: 680,
     show: false,
+    frame: false,
     backgroundColor: "#e9e5dc",
-    icon: path.join(appRoot, "build", "icon.svg"),
+    icon: windowIconPath(),
     title: "راوی — Markdown فارسی",
     webPreferences: {
       preload: path.join(desktopDirectory, "preload.cjs"),
@@ -801,7 +1122,7 @@ if (!hasSingleInstanceLock) {
   });
 
   app.setAppUserModelId("ir.raavi.markdown");
-  nativeTheme.themeSource = "light";
+  nativeTheme.themeSource = "system";
   registerDesktopHandlers();
 
   app.whenReady().then(createWindow);
@@ -812,6 +1133,7 @@ if (!hasSingleInstanceLock) {
     if (process.platform !== "darwin") app.quit();
   });
   app.on("before-quit", () => {
+    closeLibraryWatchers();
     if (localServer) void localServer.close();
   });
 }

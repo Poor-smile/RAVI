@@ -28,21 +28,47 @@ test.describe("Persian Mermaid Studio", () => {
 
     try {
       const window = await app.firstWindow();
-      await window
-        .getByRole("button", { name: "ساخت نمودار Mermaid", exact: true })
-        .click();
+      await window.evaluate(() => {
+        const content = "# سند جدید\n\n";
+        localStorage.setItem(
+          "raavi:document:v1",
+          JSON.stringify({
+            fileName: "سند جدید",
+            content,
+            readerSize: 18,
+            annotations: [],
+            assets: [],
+            revision: 1,
+            versions: [],
+            documentType: "ravi",
+            lastSavedSnapshot: content,
+            draftId: "mermaid-persian-studio",
+            viewMode: "live",
+            readingOutlineOpen: false,
+            readingPositions: {},
+            annotationComposer: null,
+          }),
+        );
+      });
+      await window.reload();
+      await expect(window.locator(".app-shell")).toHaveAttribute("data-hydrated", "true");
+      await window.keyboard.press("Control+K");
+      const commandCenter = window.getByRole("dialog", { name: "مرکز فرمان راوی" });
+      await expect(commandCenter).toBeVisible();
+      await commandCenter.getByRole("combobox", { name: "جست‌وجوی فرمان" }).fill("Mermaid");
+      await commandCenter.getByRole("option", { name: /ساخت نمودار Mermaid/u }).click();
       const studio = window.getByRole("dialog", {
-        name: "ساخت نمودار",
+        name: "استودیو گراف",
         exact: true,
       });
       await expect(studio.getByRole("heading", { name: "چه نموداری می‌خواهید بسازید؟" })).toBeVisible();
-      await expect(studio.locator(".mermaid-kind-list > button")).toHaveCount(29);
+      await expect(studio.locator(".mermaid-ai-catalog > button")).toHaveCount(29);
       await expect(studio.getByRole("button", { name: "افزودن به سند" })).toBeDisabled();
-      await expect(studio.getByText("ابتدا نوع نمودار را انتخاب کنید", { exact: true })).toBeVisible();
+      await expect(studio.getByText("انتخاب نوع", { exact: true })).toBeVisible();
       await expect(studio).toHaveCSS("opacity", "1");
       await window.screenshot({ path: testInfo.outputPath("type-picker.png") });
 
-      await studio.getByRole("button", { name: /^فرایند/ }).click();
+      await studio.getByRole("option", { name: /^فرایند/ }).click();
       await expect(studio.getByRole("button", { name: /^گسترش در عرض/ })).toHaveAttribute("aria-pressed", "true");
       const flowchartSurface = studio.locator(".mermaid-render-surface");
       const horizontalRenderKey = await flowchartSurface.getAttribute(
@@ -62,27 +88,31 @@ test.describe("Persian Mermaid Studio", () => {
       );
       await studio.getByRole("button", { name: "تغییر نوع", exact: true }).click();
 
-      const typeSearch = studio.getByRole("searchbox", { name: "جست‌وجوی نوع نمودار" });
+      const typeSearch = studio.getByPlaceholder("نام نمودار را بنویسید…");
       await typeSearch.fill("توالی");
-      await expect(studio.locator(".mermaid-kind-list > button")).toHaveCount(1);
-      await studio.getByRole("button", { name: /^توالی/ }).click();
+      await expect(studio.locator(".mermaid-ai-catalog > button")).toHaveCount(1);
+      await studio.getByRole("option", { name: /^توالی/ }).click();
       await expect(studio.getByRole("region", { name: "ساخت آسان توالی" })).toBeVisible();
       await expect(studio.getByLabel("راهنمای کنترل عرض و طول نمودار")).toContainText("کنترل عرض");
       await expect(studio.getByRole("button", { name: "انتقال ردیف ۲ به بالا" })).toBeEnabled();
       await expect
         .poll(() => flowchartSurface.getAttribute("data-mermaid-render-key"))
         .not.toBe(beforeSequenceKey);
-      const sequenceSvg = await studio
-        .locator("img.mermaid-render-surface")
-        .evaluate(async (image) => fetch((image as HTMLImageElement).src).then((response) => response.text()));
-      expect(sequenceSvg).toContain("پیش‌نمایش آماده است");
+      const sequenceSurface = studio.locator("img.mermaid-render-surface");
+      await expect
+        .poll(() =>
+          sequenceSurface.evaluate(async (image) =>
+            fetch((image as HTMLImageElement).src).then((response) => response.text()),
+          ),
+        )
+        .toContain("پیش‌نمایش آماده است");
       await window.screenshot({ path: testInfo.outputPath("sequence-builder.png") });
       const beforeSankeyKey = await flowchartSurface.getAttribute(
         "data-mermaid-render-key",
       );
       await studio.getByRole("button", { name: "تغییر نوع", exact: true }).click();
-      await studio.getByRole("searchbox", { name: "جست‌وجوی نوع نمودار" }).fill("");
-      await studio.getByRole("button", { name: /^جریان سنکی/ }).click();
+      await studio.getByPlaceholder("نام نمودار را بنویسید…").fill("سنکی");
+      await studio.getByRole("option", { name: /^جریان سنکی/ }).click();
       await expect(studio.getByRole("region", { name: "ساخت آسان جریان سنکی" })).toBeVisible();
       const surface = studio.locator("img.mermaid-render-surface");
       await expect

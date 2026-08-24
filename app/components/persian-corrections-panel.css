@@ -1,0 +1,509 @@
+/* Figma 2.0 · Panels & Command / P04 — local Persian corrections. */
+.persian-corrections-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  direction: rtl;
+  color: var(--ink-950);
+  background: var(--paper-200);
+  outline: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.persian-corrections-summary {
+  flex: none;
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+  padding: var(--space-xs);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  color: var(--ink-950);
+  background: var(--paper-100);
+  border: 0;
+  border-radius: 6px;
+}
+
+.persian-corrections-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: var(--line-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.persian-corrections-summary button {
+  flex: none;
+  height: 28px;
+  min-height: 28px;
+  padding-inline: var(--space-sm);
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  border: 0;
+  border-radius: var(--radius-action);
+  box-shadow: inset 0 0 0 1px var(--focus-ring);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: var(--line-label);
+  cursor: pointer;
+}
+
+.persian-corrections-summary button:hover:not(:disabled) {
+  color: var(--on-accent);
+  background: var(--proof-blue);
+}
+
+.persian-corrections-summary button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.persian-corrections-summary button:disabled {
+  color: var(--ink-500);
+  background: var(--paper-300);
+  box-shadow: none;
+  cursor: default;
+}
+
+.persian-corrections-list {
+  flex: none;
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.persian-corrections-list > [role="listitem"] {
+  min-width: 0;
+  height: 56px;
+}
+
+.persian-correction-row {
+  width: 100%;
+  height: 56px;
+  min-height: 56px;
+  padding: var(--space-xs) var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-xs);
+  overflow: hidden;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  text-align: right;
+  cursor: pointer;
+}
+
+.persian-correction-row:hover:not(:disabled) {
+  background: var(--paper-100);
+}
+
+.persian-correction-row:focus-visible {
+  outline: 0;
+  box-shadow: inset 0 0 0 1px var(--proof-blue);
+}
+
+.persian-correction-row:disabled {
+  color: var(--ink-500);
+  background: var(--paper-300);
+  cursor: default;
+}
+
+.persian-correction-row strong,
+.persian-correction-row small {
+  width: 100%;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.persian-correction-heading {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.persian-correction-row .persian-correction-heading strong {
+  width: auto;
+  min-width: 0;
+}
+
+.persian-local-badge {
+  flex: none;
+  padding: 1px 6px;
+  color: var(--ink-700);
+  background: var(--paper-200);
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.persian-correction-row strong {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: var(--line-label);
+}
+
+.persian-correction-row small {
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: var(--line-caption);
+}
+
+.persian-correction-row:disabled small {
+  color: var(--ink-500);
+}
+
+.persian-corrections-privacy {
+  flex: none;
+  min-height: var(--line-caption);
+  margin: auto 0 0;
+  overflow: hidden;
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: var(--line-caption);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html body .app-shell .persian-corrections-summary,
+html body .app-shell .persian-corrections-summary button,
+html body .app-shell .persian-corrections-panel button.persian-correction-row,
+html body .app-shell .persian-corrections-panel button.persian-correction-row strong.persian-correction-title {
+  font-size: 12px;
+}
+
+html body .app-shell .persian-corrections-panel button.persian-correction-row small.persian-correction-detail,
+html body .app-shell .persian-corrections-privacy {
+  font-size: 11px;
+}
+
+.persian-ai-review-entry {
+  flex: none;
+  padding-block: var(--space-sm);
+  display: grid;
+  gap: var(--space-xs);
+  border-block-start: 1px solid var(--rule);
+}
+
+.persian-ai-review-entry > small,
+.persian-ai-review-state small,
+.persian-ai-review-confirm p,
+.persian-ai-batch-confirm small {
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: var(--line-caption);
+}
+
+.persian-ai-review-trigger {
+  min-height: 36px;
+  padding-inline: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  color: var(--ink-950);
+  background: var(--paper-50);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-action);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.persian-ai-review-trigger:hover:not(:disabled) {
+  color: var(--proof-blue-dark);
+  border-color: var(--focus-ring);
+  background: var(--proof-blue-soft);
+}
+
+.persian-ai-review-trigger:focus-visible,
+.persian-ai-review-state button:focus-visible,
+.persian-ai-inline-actions button:focus-visible,
+.persian-ai-suggestions-summary button:focus-visible,
+.persian-ai-suggestion-actions button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.persian-ai-review-trigger:disabled {
+  color: var(--ink-500);
+  background: var(--paper-300);
+  cursor: default;
+}
+
+.persian-ai-review-confirm,
+.persian-ai-batch-confirm,
+.persian-ai-review-state {
+  flex: none;
+  padding: 10px;
+  display: grid;
+  gap: var(--space-xs);
+  color: var(--ink-950);
+  background: var(--paper-100);
+  border-radius: var(--radius-action);
+}
+
+.persian-ai-review-confirm > strong,
+.persian-ai-batch-confirm > strong,
+.persian-ai-review-state strong {
+  font-size: 12px;
+  line-height: var(--line-label);
+}
+
+.persian-ai-review-confirm p {
+  margin: 0;
+}
+
+.persian-ai-review-state {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+
+.persian-ai-review-state > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.persian-ai-review-state > button,
+.persian-ai-review-state > .persian-ai-inline-actions {
+  grid-column: 1 / -1;
+}
+
+.persian-ai-review-state.is-error {
+  color: var(--error);
+  background: var(--error-soft);
+}
+
+.persian-ai-review-state.is-warning {
+  color: var(--saving);
+  background: color-mix(in srgb, var(--saving) 10%, var(--paper-100));
+}
+
+.persian-ai-review-state.is-success {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 9%, var(--paper-100));
+}
+
+.persian-ai-inline-actions,
+.persian-ai-suggestion-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.persian-ai-inline-actions button,
+.persian-ai-review-state > button,
+.persian-ai-suggestions-summary button,
+.persian-ai-suggestion-actions button {
+  min-height: 28px;
+  padding-inline: var(--space-sm);
+  color: var(--ink-950);
+  background: var(--paper-300);
+  border: 0;
+  border-radius: var(--radius-action);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.persian-ai-inline-actions button:first-child,
+.persian-ai-suggestion-actions button.is-primary {
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  box-shadow: inset 0 0 0 1px var(--focus-ring);
+}
+
+.persian-ai-suggestions {
+  flex: none;
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.persian-ai-suggestions-summary {
+  min-height: 44px;
+  padding: var(--space-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  color: var(--ink-950);
+  background:
+    linear-gradient(var(--paper-100), var(--paper-100)) padding-box,
+    var(--brand-gradient) border-box;
+  border: 1px solid transparent;
+  border-radius: var(--radius-action);
+}
+
+.persian-ai-suggestions-summary strong {
+  min-width: 0;
+  font-size: 12px;
+  line-height: var(--line-label);
+}
+
+.persian-ai-suggestion-list {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.persian-ai-suggestion-card {
+  min-width: 0;
+  padding: 10px;
+  display: grid;
+  gap: var(--space-sm);
+  color: var(--ink-950);
+  background:
+    linear-gradient(var(--paper-50), var(--paper-50)) padding-box,
+    var(--brand-gradient) border-box;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgb(81 103 218 / 10%);
+}
+
+.persian-ai-suggestion-card > header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.persian-ai-suggestion-card > header > strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: var(--line-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.persian-ai-badge {
+  flex: none;
+  padding: 2px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--proof-blue-dark);
+  background:
+    linear-gradient(var(--proof-blue-soft), var(--proof-blue-soft)) padding-box,
+    var(--brand-gradient) border-box;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.persian-ai-suggestion-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: var(--line-caption);
+}
+
+.persian-ai-reason,
+.persian-ai-current {
+  color: var(--ink-700);
+}
+
+.persian-ai-replacement {
+  color: var(--ink-950);
+  font-weight: 700;
+}
+
+.persian-ai-suggestion-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.persian-ai-suggestion-actions button:disabled {
+  color: var(--ink-500);
+  cursor: wait;
+}
+
+.persian-ai-suggestion-card.is-rejected {
+  box-shadow: none;
+  opacity: 0.72;
+}
+
+.persian-ai-suggestion-card.is-exiting-applied {
+  pointer-events: none;
+  will-change: transform, opacity, filter;
+}
+
+.persian-ai-suggestion-outcome,
+.persian-ai-live-message,
+.persian-ai-review-note {
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: var(--line-caption);
+}
+
+.persian-ai-review-note,
+.persian-ai-live-message {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .persian-ai-suggestion-card {
+    animation: persian-ai-suggestion-enter 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .persian-ai-suggestion-card.is-exiting-applied {
+    animation: persian-ai-suggestion-exit 220ms cubic-bezier(0.7, 0, 0.84, 0) forwards;
+  }
+}
+
+@keyframes persian-ai-suggestion-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes persian-ai-suggestion-exit {
+  to {
+    opacity: 0;
+    filter: blur(2px);
+    transform: translateX(108%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .persian-ai-suggestion-card.is-exiting-applied {
+    opacity: 0;
+  }
+}
+
+@media (forced-colors: active) {
+  .persian-ai-suggestions-summary,
+  .persian-ai-suggestion-card,
+  .persian-ai-badge {
+    border-color: CanvasText;
+  }
+}

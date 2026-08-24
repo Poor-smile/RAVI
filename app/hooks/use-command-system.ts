@@ -18,17 +18,20 @@ type CommandHandlers = Partial<
 export function useCommandSystem({
   environment,
   context,
+  getHasEditorSelection,
   handlers,
   isCommandEnabled,
 }: {
   environment: CommandEnvironment;
   context: Omit<CommandContext, "editableKind">;
+  getHasEditorSelection?: () => boolean;
   handlers: CommandHandlers;
   isCommandEnabled?: (id: CommandId, event: KeyboardEvent) => boolean;
 }) {
   const snapshotRef = useRef({
     environment,
     context,
+    getHasEditorSelection,
     handlers,
     isCommandEnabled,
   });
@@ -37,18 +40,25 @@ export function useCommandSystem({
     snapshotRef.current = {
       environment,
       context,
+      getHasEditorSelection,
       handlers,
       isCommandEnabled,
     };
-  }, [context, environment, handlers, isCommandEnabled]);
+  }, [context, environment, getHasEditorSelection, handlers, isCommandEnabled]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!document.hasFocus()) return;
       const snapshot = snapshotRef.current;
+      const editableKind = editableKindFromTarget(event.target);
       const resolved = resolveCommand(event, snapshot.environment, {
         ...snapshot.context,
-        editableKind: editableKindFromTarget(event.target),
+        hasEditorSelection:
+          editableKind === "editor"
+            ? snapshot.getHasEditorSelection?.() ??
+              snapshot.context.hasEditorSelection
+            : false,
+        editableKind,
       });
       if (!resolved) return;
 

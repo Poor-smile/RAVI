@@ -1,0 +1,238 @@
+/* Figma 2.0 · Panels & Command / P02 — independent, local Recent panel. */
+.recent-files-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  direction: rtl;
+  color: var(--ink-950);
+  background: var(--paper-200);
+}
+
+.recent-files-search {
+  flex: none;
+  width: 100%;
+  height: var(--target-desktop);
+  min-height: var(--target-desktop);
+  padding-inline: var(--space-sm) var(--space-xs);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  color: var(--ink-700);
+  background: var(--paper-50);
+  border: 0;
+  border-radius: var(--radius-action);
+  box-shadow: inset 0 0 0 var(--stroke-hairline) var(--rule);
+}
+
+.recent-files-search:focus-within {
+  color: var(--ink-950);
+  box-shadow: inset 0 0 0 2px var(--proof-blue);
+}
+
+.recent-files-search > svg {
+  flex: none;
+}
+
+.recent-files-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 12px;
+}
+
+.recent-files-search input::placeholder {
+  color: var(--ink-500);
+}
+
+.recent-files-search input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.recent-files-search button {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink-700);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-action);
+  cursor: pointer;
+}
+
+.recent-files-search button:hover {
+  color: var(--ink-950);
+  background: var(--paper-200);
+}
+
+.recent-files-search button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.recent-files-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-color: var(--scroll-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.recent-files-group + .recent-files-group {
+  margin-top: var(--space-sm);
+}
+
+.recent-files-group h3 {
+  height: 28px;
+  margin: 0;
+  padding-inline: var(--space-sm);
+  display: flex;
+  align-items: center;
+  color: var(--ink-700);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: var(--line-label);
+}
+
+.recent-files-list {
+  display: grid;
+  gap: var(--space-xs);
+}
+
+.recent-files-row {
+  width: 100%;
+  height: var(--target-desktop);
+  min-height: var(--target-desktop);
+  padding-inline: var(--space-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  overflow: hidden;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.recent-files-row:hover {
+  background: var(--paper-100);
+}
+
+.recent-files-row.is-active {
+  color: var(--proof-blue-dark);
+  background: var(--proof-blue-soft);
+  box-shadow: inset 0 0 0 var(--stroke-hairline) var(--proof-blue);
+}
+
+.recent-files-row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.recent-files-type {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-700);
+}
+
+.recent-files-row[data-document-type="ravi"] .recent-files-type {
+  color: var(--proof-blue-dark);
+}
+
+.recent-files-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: var(--line-label);
+  direction: ltr;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-files-extension {
+  unicode-bidi: isolate;
+}
+
+.recent-files-row time {
+  flex: none;
+  color: var(--ink-500);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--line-caption);
+  direction: ltr;
+}
+
+.recent-files-row.is-active time {
+  color: var(--proof-blue-dark);
+}
+
+.recent-files-empty {
+  min-height: 180px;
+  padding: 24px var(--space-md);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-xs);
+  color: var(--ink-500);
+  text-align: center;
+}
+
+.recent-files-empty strong {
+  color: var(--ink-950);
+  font-size: 12px;
+  line-height: var(--line-label);
+}
+
+.recent-files-empty span {
+  max-width: 220px;
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.recent-files-privacy {
+  flex: none;
+  min-height: 24px;
+  padding-inline: var(--space-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--ink-500);
+  font-size: 11px;
+  line-height: var(--line-caption);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Keep the Figma Foundation scale inside compact rows despite the global
+   minimum control-text safeguard. The 36px row remains the accessible target. */
+html body .app-shell .recent-files-search input,
+html body .app-shell .recent-files-row,
+html body .app-shell .recent-files-row .recent-files-name {
+  font-size: 12px;
+}
+
+html body .app-shell .recent-files-row time.recent-files-time {
+  font-size: 11px;
+}

@@ -1,26 +1,32 @@
 "use client";
 
-import { Keyboard, X } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { Keyboard, Settings2, X } from "@/app/icons/material-symbols";
+import { type RefObject, useMemo, useRef } from "react";
 import {
   activeBindings,
   COMMAND_GROUPS,
   COMMAND_REGISTRY,
   CommandEnvironment,
 } from "../keyboard/command-registry";
+import { shortcutPlatformLabel } from "../keyboard/shortcut-guide";
 import { AccessibleModal } from "./accessible-modal";
 import { CommandShortcutKeys } from "./command-tooltip";
+import { ShortcutGuideSections } from "./shortcut-guide-sections";
 
 export function ShortcutHelpDialog({
   open,
   isTopLayer,
   environment,
   onClose,
+  onOpenSettings,
+  returnFocusRef,
 }: {
   open: boolean;
   isTopLayer: boolean;
   environment: CommandEnvironment;
   onClose: () => void;
+  onOpenSettings: () => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -44,6 +50,7 @@ export function ShortcutHelpDialog({
       onClose={onClose}
       dialogRef={dialogRef}
       initialFocusRef={titleRef}
+      returnFocusRef={returnFocusRef}
       backdropClassName="shortcut-modal-backdrop"
       dialogClassName="shortcut-modal"
       labelledBy="shortcut-modal-title"
@@ -65,9 +72,24 @@ export function ShortcutHelpDialog({
       </header>
 
       <p id="shortcut-modal-description" className="shortcut-modal-intro">
-        میان‌برها با جای کلید فیزیکی کار می‌کنند؛ بنابراین با صفحه‌کلید فارسی و
-        انگلیسی یکسان هستند.
+        کلیدهای مناسب <strong>{shortcutPlatformLabel(environment)}</strong> نمایش
+        داده شده‌اند. میان‌برها با جای کلید فیزیکی کار می‌کنند؛ بنابراین با
+        صفحه‌کلید فارسی و انگلیسی یکسان هستند.
       </p>
+
+      <div className="shortcut-modal-guide">
+        <div className="shortcut-modal-guide-heading">
+          <div>
+            <span>رفتارهای ویرایشگر</span>
+            <h3>Enter با Ctrl/Cmd+Enter یکی نیست</h3>
+          </div>
+          <p>
+            Enter نوشتن را در ساختار فعلی ادامه می‌دهد؛ Ctrl/Cmd+Enter از کل
+            بلاک خارج می‌شود و یک Text Block مستقل می‌سازد.
+          </p>
+        </div>
+        <ShortcutGuideSections environment={environment} />
+      </div>
 
       <div className="shortcut-groups">
         {groupedCommands.map((group) => (
@@ -102,9 +124,15 @@ export function ShortcutHelpDialog({
 
       <footer className="shortcut-modal-footer">
         <span>برای بستن بالاترین لایه، کلید Esc را بزنید.</span>
-        <button type="button" onClick={onClose}>
-          متوجه شدم
-        </button>
+        <div>
+          <button className="button--quiet" type="button" onClick={onOpenSettings}>
+            <Settings2 size={17} aria-hidden="true" />
+            تنظیمات میان‌برها
+          </button>
+          <button type="button" onClick={onClose}>
+            متوجه شدم
+          </button>
+        </div>
       </footer>
     </AccessibleModal>
   );

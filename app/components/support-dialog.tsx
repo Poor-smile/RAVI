@@ -7,7 +7,7 @@ import {
   Send,
   Sparkles,
   X,
-} from "lucide-react";
+} from "@/app/icons/material-symbols";
 import { RefObject, useRef } from "react";
 import { AccessibleModal } from "./accessible-modal";
 
@@ -23,7 +23,7 @@ export function SupportDialog({
 }: {
   open: boolean;
   isTopLayer: boolean;
-  returnFocusRef: RefObject<HTMLButtonElement | null>;
+  returnFocusRef: RefObject<HTMLElement | null>;
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);

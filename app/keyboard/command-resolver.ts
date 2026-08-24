@@ -22,6 +22,7 @@ export type KeyboardEventLike = {
 export type CommandContext = {
   editableKind: EditableKind | null;
   enabledCommandIds: ReadonlySet<CommandId>;
+  hasEditorSelection?: boolean;
 };
 
 export type ResolvedCommand = {
@@ -70,6 +71,13 @@ function editableAllows(
   return command.allowInEditable.includes(editableKind);
 }
 
+function selectionAllows(binding: KeyBinding, context: CommandContext) {
+  if (!binding.selection) return true;
+  return binding.selection === "required"
+    ? Boolean(context.hasEditorSelection)
+    : !context.hasEditorSelection;
+}
+
 export function resolveCommand(
   event: KeyboardEventLike,
   environment: CommandEnvironment,
@@ -82,8 +90,10 @@ export function resolveCommand(
     if (event.repeat && !command.repeatable) continue;
     if (!editableAllows(command, context.editableKind)) continue;
 
-    const binding = activeBindings(command, environment).find((candidate) =>
-      bindingMatches(event, candidate, environment),
+    const binding = activeBindings(command, environment).find(
+      (candidate) =>
+        selectionAllows(candidate, context) &&
+        bindingMatches(event, candidate, environment),
     );
     if (binding) return { command, binding };
   }
@@ -106,7 +116,10 @@ export function editableKindFromTarget(
 }
 
 export function registryConflicts(environment: CommandEnvironment) {
-  const seen = new Map<string, CommandId>();
+  const seen = new Map<
+    string,
+    Array<{ id: CommandId; selection: KeyBinding["selection"] }>
+  >();
   const conflicts: Array<{ binding: string; commands: [CommandId, CommandId] }> =
     [];
 
@@ -120,18 +133,24 @@ export function registryConflicts(environment: CommandEnvironment) {
         expected.alt,
         expected.shift,
       ].join(":");
-      const existing = seen.get(signature);
-      if (existing && existing !== command.id) {
+      const entries = seen.get(signature) ?? [];
+      const existing = entries.find(
+        (entry) =>
+          entry.id !== command.id &&
+          (!entry.selection ||
+            !binding.selection ||
+            entry.selection === binding.selection),
+      );
+      if (existing) {
         conflicts.push({
           binding: signature,
-          commands: [existing, command.id],
+          commands: [existing.id, command.id],
         });
-      } else {
-        seen.set(signature, command.id);
       }
+      entries.push({ id: command.id, selection: binding.selection });
+      seen.set(signature, entries);
     }
   }
 
   return conflicts;
 }
-

@@ -7,7 +7,7 @@ import worker from "../dist/server/index.js";
 const desktopDirectory = path.dirname(fileURLToPath(import.meta.url));
 const clientDirectory = path.resolve(desktopDirectory, "..", "dist", "client");
 const MAX_LIBRARY_FILES = 20_000;
-const MAX_MARKDOWN_SIZE = 2 * 1024 * 1024;
+const MAX_MARKDOWN_SIZE = 16 * 1024 * 1024;
 const MAX_RAVI_SIZE = 64 * 1024 * 1024;
 const MAX_RAVI_IMAGE_ASSETS = 8;
 const MAX_RAVI_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -289,6 +289,9 @@ function sanitizeRaaviVersions(value) {
             ? version.savedAt.slice(0, 64)
             : new Date().toISOString(),
         content: version.content,
+        ...(version.kind === "autosave" || version.kind === "manual"
+          ? { kind: version.kind }
+          : {}),
         annotations: sanitizeRaaviAnnotations(version.annotations),
       },
     ];
@@ -354,12 +357,17 @@ export async function scanMarkdownFolder(rootPath) {
   if (!rootStats.isDirectory()) throw new Error("Selected path is not a folder.");
 
   const files = [];
+  const errors = [];
 
   async function visit(directoryPath) {
     let entries;
     try {
       entries = await readdir(directoryPath, { withFileTypes: true });
-    } catch {
+    } catch (error) {
+      errors.push({
+        path: path.relative(resolvedRoot, directoryPath).split(path.sep).join("/"),
+        code: typeof error?.code === "string" ? error.code : "UNKNOWN",
+      });
       return;
     }
 
@@ -389,8 +397,17 @@ export async function scanMarkdownFolder(rootPath) {
           lastModified: details.mtimeMs,
           documentType: isRaaviFile(entry.name) ? "ravi" : "markdown",
         });
-      } catch {
+      } catch (error) {
         // A file can disappear while a directory is being scanned.
+        if (error?.code !== "ENOENT") {
+          errors.push({
+            path: path
+              .relative(resolvedRoot, absolutePath)
+              .split(path.sep)
+              .join("/"),
+            code: typeof error?.code === "string" ? error.code : "UNKNOWN",
+          });
+        }
       }
     }
   }
@@ -402,6 +419,7 @@ export async function scanMarkdownFolder(rootPath) {
     rootName: path.basename(resolvedRoot),
     rootPath: resolvedRoot,
     files,
+    errors,
     truncated: files.length >= MAX_LIBRARY_FILES,
   };
 }

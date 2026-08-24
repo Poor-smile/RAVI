@@ -175,7 +175,7 @@ test.describe("Mermaid stability", () => {
       await expect(detailedDiagram).toBeVisible();
       await detailedDiagram
         .getByRole("button", {
-          name: "بستن نمای تمام‌صفحهٔ نمودار",
+          name: "بازگشت به سند",
           exact: true,
         })
         .click();

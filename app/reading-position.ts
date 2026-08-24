@@ -93,10 +93,51 @@ function blockType(block: HTMLElement) {
 function readingBlocks(article: HTMLElement) {
   return Array.from(
     article.querySelectorAll<HTMLElement>(READING_BLOCK_SELECTOR),
-  ).filter((block) => {
+  ).filter((block) => blockText(block).length > 0);
+}
+
+function blockAtProbe(
+  article: HTMLElement,
+  blocks: HTMLElement[],
+  probeY: number,
+) {
+  const articleRect = article.getBoundingClientRect();
+  const probeX = Math.min(
+    Math.max(articleRect.left + 1, articleRect.left + articleRect.width / 2),
+    Math.max(articleRect.left + 1, articleRect.right - 1),
+  );
+  const probeElements =
+    typeof document.elementsFromPoint === "function"
+      ? document.elementsFromPoint(probeX, probeY)
+      : typeof document.elementFromPoint === "function"
+        ? [document.elementFromPoint(probeX, probeY)].filter(
+            (element): element is Element => element !== null,
+          )
+        : [];
+  const hit = probeElements
+    .map((element) => element.closest<HTMLElement>(READING_BLOCK_SELECTOR))
+    .find((block): block is HTMLElement => Boolean(block && article.contains(block)));
+  if (hit) return hit;
+
+  let low = 0;
+  let high = blocks.length - 1;
+  let closest = blocks[0];
+  let closestDistance = Number.POSITIVE_INFINITY;
+  while (low <= high) {
+    const index = Math.floor((low + high) / 2);
+    const block = blocks[index];
     const rect = block.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0 && blockText(block).length > 0;
-  });
+    const distance =
+      probeY < rect.top ? rect.top - probeY : probeY > rect.bottom ? probeY - rect.bottom : 0;
+    if (distance < closestDistance) {
+      closest = block;
+      closestDistance = distance;
+    }
+    if (rect.bottom < probeY) low = index + 1;
+    else if (rect.top > probeY) high = index - 1;
+    else return block;
+  }
+  return closest;
 }
 
 function headingPathAt(blocks: HTMLElement[], targetIndex: number) {
@@ -202,22 +243,8 @@ export function captureReadingViewport(
   if (!blocks.length) return null;
 
   const probeY = readingProbeY(root);
-  const viewport = rootRect(root);
-  let targetIndex = 0;
-  let bestDistance = Number.POSITIVE_INFINITY;
-
-  blocks.forEach((block, index) => {
-    const rect = block.getBoundingClientRect();
-    if (rect.bottom < viewport.top || rect.top > viewport.bottom) return;
-    const containsProbe = rect.top <= probeY && rect.bottom >= probeY;
-    const distance = containsProbe ? 0 : Math.abs(rect.top - probeY);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      targetIndex = index;
-    }
-  });
-
-  const target = blocks[targetIndex];
+  const target = blockAtProbe(article, blocks, probeY);
+  const targetIndex = Math.max(0, blocks.indexOf(target));
   const maxScroll = rootMaxScroll(root);
   return {
     anchor: anchorFromBlock(blocks, targetIndex),
@@ -239,20 +266,33 @@ function findAnchorBlock(
   currentContentSignature: string,
 ) {
   const { anchor } = record;
-  const candidates = blocks.map((block, index) => ({
-    block,
-    index,
-    text: blockText(block),
-    type: blockType(block),
-    headingPath: headingPathAt(blocks, index),
-    textHash: readingTextFingerprint(blockText(block)),
-    previousTextHash:
-      index > 0 ? readingTextFingerprint(blockText(blocks[index - 1])) : "",
-    nextTextHash:
-      index + 1 < blocks.length
-        ? readingTextFingerprint(blockText(blocks[index + 1]))
-        : "",
-  }));
+  const headingPath: string[] = [];
+  const candidates = blocks.map((block, index) => {
+    const text = blockText(block);
+    const type = blockType(block);
+    const heading = /^h([1-6])$/iu.exec(type);
+    if (heading) {
+      const level = Number(heading[1]);
+      headingPath.splice(level - 1);
+      headingPath[level - 1] = text.slice(0, 140);
+    }
+    return {
+      block,
+      index,
+      text,
+      type,
+      headingPath: headingPath.filter(Boolean),
+      textHash: readingTextFingerprint(text),
+      previousTextHash: "",
+      nextTextHash: "",
+    };
+  });
+  for (let index = 0; index < candidates.length; index += 1) {
+    candidates[index].previousTextHash =
+      index > 0 ? candidates[index - 1].textHash : "";
+    candidates[index].nextTextHash =
+      index + 1 < candidates.length ? candidates[index + 1].textHash : "";
+  }
   const indexedCandidate = candidates[anchor.blockIndex];
   if (
     currentContentSignature === record.contentSignature &&

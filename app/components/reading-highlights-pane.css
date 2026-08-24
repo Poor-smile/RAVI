@@ -1,0 +1,320 @@
+/* Figma 2.0 · Panels & Command / P06 — independent local Highlights. */
+.app-shell.is-new-ui:not(.is-reading) .reading-highlights-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-xs);
+  overflow: hidden;
+  direction: rtl;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlights-summary {
+  width: 100%;
+  min-height: 18px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-950);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlights-list {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-xs);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: var(--scroll-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row {
+  position: relative;
+  width: 100%;
+  height: 64px;
+  min-height: 64px;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--radius-action);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-main {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  overflow: hidden;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-action);
+  box-shadow: none;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-main:hover {
+  background: var(--paper-100);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-main:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlight-row.is-active
+  .reading-highlight-row-main {
+  color: var(--proof-blue);
+  background: var(--proof-blue-soft);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-copy {
+  min-width: 0;
+  width: 210px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-copy strong,
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-copy strong {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-copy span {
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 17px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-main time {
+  width: 42px;
+  flex: none;
+  overflow: hidden;
+  color: var(--ink-500);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 17px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 120ms ease;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-delete {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  left: 3px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--error);
+  background: var(--paper-50);
+  border: 0;
+  border-radius: var(--radius-action);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlight-row:is(:hover, :focus-within)
+  .reading-highlight-row-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlight-row:is(:hover, :focus-within)
+  .reading-highlight-row-main
+  time {
+  opacity: 0;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlight-row-delete:hover {
+  background: var(--error-soft);
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlight-row-delete:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlights-empty {
+  min-height: 132px;
+  padding: var(--space-lg) var(--space-sm);
+  display: grid;
+  place-content: center;
+  gap: var(--space-xs);
+  color: var(--ink-700);
+  text-align: center;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlights-empty strong {
+  color: var(--ink-950);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-highlights-empty span {
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-sidebar-filter-control {
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 var(--space-sm);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--ink-700);
+  background: var(--paper-50);
+  border: 0;
+  border-radius: var(--radius-action);
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-sidebar-filter-control:focus-within {
+  box-shadow: inset 0 0 0 1px var(--proof-blue);
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-sidebar-filter-control
+  input {
+  min-width: 0;
+  height: 100%;
+  flex: 1;
+  padding: 0;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-sidebar-filter-control
+  input::placeholder {
+  color: var(--ink-700);
+  opacity: 1;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-sidebar-filter-control
+  input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-sidebar-filter-control
+  button {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink-700);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-action);
+  cursor: pointer;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-sidebar-filter-control
+  button:hover {
+  color: var(--ink-950);
+  background: var(--paper-200);
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-sidebar-filter-control
+  button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .library-content.is-sidebar-annotations
+  + .library-footer {
+  width: 100%;
+  min-height: 17px;
+  padding: 0;
+  color: var(--ink-700);
+  background: transparent;
+  border: 0;
+  font-size: 11px;
+  line-height: 17px;
+  text-align: right;
+}
+
+html body .app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-highlight-row-main,
+html body .app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-highlight-row-copy
+  strong,
+html body .app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-summary {
+  font-size: 12px;
+}
+
+html body .app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-highlight-row-copy
+  span,
+html body .app-shell.is-new-ui:not(.is-reading)
+  .reading-highlights-pane
+  .reading-highlight-row-main
+  time {
+  font-size: 11px;
+}

@@ -12,6 +12,32 @@ import {
   scanMarkdownFolder,
 } from "../desktop/server.mjs";
 import { desktopPdfOptions } from "../desktop/pdf-options.mjs";
+import {
+  canRestoreDocumentAccess,
+  isPathInsideRoot,
+  normalizedPathKey,
+} from "../desktop/document-access.mjs";
+
+test("desktop restores save access only for persisted recent or library files", () => {
+  const rootPath = path.resolve("C:\\Raavi Library");
+  const recentPath = path.resolve("C:\\Notes\\restored.md");
+  const libraryPath = path.join(rootPath, "projects", "plan.md");
+  const siblingPath = path.resolve("C:\\Raavi Library Backup\\plan.md");
+  const state = {
+    folders: [rootPath],
+    recents: [{ path: recentPath }],
+  };
+
+  assert.equal(canRestoreDocumentAccess(recentPath, state), true);
+  assert.equal(canRestoreDocumentAccess(libraryPath, state), true);
+  assert.equal(canRestoreDocumentAccess(siblingPath, state), false);
+  assert.equal(isPathInsideRoot(libraryPath, rootPath), true);
+  assert.equal(isPathInsideRoot(siblingPath, rootPath), false);
+  assert.equal(
+    normalizedPathKey(recentPath.toLocaleUpperCase("en-US")),
+    normalizedPathKey(recentPath),
+  );
+});
 
 test("desktop PDF output explicitly disables browser headers and footers", () => {
   const options = desktopPdfOptions();
@@ -77,6 +103,7 @@ test("desktop reads a shared Raavi document with annotations", async () => {
         savedAt: "2026-07-30T12:00:00.000Z",
         content: "# متن نمونه",
         annotations: [],
+        kind: "autosave",
       },
     ],
     assets: [
@@ -100,6 +127,7 @@ test("desktop reads a shared Raavi document with annotations", async () => {
     assert.equal(document.revision, 3);
     assert.equal(document.versions.length, 1);
     assert.equal(document.versions[0].number, 3);
+    assert.equal(document.versions[0].kind, "autosave");
     assert.deepEqual(document.assets, documentValue.assets);
   } finally {
     await rm(rootPath, { recursive: true, force: true });

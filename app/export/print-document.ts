@@ -6,6 +6,7 @@ const UI_ONLY_SELECTOR = [
   ".mermaid-diagram-viewport-tools",
   ".mermaid-diagram-hint",
   ".selection-range-feedback",
+  ".reading-document-kicker",
 ].join(",");
 
 const ID_REFERENCE_ATTRIBUTES = [
@@ -80,18 +81,23 @@ function waitForImage(image: HTMLImageElement) {
 }
 
 function normalizePrintableArticle(article: HTMLElement) {
-  if (article.hasAttribute("data-raavi-frontmatter")) {
-    const thematicBreak = article.firstElementChild;
-    const metadataHeading = thematicBreak?.nextElementSibling;
-    if (thematicBreak?.matches("hr") && metadataHeading?.matches("h2")) {
-      thematicBreak.remove();
-      metadataHeading.remove();
-    }
-    article.removeAttribute("data-raavi-frontmatter");
+  const documentHeading = article.querySelector(":scope > h1");
+  const metadataHeading = documentHeading?.previousElementSibling;
+  const thematicBreak = metadataHeading?.previousElementSibling;
+  if (
+    thematicBreak?.matches("hr") &&
+    metadataHeading?.matches("h2") &&
+    documentHeading?.matches("h1")
+  ) {
+    thematicBreak.remove();
+    metadataHeading.remove();
   }
+  article.removeAttribute("data-raavi-frontmatter");
 
   article
-    .querySelectorAll<HTMLElement>("[data-footnotes] > h2")
+    .querySelectorAll<HTMLElement>(
+      '[data-footnotes] h2, h2#footnote-label, h2[id$="footnote-label"]',
+    )
     .forEach((heading) => heading.remove());
 
   article

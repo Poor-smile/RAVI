@@ -53,7 +53,13 @@ export default defineConfig(async () => {
   return {
     server: {
       watch: {
-        ignored: ["**/src-tauri/target/**"],
+        ignored: [
+          "**/src-tauri/target/**",
+          "**/release-current/**",
+          "**/release-latest/**",
+          "**/release-*/**",
+          "**/win-unpacked/**",
+        ],
         ...(isCodexSeatbeltSandbox
           ? { useFsEvents: false, usePolling: true }
           : {}),

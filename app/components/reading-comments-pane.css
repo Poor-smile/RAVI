@@ -1,0 +1,685 @@
+/* Figma 2.0 · Panels & Command / P07 — independent editable Comments. */
+html[data-theme="dark"]
+  .app-shell.is-new-ui:not(.is-reading)
+  .sidebar-pane:has(.reading-comments-pane) {
+  background: var(--paper-200);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comments-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-xs);
+  overflow: hidden;
+  direction: rtl;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-trigger {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--proof-blue);
+  background: var(--proof-blue-soft);
+  border: 1px solid var(--proof-blue);
+  border-radius: var(--radius-action);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  cursor: pointer;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-trigger span {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-trigger:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.app-shell.is-new-ui:not(.is-reading) :is(.smart-annotation-confirm, .smart-annotation-processing, .smart-annotation-state, .smart-annotation-complete) {
+  width: 100%;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--ink-700);
+  background: var(--paper-50);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-action);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) :is(.smart-annotation-confirm, .smart-annotation-processing, .smart-annotation-state, .smart-annotation-complete) > strong,
+.app-shell.is-new-ui:not(.is-reading) :is(.smart-annotation-state, .smart-annotation-complete) div > strong {
+  color: var(--ink-950);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-confirm p,
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-confirm small,
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-state small,
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-complete small {
+  margin: 0;
+  display: block;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-privacy {
+  min-height: 54px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border-radius: var(--radius-action);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-actions,
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-actions,
+.app-shell.is-new-ui:not(.is-reading) .detached-annotation-card > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.app-shell.is-new-ui:not(.is-reading) :is(.smart-annotation-actions, .smart-comment-actions, .detached-annotation-card > div) button,
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-state > button {
+  min-height: 32px;
+  padding: 0 10px;
+  color: var(--proof-blue);
+  background: var(--proof-blue-soft);
+  border: 1px solid var(--proof-blue);
+  border-radius: var(--radius-action);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-shell.is-new-ui:not(.is-reading) :is(.smart-annotation-actions, .smart-comment-actions) button.is-primary {
+  color: white;
+  background: var(--proof-blue);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-processing {
+  min-height: 150px;
+  justify-content: center;
+  text-align: center;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-progress {
+  height: 4px;
+  overflow: hidden;
+  background: var(--paper-200);
+  border-radius: 99px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-progress i {
+  width: 42%;
+  height: 100%;
+  display: block;
+  background: var(--brand-gradient, linear-gradient(90deg, #ff9e85, #a46cff, #52a8ff));
+  border-radius: inherit;
+  animation: smart-annotation-progress 1.25s ease-in-out infinite alternate;
+}
+
+@keyframes smart-annotation-progress {
+  from { transform: translateX(0); }
+  to { transform: translateX(-138%); }
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-state {
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+  background: var(--warning-bg);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-state.is-error {
+  color: var(--error);
+  background: var(--error-soft);
+  border-color: var(--error);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-complete {
+  flex-direction: row;
+  align-items: center;
+  color: var(--success);
+  background: var(--success-soft, #edf8ef);
+  border-color: var(--success);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-summary {
+  width: 100%;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
+  gap: 4px;
+  color: var(--ink-700);
+  background: var(--paper-50);
+  border-radius: var(--radius-action);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-summary span {
+  padding: 8px 4px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-summary strong {
+  color: var(--ink-950);
+  font-size: 13px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-annotation-summary small {
+  font-size: 9px;
+  line-height: 14px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-card {
+  position: relative;
+  width: 100%;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--ink-950);
+  background:
+    linear-gradient(var(--paper-50), var(--paper-50)) padding-box,
+    var(--brand-gradient, linear-gradient(135deg, #ff9e85, #a46cff, #52a8ff)) border-box;
+  border: 1px solid transparent;
+  border-radius: var(--radius-action);
+  transition: transform 260ms cubic-bezier(.2,.8,.2,1), opacity 220ms ease;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-card.is-exiting {
+  transform: translateX(112%);
+  opacity: 0;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-card header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-700);
+  font-size: 10px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-brand {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--proof-blue);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-brand svg {
+  color: #8b5cf6;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-anchor {
+  padding: 0;
+  overflow: hidden;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-reason {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-diff {
+  display: grid;
+  gap: 6px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-diff p {
+  margin: 0;
+  padding: 8px;
+  color: var(--ink-950);
+  background: var(--paper-200);
+  border-radius: var(--radius-action);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-diff p:last-child {
+  background: var(--proof-blue-soft);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-diff span {
+  margin-bottom: 3px;
+  display: block;
+  color: var(--ink-700);
+  font-size: 9px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink-700);
+  font-size: 9px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .smart-comment-applying {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--proof-blue);
+  background: var(--proof-blue-soft);
+  border-radius: var(--radius-action);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .detached-annotations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .detached-warning {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-action);
+  font-size: 10px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .detached-annotations h3 {
+  margin: 0;
+  font-size: 12px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .detached-annotation-card {
+  padding: 10px;
+  color: var(--ink-700);
+  background: var(--paper-50);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-action);
+  font-size: 10px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .detached-annotation-card p {
+  color: var(--ink-950);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comments-portability {
+  width: 100%;
+  margin: 0;
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: 17px;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.is-new-ui:not(.is-reading) .smart-annotation-progress i { animation: none; }
+  .app-shell.is-new-ui:not(.is-reading) .smart-comment-card { transition: none; }
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comments-summary {
+  width: 100%;
+  min-height: 18px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-950);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comments-list {
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-xs);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: var(--scroll-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comment-row {
+  position: relative;
+  width: 100%;
+  height: 64px;
+  min-height: 64px;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--radius-action);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comment-row-main {
+  width: 100%;
+  height: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  display: grid;
+  grid-template-columns: minmax(0, 210px) 42px;
+  grid-template-rows: 24px 24px;
+  align-content: center;
+  column-gap: var(--space-sm);
+  row-gap: 0;
+  overflow: hidden;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-action);
+  box-shadow: none;
+  direction: rtl;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comment-row:hover
+  .reading-comment-row-main {
+  background: var(--paper-100);
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comment-row-main:has(:focus-visible) {
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comment-row.is-active
+  .reading-comment-row-main {
+  background: var(--proof-blue-soft);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comment-row-jump {
+  min-width: 0;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  grid-column: 1;
+  grid-row: 1;
+  overflow: hidden;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font: inherit;
+  line-height: 18px;
+  text-align: right;
+  cursor: pointer;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comment-row-jump:focus-visible,
+.app-shell.is-new-ui:not(.is-reading) .reading-comment-row-body:focus-visible {
+  outline: 0;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comment-row-jump strong {
+  width: 100%;
+  display: block;
+  overflow: hidden;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comment-row.is-active
+  .reading-comment-row-jump {
+  color: var(--proof-blue);
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comment-row-body {
+  min-width: 0;
+  width: 100%;
+  height: 24px;
+  padding: 0;
+  grid-column: 1;
+  grid-row: 2;
+  overflow: hidden;
+  color: var(--ink-700);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 17px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comment-row-body::placeholder {
+  color: var(--ink-500);
+  opacity: 1;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comment-row-main time {
+  width: 42px;
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+  overflow: hidden;
+  color: var(--ink-500);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 17px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 120ms ease;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comment-row-delete {
+  position: absolute;
+  z-index: 1;
+  top: 14px;
+  left: 3px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--error);
+  background: var(--paper-50);
+  border: 0;
+  border-radius: var(--radius-action);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comment-row:is(:hover, :focus-within)
+  .reading-comment-row-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comment-row:is(:hover, :focus-within)
+  .reading-comment-row-main
+  time {
+  opacity: 0;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comment-row-delete:hover {
+  background: var(--error-soft);
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comment-row-delete:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comments-empty {
+  min-height: 132px;
+  padding: var(--space-lg) var(--space-sm);
+  display: grid;
+  place-content: center;
+  gap: var(--space-xs);
+  color: var(--ink-700);
+  text-align: center;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comments-empty strong {
+  color: var(--ink-950);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.app-shell.is-new-ui:not(.is-reading) .reading-comments-empty span {
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-sidebar-filter-control {
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 var(--space-sm);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--ink-700);
+  background: var(--paper-50);
+  border: 0;
+  border-radius: var(--radius-action);
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-sidebar-filter-control:focus-within {
+  box-shadow: inset 0 0 0 1px var(--proof-blue);
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-sidebar-filter-control
+  input {
+  min-width: 0;
+  height: 100%;
+  flex: 1;
+  padding: 0;
+  color: var(--ink-950);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-sidebar-filter-control
+  input::placeholder {
+  color: var(--ink-700);
+  opacity: 1;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-sidebar-filter-control
+  input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-sidebar-filter-control
+  button {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink-700);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-action);
+  cursor: pointer;
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-sidebar-filter-control
+  button:hover {
+  color: var(--ink-950);
+  background: var(--paper-200);
+}
+
+.app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-sidebar-filter-control
+  button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+html body .app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-comment-row-jump,
+html body .app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-comment-row-jump
+  strong,
+html body .app-shell.is-new-ui:not(.is-reading) .reading-comments-summary {
+  font-size: 12px;
+}
+
+html body .app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-comment-row-body,
+html body .app-shell.is-new-ui:not(.is-reading)
+  .reading-comments-pane
+  .reading-comment-row-main
+  time {
+  font-size: 11px;
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "unit": "bytes",
+  "artifacts": {
+    "markdown": {
+      "label": "Markdown editor",
+      "pattern": "^markdown-code-editor-[^.]+\\.js$",
+      "baselineBytes": 301043,
+      "maxBytes": 327680
+    },
+    "mermaid": {
+      "label": "Mermaid Studio",
+      "pattern": "^mermaid-studio-[^.]+\\.js$",
+      "baselineBytes": 134906,
+      "maxBytes": 153600
+    },
+    "graph": {
+      "label": "Graph / Cytoscape",
+      "pattern": "^cytoscape\\.esm-[^.]+\\.js$",
+      "baselineBytes": 435413,
+      "maxBytes": 471040
+    }
+  }
+}

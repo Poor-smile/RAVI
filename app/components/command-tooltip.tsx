@@ -39,6 +39,14 @@ export function commandAriaKeyShortcuts(
   return value || undefined;
 }
 
+export function commandShortcutLabel(
+  id: CommandId,
+  environment: CommandEnvironment,
+) {
+  const binding = primaryBinding(id, environment);
+  return binding ? formatBinding(binding, environment.platform) : "";
+}
+
 export function CommandShortcutKeys({
   binding,
   environment,
@@ -54,4 +62,3 @@ export function CommandShortcutKeys({
     </span>
   );
 }
-

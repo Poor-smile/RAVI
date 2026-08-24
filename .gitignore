@@ -46,8 +46,16 @@ next-env.d.ts
 /outputs/
 /work/
 /release/
+/release-*/
 /release-pruned/
 /dist-tauri/
 /src-tauri/target/
 /.deploy-raavi-web/
 /.codex-video-review/
+/.artifacts/
+/.codex-temp-*
+/.codex/
+/.logs/
+/.tmp/
+/tmp/
+/*.fig

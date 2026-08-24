@@ -34,9 +34,6 @@ npm version X.Y.Z --no-git-tag-version
 - این فایل‌ها را برای نسخه جدید بررسی و بروزرسانی کنید:
   - `package.json`
   - `package-lock.json`
-  - `src-tauri/tauri.conf.json`
-  - `src-tauri/Cargo.toml`
-  - رکورد محلی `raavi` در `src-tauri/Cargo.lock`
   - `CHANGELOG.md`
   - `landing/CHANGELOG.md`
   - `app/components/about-dialog.tsx`
@@ -61,27 +58,21 @@ npm run build:web-static
 
 ## 4. ساخت نسخه دسکتاپ
 
-اگر Rust در PATH نیست، اول PATH را برای همان ترمینال تنظیم کنید:
+نسخهٔ رسمی Windows با Electron و نصب‌کنندهٔ NSIS ساخته می‌شود:
 
 ```powershell
-$env:PATH="$env:USERPROFILE\.cargo\bin;$env:PATH"
-```
-
-سپس نسخه Windows را بسازید:
-
-```powershell
-npm run tauri:build
+npm run desktop:pack
 ```
 
 خروجی‌های اصلی مورد انتظار:
 
-- `release/Raavi-Tauri-Setup-X.Y.Z-x64.exe`
-- `release/Raavi-Tauri-Portable-X.Y.Z-x64.exe`
-
-برای لینک‌های عمومی، aliasهای زیر را آماده کنید:
-
 - `release/Raavi-Setup-X.Y.Z-x64.exe`
-- `release/Raavi-Portable-X.Y.Z-x64.exe`
+- `release/Raavi-Setup-X.Y.Z-x64.exe.blockmap`
+- `release/win-unpacked/Raavi.exe`
+
+فرمان `desktop:pack` آیکون برنامه و فایل Markdown را می‌سازد، build تولیدی را
+انجام می‌دهد، Installer را تولید می‌کند و قرارداد NSIS را نیز بررسی می‌کند.
+Tauri و فایل Portable بخشی از مسیر انتشار نسخهٔ ۲ نیستند.
 
 فایل‌های نهایی دانلود را در این مسیرها هم کپی کنید:
 
@@ -92,7 +83,6 @@ npm run tauri:build
 
 ```powershell
 Get-FileHash release\Raavi-Setup-X.Y.Z-x64.exe -Algorithm SHA256
-Get-FileHash release\Raavi-Portable-X.Y.Z-x64.exe -Algorithm SHA256
 ```
 
 ## 5. بروزرسانی صفحه معرفی و CHANGELOG
@@ -136,7 +126,7 @@ rg -n "Raavi-Setup-OLD|OLD_HASH|نسخهٔ <bdi dir=`"ltr`">OLD"
 نمونه جستجو برای تایید نسخه جدید:
 
 ```powershell
-rg -n "Raavi-Setup-X.Y.Z|X.Y.Z|NEW_HASH" CHANGELOG.md landing app package.json src-tauri
+rg -n "Raavi-Setup-X.Y.Z|X.Y.Z|NEW_HASH" CHANGELOG.md landing app package.json desktop build
 ```
 
 ## 7. آپلود در cPanel
@@ -189,7 +179,7 @@ Invoke-WebRequest -Uri "https://ravi.poorsmile.ir/downloads/Raavi-Setup-X.Y.Z-x6
 حداقل تست‌های پیشنهادی برای انتشار:
 
 ```powershell
-npx eslint app tests scripts desktop tauri-app playwright.config.ts playwright.reading-audit.config.ts --ignore-pattern dist --ignore-pattern .next --ignore-pattern .deploy-raavi-publish --ignore-pattern .deploy-raavi-web --ignore-pattern release-pruned --ignore-pattern src-tauri/target
+npx eslint app tests scripts desktop playwright.config.ts playwright.reading-audit.config.ts --ignore-pattern dist --ignore-pattern .next --ignore-pattern .deploy-raavi-publish --ignore-pattern .deploy-raavi-web --ignore-pattern release
 node --import tsx --test tests/mermaid-blocks.test.ts tests/mermaid-samples.test.ts tests/mermaid-viewport.test.ts tests/mermaid-persian-adapter.test.ts tests/mermaid-simple-builder.test.ts tests/reading-position.test.ts tests/raavi-assets.test.ts
 node --test tests/rendered-html.test.mjs tests/desktop-server.test.mjs
 npx playwright test tests/keyboard-shortcuts.spec.ts tests/mermaid-persian-studio.spec.ts
@@ -253,7 +243,6 @@ https://github.com/Poor-smile/RAVI/releases
 - Description: خلاصه تغییرات همان نسخه از `CHANGELOG.md`
 - Assets:
   - `release/Raavi-Setup-X.Y.Z-x64.exe`
-  - `release/Raavi-Portable-X.Y.Z-x64.exe`
   - در صورت نیاز `raavi-web-cpanel.zip`
   - در صورت نیاز `raavi-landing-wordpress.zip`
 
@@ -262,7 +251,6 @@ https://github.com/Poor-smile/RAVI/releases
 ```powershell
 gh release create vX.Y.Z `
   release\Raavi-Setup-X.Y.Z-x64.exe `
-  release\Raavi-Portable-X.Y.Z-x64.exe `
   --repo Poor-smile/RAVI `
   --title "Raavi X.Y.Z" `
   --notes-file CHANGELOG.md

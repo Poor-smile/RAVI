@@ -31,15 +31,45 @@ async function openMobileMenu(page: Page) {
 }
 
 async function openEditorPane(page: Page) {
-  const editorTab = page.locator('.mobile-tabs [role="tab"]').nth(0);
+  await expect(page.locator(".app-shell")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
+  const backToDesk = page.getByRole("button", { name: /بازگشت به میز/ });
+  const liveMode = page.getByRole("button", {
+    name: "ویرایش روان",
+    exact: true,
+  });
   await expect
-    .poll(async () => {
-      if ((await editorTab.getAttribute("aria-selected")) !== "true") {
-        await editorTab.click();
-      }
-      return editorTab.getAttribute("aria-selected");
-    })
-    .toBe("true");
+    .poll(async () =>
+      (await backToDesk.isVisible()) || (await liveMode.isVisible()),
+    )
+    .toBe(true);
+  if (await backToDesk.isVisible()) await backToDesk.click();
+  await expect(liveMode).toBeVisible();
+  if ((await liveMode.getAttribute("aria-pressed")) !== "true") {
+    await liveMode.click();
+  }
+  await expect(page.locator(".workspace")).toHaveAttribute(
+    "data-workspace-screen",
+    "writing",
+  );
+}
+
+async function openMarkdownFixture(page: Page) {
+  await expect(page.locator(".app-shell")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
+  await page
+    .locator('input[type="file"][accept*=".md"]')
+    .first()
+    .setInputFiles({
+      name: "سند-لایه‌ها.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("# سند لایه‌ها\n\nمتن آزمون موبایل.", "utf8"),
+    });
+  await expect(page.locator(".document-identity")).toContainText("سند-لایه‌ها.md");
 }
 
 test("mobile Back closes the top transient layer before leaving the document", async ({
@@ -54,8 +84,11 @@ test("mobile Back closes the top transient layer before leaving the document", a
   await expect(page.locator(".mobile-topbar-menu")).toBeHidden();
   await expectGuard(page, false);
 
-  const libraryButton = page.locator(".mobile-library-trigger");
-  await libraryButton.click();
+  await openMobileMenu(page);
+  await page
+    .locator(".mobile-topbar-menu-grid")
+    .getByRole("button", { name: /بازکردن نوار کناری/ })
+    .click();
   await expect(page.locator("#library-panel")).toBeVisible();
   await expectGuard(page, true);
   await systemBack(page);
@@ -64,12 +97,13 @@ test("mobile Back closes the top transient layer before leaving the document", a
 
   await openMobileMenu(page);
   await page.locator(".mobile-topbar-menu-grid > button").nth(1).click();
-  const newDocumentDialog = page.locator(".new-document-modal");
-  await expect(newDocumentDialog).toBeVisible();
   await expect(page.locator(".mobile-topbar-menu")).toBeHidden();
-  await expectGuard(page, true);
-  await systemBack(page);
-  await expect(newDocumentDialog).toBeHidden();
+  await expect(page.getByRole("tab", { name: "تب جدید", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.locator(".workspace-office-setup")).toBeVisible();
+  await expect(page.locator(".new-document-modal")).toHaveCount(0);
   await expectGuard(page, false);
 });
 
@@ -77,6 +111,8 @@ test("mobile file action opens the system picker outside the inert workspace", a
   page,
 }) => {
   await page.goto("/");
+  await openMarkdownFixture(page);
+  await page.getByRole("button", { name: /بازگشت به میز/ }).click();
   await openMobileMenu(page);
 
   const [fileChooser] = await Promise.all([
@@ -98,16 +134,35 @@ test("reading outline and editor tools unwind in visual order", async ({
   page,
 }) => {
   await page.goto("/");
+  await openMarkdownFixture(page);
+  await page.getByRole("button", { name: /بازگشت به میز/ }).click();
   await openMobileMenu(page);
   await page.locator(".mobile-topbar-menu-grid > button").nth(2).click();
 
   const workspace = page.locator(".workspace");
+  const sidebar = page.locator("#library-panel");
   await expect(workspace).toHaveClass(/workspace--reading/);
-  await expect(page.locator(".reading-outline")).toBeVisible();
+  await expect(sidebar).toBeVisible();
+  await expect(sidebar).toHaveClass(/is-collapsed/);
+  await expect(sidebar.locator(".sidebar-pane")).toBeHidden();
   await expectGuard(page, true);
 
+  const outlineTrigger = page.getByRole("button", {
+    name: "فهرست سند",
+    exact: true,
+  });
+  await outlineTrigger.click();
+  await expect(sidebar).toHaveClass(/is-open/);
+  await expect(sidebar.locator(".sidebar-pane")).toBeVisible();
+  await expect(sidebar).toHaveAttribute(
+    "aria-modal",
+    "true",
+  );
+  await expect(page.locator(".workspace")).toHaveAttribute("inert", "");
+
   await systemBack(page);
-  await expect(page.locator(".reading-outline")).toBeHidden();
+  await expect(sidebar).toHaveClass(/is-collapsed/);
+  await expect(sidebar.locator(".sidebar-pane")).toBeHidden();
   await expect(workspace).toHaveClass(/workspace--reading/);
   await expectGuard(page, true);
 
@@ -116,22 +171,32 @@ test("reading outline and editor tools unwind in visual order", async ({
   await expectGuard(page, false);
 
   await openEditorPane(page);
-  await page.locator(".format-tool-expand").click();
-  await expect(workspace).toHaveClass(/mobile-editor-tools-is-open/);
-  await expectGuard(page, true);
-  await systemBack(page);
-  await expect(workspace).not.toHaveClass(/mobile-editor-tools-is-open/);
+  await page.getByRole("button", { name: "ابزارهای بیشتر", exact: true }).click();
+  const editorTools = page.getByRole("menu", {
+    name: "ابزارهای بیشتر ویرایش",
+  });
+  await expect(editorTools).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(editorTools).toBeHidden();
   await expectGuard(page, false);
 });
 
 test("Mermaid sample library closes before the studio", async ({ page }) => {
   await page.goto("/");
+  await openMarkdownFixture(page);
   await openEditorPane(page);
-  await page.locator('button[aria-label*="Mermaid"]').click();
+  await page.getByRole("button", { name: "ابزارهای بیشتر", exact: true }).click();
+  await page
+    .getByRole("menu", { name: "ابزارهای بیشتر ویرایش" })
+    .getByRole("menuitem", { name: "نمودار Mermaid", exact: true })
+    .click();
 
   const studio = page.locator(".mermaid-studio");
   await expect(studio).toBeVisible();
-  await studio.locator(".mermaid-mode-switch button").nth(1).click();
+  await studio.getByRole("option").first().click();
+  const compactModeSwitch = studio.locator(".mermaid-mode-switch--compact");
+  await expect(compactModeSwitch).toBeVisible();
+  await compactModeSwitch.getByRole("button").nth(1).click();
 
   await studio.locator(".mermaid-preview-tools > button").last().click();
   await expect(studio).toHaveClass(/preview-is-fullscreen/);

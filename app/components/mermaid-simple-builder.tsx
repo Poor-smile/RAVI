@@ -2,24 +2,18 @@
 
 import {
   AlertCircle,
-  BrainCircuit,
-  ChartNoAxesCombined,
   ChevronDown,
   ChevronUp,
-  Clock3,
   Copy,
-  GitMerge,
   GripVertical,
   Plus,
   Redo2,
-  Search,
   Settings2,
   Trash2,
   Undo2,
-  Workflow,
-} from "lucide-react";
+} from "@/app/icons/material-symbols";
 import { useMemo, useState } from "react";
-import { normalizePersianSearch } from "../mermaid/persian-adapter";
+import { MermaidDiagramCatalog, MermaidDiagramPreview } from "./mermaid-diagram-catalog";
 import {
   createSimpleDiagramDraft,
   createSimpleDiagramRow,
@@ -35,6 +29,7 @@ import {
 } from "../mermaid/simple-builder";
 
 type ControlOption = { value: string; label: string };
+
 type ControlSpec = {
   key: string;
   label: string;
@@ -97,14 +92,6 @@ const ADVANCED_ONLY: Partial<Record<SimpleDiagramKind, string>> = {
   journey: "رنگ‌های جزئی actor و section از themeVariables در حالت پیشرفته قابل تنظیم‌اند.",
   quadrant: "تنظیمات ریز فونت، padding و رنگ متن هر ربع در حالت پیشرفته باقی می‌مانند.",
 };
-
-function KindIcon({ kind }: { kind: SimpleDiagramKind }) {
-  if (["mindmap", "journey", "ishikawa", "cynefin"].includes(kind)) return <BrainCircuit size={21} aria-hidden="true" />;
-  if (["timeline", "gantt", "kanban", "gitgraph", "eventmodeling"].includes(kind)) return <Clock3 size={21} aria-hidden="true" />;
-  if (["pie", "xychart", "quadrant", "sankey", "radar", "treemap", "venn", "wardley"].includes(kind)) return <ChartNoAxesCombined size={21} aria-hidden="true" />;
-  if (["class", "state", "er", "requirement", "architecture", "c4", "block", "packet", "treeview"].includes(kind)) return <GitMerge size={21} aria-hidden="true" />;
-  return <Workflow size={21} aria-hidden="true" />;
-}
 
 const ESSENTIAL_ROW_CONTROL_KINDS = new Set<SimpleDiagramKind>([
   "requirement",
@@ -627,61 +614,24 @@ export function MermaidSimpleBuilder({
   draft,
   onChange,
   onChooseKind,
+  onPreviewChange,
 }: {
   draft: SimpleDiagramDraft | null;
   onChange: (draft: SimpleDiagramDraft) => void;
   onChooseKind: (draft: SimpleDiagramDraft | null) => void;
+  onPreviewChange?: (preview: MermaidDiagramPreview | null) => void;
 }) {
-  const [query, setQuery] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const historyKey = draft?.kind ?? "none";
   const [history, setHistory] = useState<{ key: string; undo: SimpleDiagramDraft[]; redo: SimpleDiagramDraft[] }>({ key: historyKey, undo: [], redo: [] });
   const activeHistory = history.key === historyKey ? history : { key: historyKey, undo: [], redo: [] };
 
-  const filteredOptions = useMemo(() => {
-    const normalized = normalizePersianSearch(query);
-    if (!normalized) return SIMPLE_DIAGRAM_OPTIONS;
-    return SIMPLE_DIAGRAM_OPTIONS.filter((option) => normalizePersianSearch(`${option.title} ${option.description} ${option.category} ${option.kind}`).includes(normalized));
-  }, [query]);
-  const groupedOptions = useMemo(() => {
-    const groups = new Map<string, typeof SIMPLE_DIAGRAM_OPTIONS>();
-    for (const option of filteredOptions) groups.set(option.category, [...(groups.get(option.category) ?? []), option]);
-    return Array.from(groups);
-  }, [filteredOptions]);
-
   if (!draft) {
     return (
-      <section className="mermaid-kind-picker" aria-labelledby="mermaid-kind-title">
-        <header>
-          <span>شروع ساخت</span>
-          <h2 id="mermaid-kind-title">چه نموداری می‌خواهید بسازید؟</h2>
-          <p>همهٔ نوع‌ها فرم فارسی دارند؛ راوی کد Mermaid را پشت صحنه می‌سازد.</p>
-        </header>
-        <label className="mermaid-kind-search">
-          <Search size={17} aria-hidden="true" />
-          <span className="visually-hidden">جست‌وجوی نوع نمودار</span>
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`جست‌وجو میان ${SIMPLE_DIAGRAM_OPTIONS.length.toLocaleString("fa-IR")} نوع نمودار…`} data-editable-kind="generic" />
-        </label>
-        {groupedOptions.length ? (
-          <div className="mermaid-kind-groups">
-            {groupedOptions.map(([category, options]) => (
-              <section className="mermaid-kind-group" key={category} aria-labelledby={`mermaid-category-${category}`}>
-                <h3 id={`mermaid-category-${category}`}>{category}</h3>
-                <div className="mermaid-kind-list">
-                  {options.map((option) => (
-                    <button type="button" key={option.kind} onClick={() => onChooseKind(createSimpleDiagramDraft(option.kind))}>
-                      <span className="mermaid-kind-icon"><KindIcon kind={option.kind} /></span>
-                      <span><strong>{option.title}</strong><small>{option.description}</small></span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        ) : (
-          <div className="mermaid-kind-empty" role="status"><strong>نموداری با این نام پیدا نشد.</strong><button type="button" onClick={() => setQuery("")}>پاک‌کردن جست‌وجو</button></div>
-        )}
-      </section>
+      <MermaidDiagramCatalog
+        onChoose={(kind) => onChooseKind(createSimpleDiagramDraft(kind))}
+        onPreviewChange={onPreviewChange}
+      />
     );
   }
 

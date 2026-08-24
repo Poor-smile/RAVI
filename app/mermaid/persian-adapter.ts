@@ -75,7 +75,23 @@ export function detectMermaidKind(code: string): MermaidDiagramKind {
   const body = trimmed.startsWith("---")
     ? trimmed.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*\r?\n/u, "")
     : trimmed;
-  const firstLine = body.split(/\r?\n/u, 1)[0]?.trim() ?? "";
+  let insideDirective = false;
+  const firstLine =
+    body
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find((line) => {
+        if (!line) return false;
+        if (insideDirective) {
+          if (line.includes("}%%")) insideDirective = false;
+          return false;
+        }
+        if (line.startsWith("%%{")) {
+          insideDirective = !line.includes("}%%");
+          return false;
+        }
+        return !line.startsWith("%%");
+      }) ?? "";
   if (/^(?:flowchart|graph)\b/iu.test(firstLine)) return "flowchart";
   if (/^sequenceDiagram\b/iu.test(firstLine)) return "sequence";
   if (/^classDiagram\b/iu.test(firstLine)) return "class";

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  KeyboardEventHandler,
   MouseEvent,
   ReactNode,
   RefObject,
@@ -13,13 +14,20 @@ import {
 
 export type ModalLayerId =
   | "about"
+  | "closeDocument"
+  | "commandPalette"
   | "export"
+  | "externalLink"
+  | "fileOperation"
+  | "formula"
   | "image"
   | "library"
   | "mermaid"
   | "mobileMenu"
   | "new"
+  | "quickOpen"
   | "save"
+  | "settings"
   | "support"
   | "shortcuts";
 
@@ -70,14 +78,21 @@ export function useModalFocus({
   containerRef,
   initialFocusRef,
   returnFocusRef,
+  trapFocus = true,
 }: {
   open: boolean;
   isTopLayer: boolean;
   containerRef: RefObject<HTMLElement | null>;
   initialFocusRef?: RefObject<HTMLElement | null>;
   returnFocusRef?: RefObject<HTMLElement | null>;
+  trapFocus?: boolean;
 }) {
   const capturedOpenerRef = useRef<HTMLElement | null>(null);
+  const latestReturnFocusRef = useRef(returnFocusRef);
+
+  useEffect(() => {
+    latestReturnFocusRef.current = returnFocusRef;
+  }, [returnFocusRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,7 +104,10 @@ export function useModalFocus({
         : null);
 
     return () => {
-      const target = explicitReturnTarget ?? capturedOpenerRef.current;
+      const target =
+        latestReturnFocusRef.current?.current ??
+        explicitReturnTarget ??
+        capturedOpenerRef.current;
       if (target?.isConnected) requestAnimationFrame(() => target.focus());
     };
   }, [open, returnFocusRef]);
@@ -108,6 +126,8 @@ export function useModalFocus({
       target.focus();
     };
     requestAnimationFrame(focusInitial);
+
+    if (!trapFocus) return;
 
     const trapTab = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
@@ -143,7 +163,7 @@ export function useModalFocus({
       document.removeEventListener("keydown", trapTab);
       document.removeEventListener("focusin", containFocus);
     };
-  }, [containerRef, initialFocusRef, isTopLayer, open]);
+  }, [containerRef, initialFocusRef, isTopLayer, open, trapFocus]);
 }
 
 export function AccessibleModal({
@@ -157,6 +177,11 @@ export function AccessibleModal({
   dialogClassName,
   labelledBy,
   describedBy,
+  containerId,
+  containerRole = "dialog",
+  ariaModal = true,
+  trapFocus = true,
+  onKeyDown,
   children,
 }: {
   open: boolean;
@@ -169,6 +194,11 @@ export function AccessibleModal({
   dialogClassName: string;
   labelledBy: string;
   describedBy?: string;
+  containerId?: string;
+  containerRole?: "dialog" | "alertdialog" | "menu";
+  ariaModal?: boolean;
+  trapFocus?: boolean;
+  onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
   children: ReactNode;
 }) {
   useModalFocus({
@@ -177,6 +207,7 @@ export function AccessibleModal({
     containerRef: dialogRef,
     initialFocusRef,
     returnFocusRef,
+    trapFocus,
   });
 
   if (!open) return null;
@@ -192,13 +223,15 @@ export function AccessibleModal({
       onMouseDown={closeFromBackdrop}
     >
       <div
+        id={containerId}
         ref={dialogRef}
         className={dialogClassName}
-        role="dialog"
-        aria-modal="true"
+        role={containerRole}
+        aria-modal={(containerRole === "dialog" || containerRole === "alertdialog") && ariaModal ? true : undefined}
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}
         tabIndex={-1}
+        onKeyDown={onKeyDown}
       >
         {children}
       </div>

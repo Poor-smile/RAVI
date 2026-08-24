@@ -1,30 +1,30 @@
 "use client";
 
+import "./mermaid-studio.css";
+
 import {
   AlertTriangle,
-  ArrowRight,
-  BookOpen,
+  ArrowLeft,
   Check,
   CircleHelp,
-  Code2,
-  Eye,
   Hand,
   Library,
   LoaderCircle,
   Maximize2,
   Minimize2,
-  RotateCcw,
   Scan,
   Search,
-  Wrench,
+  Sparkles,
   X,
   ZoomIn,
   ZoomOut,
-} from "lucide-react";
+} from "@/app/icons/material-symbols";
 import {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
   RefObject,
+  Suspense,
+  lazy,
   useEffect,
   useMemo,
   useRef,
@@ -39,6 +39,7 @@ import {
   createSimpleDiagramDraft,
   isSimpleDiagramKind,
   parseSimpleDiagram,
+  SIMPLE_DIAGRAM_OPTIONS,
   SimpleDiagramDraft,
   simpleDraftToCode,
   validateSimpleDiagramDraft,
@@ -56,6 +57,15 @@ import { AccessibleModal } from "./accessible-modal";
 import { useBackLayer } from "./back-layer-provider";
 import { MermaidCodeEditor } from "./mermaid-code-editor";
 import { MermaidSimpleBuilder } from "./mermaid-simple-builder";
+import {
+  MermaidAiBuilder,
+  type MermaidAiDiagramPreview,
+  type MermaidAiStep,
+} from "./mermaid-ai-builder";
+
+const MermaidBuildingPreview = lazy(() =>
+  import("./mermaid-building-preview").then((module) => ({ default: module.MermaidBuildingPreview })),
+);
 
 export type MermaidStudioSession = {
   id: string;
@@ -63,6 +73,7 @@ export type MermaidStudioSession = {
   initialCode: string;
   insertionOffset: number;
   originalDocument: string;
+  selectedText?: string;
   block?: MermaidBlock;
   editorScrollTop: number;
   previewScrollTop: number;
@@ -72,7 +83,7 @@ export type MermaidApplyResult =
   | { ok: true }
   | { ok: false; message: string };
 
-type WorkspaceMode = "simple" | "advanced";
+type WorkspaceMode = "simple" | "advanced" | "guided";
 
 const DRAFT_PREFIX = "raavi:mermaid-draft:v1";
 
@@ -131,11 +142,14 @@ export function MermaidStudio({
   );
   const dialogRef = useRef<HTMLDivElement>(null);
   const backButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmDialogRef = useRef<HTMLDivElement>(null);
+  const confirmCancelRef = useRef<HTMLButtonElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const renderSurfaceRef = useRef<HTMLImageElement>(null);
   const displayStartedRef = useRef(0);
   const lastValidCodeRef = useRef(session.initialCode || DEFAULT_MERMAID_CODE);
   const [code, setCode] = useState(recoveredCode);
+  const detectedDiagramKind = detectMermaidKind(code);
   const initialCode = session.initialCode || DEFAULT_MERMAID_CODE;
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(() =>
     session.mode === "create" || recoveredSimpleDraft ? "simple" : "advanced",
@@ -143,12 +157,17 @@ export function MermaidStudio({
   const [simpleDraft, setSimpleDraft] = useState<SimpleDiagramDraft | null>(() =>
     session.mode === "create" ? null : recoveredSimpleDraft,
   );
+  const activeDiagramKind = isSimpleDiagramKind(detectedDiagramKind)
+    ? detectedDiagramKind
+    : simpleDraft?.kind;
   const awaitingKind = workspaceMode === "simple" && simpleDraft === null;
   const [renderNonce, setRenderNonce] = useState(0);
-  const [editorPercent, setEditorPercent] = useState(44);
+  const [editorPercent, setEditorPercent] = useState(38.07);
   const [resizing, setResizing] = useState(false);
   const [samplesOpen, setSamplesOpen] = useState(false);
   const [sampleQuery, setSampleQuery] = useState("");
+  const [guidedDiagramPreview, setGuidedDiagramPreview] = useState<MermaidAiDiagramPreview | null>(null);
+  const [guidedAiStep, setGuidedAiStep] = useState<MermaidAiStep | null>(null);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [applyError, setApplyError] = useState("");
@@ -340,6 +359,18 @@ export function MermaidStudio({
   const openAdvanced = () => {
     setWorkspaceMode("advanced");
     setSamplesOpen(false);
+    setGuidedDiagramPreview(null);
+  };
+
+  const openGuided = () => {
+    if (!activeDiagramKind) {
+      setApplyError("نوع نمودار از کد فعلی تشخیص داده نشد؛ ابتدا یک نوع نمودار انتخاب کنید.");
+      return;
+    }
+    setWorkspaceMode("guided");
+    setSamplesOpen(false);
+    setApplyError("");
+    setGuidedDiagramPreview(null);
   };
 
   const openSimple = () => {
@@ -352,18 +383,13 @@ export function MermaidStudio({
     setWorkspaceMode("simple");
     setSamplesOpen(false);
     setApplyError("");
+    setGuidedDiagramPreview(null);
   };
 
   const openAdvancedSamples = () => {
     setWorkspaceMode("advanced");
     setSampleQuery("");
     setSamplesOpen(true);
-  };
-
-  const openTypePicker = () => {
-    setSimpleDraft(null);
-    setWorkspaceMode("simple");
-    setSamplesOpen(false);
   };
 
   const openRelevantSample = () => {
@@ -424,22 +450,23 @@ export function MermaidStudio({
     else if (event.code === "ArrowRight" || event.code === "ArrowDown") next -= 5;
     else if (event.code === "Home") next = 28;
     else if (event.code === "End") next = 68;
-    else if (event.code === "Enter") next = 44;
+    else if (event.code === "Enter") next = 38.07;
     else return;
     event.preventDefault();
     setEditorPercent(Math.max(28, Math.min(68, next)));
   };
 
-  const status = awaitingKind
-    ? { label: "نوع نمودار را انتخاب کنید", icon: CircleHelp }
+  const status = workspaceMode === "guided" && guidedAiStep === "building"
+    ? { label: "در حال ساخت", tone: "loading" }
+    : awaitingKind
+    ? { label: "انتخاب نوع", tone: "idle" }
     : hasSimpleIssues
-      ? { label: `${simpleIssues.length.toLocaleString("fa-IR")} مورد نیاز به اصلاح دارد`, icon: AlertTriangle }
+      ? { label: "نیاز به اصلاح", tone: "invalid" }
     : renderState.status === "valid"
-      ? { label: "آماده", icon: Check }
+      ? { label: previewFullscreen ? "تمام‌صفحه" : "آماده", tone: "valid" }
       : renderState.status === "loading"
-        ? { label: "در حال ساخت", icon: LoaderCircle }
-        : { label: "یک ردیف نیاز به اصلاح دارد", icon: AlertTriangle };
-  const StatusIcon = status.icon;
+        ? { label: "در حال ساخت", tone: "loading" }
+        : { label: "نیاز به اصلاح", tone: "invalid" };
   const activeSvg = awaitingKind
     ? ""
     : renderState.svg || renderState.lastValidSvg;
@@ -455,6 +482,7 @@ export function MermaidStudio({
     !awaitingKind &&
     renderState.status === "invalid" &&
     Boolean(renderState.lastValidSvg);
+  const showingGuidedBuild = workspaceMode === "guided" && guidedAiStep === "building";
   const fitPreview = () =>
     viewport.fitView(
       previewRef.current,
@@ -465,7 +493,7 @@ export function MermaidStudio({
   return (
     <AccessibleModal
       open={open}
-      isTopLayer={isTopLayer}
+      isTopLayer={isTopLayer && !confirmClose}
       onClose={requestClose}
       dialogRef={dialogRef}
       initialFocusRef={backButtonRef}
@@ -479,42 +507,75 @@ export function MermaidStudio({
       labelledBy="mermaid-studio-title"
       describedBy="mermaid-studio-description"
     >
+      <div className="mermaid-studio-surface" inert={confirmClose ? true : undefined} aria-hidden={confirmClose ? true : undefined}>
       <header className="mermaid-studio-header">
         <div className="mermaid-studio-identity">
-          <button
-            ref={backButtonRef}
-            type="button"
-            className="mermaid-studio-back"
-            onClick={requestClose}
-          >
-            <ArrowRight size={17} aria-hidden="true" />
-            بازگشت به سند
-          </button>
-          <span className="mermaid-studio-header-rule" aria-hidden="true" />
           <div>
-            <strong id="mermaid-studio-title">ساخت نمودار</strong>
+            <strong id="mermaid-studio-title">استودیو گراف</strong>
             <span id="mermaid-studio-description" dir="auto">
               {fileName} · {session.mode === "edit" ? "ویرایش نمودار" : "نمودار تازه"}
             </span>
           </div>
         </div>
+        <span
+          className={`mermaid-validation is-${status.tone}`}
+          role="status"
+          aria-live="polite"
+        >
+          <i aria-hidden="true" />
+          {status.label}
+        </span>
+        {!awaitingKind && (
+          <div
+            className="mermaid-mode-switch mermaid-mode-switch--compact"
+            role="group"
+            aria-label="روش ساخت نمودار"
+          >
+            <button
+              type="button"
+              className={workspaceMode === "simple" ? "is-active" : ""}
+              onClick={openSimple}
+            >
+              ساخت آسان
+            </button>
+            <button
+              type="button"
+              className={workspaceMode === "advanced" ? "is-active" : ""}
+              onClick={openAdvanced}
+            >
+              کد پیشرفته
+            </button>
+            <button
+              type="button"
+              className={workspaceMode === "guided" ? "is-active" : ""}
+              onClick={openGuided}
+            >
+              ساخت با هوش مصنوعی
+            </button>
+          </div>
+        )}
         <div className="mermaid-studio-header-actions">
-          <span
-            className={`mermaid-validation is-${awaitingKind ? "idle" : hasSimpleIssues ? "invalid" : renderState.status}`}
-            role="status"
-            aria-live="polite"
-          >
-            <StatusIcon size={15} aria-hidden="true" />
-            {status.label}
-          </span>
           <button
-            className="mermaid-studio-samples-toggle"
+            ref={backButtonRef}
             type="button"
-            onClick={openTypePicker}
+            className="mermaid-studio-back"
+            aria-label="بازگشت به سند"
+            onClick={requestClose}
           >
-            <Library size={16} aria-hidden="true" />
-            انتخاب نوع نمودار
+            <ArrowLeft size={17} aria-hidden="true" />
+            <span className="mermaid-back-label-wide">بازگشت به سند</span>
+            <span className="mermaid-back-label-compact" aria-hidden="true">بازگشت</span>
           </button>
+          {!awaitingKind && workspaceMode !== "guided" && (
+            <button
+              type="button"
+              className="mermaid-ai-launch"
+              onClick={openGuided}
+            >
+              <Sparkles size={17} aria-hidden="true" />
+              ساخت با هوش مصنوعی
+            </button>
+          )}
           <div className="mermaid-apply-wrap">
             <button
               className="button button--primary mermaid-apply"
@@ -526,62 +587,9 @@ export function MermaidStudio({
               <Check size={16} aria-hidden="true" />
               {applyLabel}
             </button>
-            <small>
-              {awaitingKind
-                ? "ابتدا نوع نمودار را انتخاب کنید"
-                : hasSimpleIssues
-                ? `پس از رفع ${simpleIssues.length.toLocaleString("fa-IR")} مورد فرم فعال می‌شود`
-                : renderState.status === "invalid"
-                ? `پس از رفع ${renderState.error?.line ? `ردیف ${renderState.error.line.toLocaleString("fa-IR")}` : "خطا"} فعال می‌شود`
-                : "پیش‌نویس خودکار نگه‌داری می‌شود"}
-            </small>
           </div>
         </div>
       </header>
-
-      {(applyError || (!awaitingKind && renderState.error)) && (
-        <div className="mermaid-studio-error" role="alert">
-          <AlertTriangle size={18} aria-hidden="true" />
-          <div className="mermaid-error-copy">
-            <strong>{applyError || renderState.error?.message}</strong>
-            {!applyError && renderState.error?.suggestion && (
-              <p>{renderState.error.suggestion}</p>
-            )}
-            {!applyError &&
-              renderState.error?.technical &&
-              /[\u0600-\u06ff]/u.test(renderState.error.technical) && (
-              <details>
-                <summary>جزئیات فنی</summary>
-                <pre>{renderState.error.technical}</pre>
-              </details>
-            )}
-          </div>
-          {!applyError && (
-            <div className="mermaid-error-actions">
-              {renderState.error?.line && (
-                <button type="button" onClick={goToError}>
-                  <Wrench size={15} aria-hidden="true" />
-                  رفتن به ردیف مشکل‌دار
-                </button>
-              )}
-              <button type="button" onClick={openRelevantSample}>
-                <BookOpen size={15} aria-hidden="true" />
-                دیدن نمونهٔ صحیح
-              </button>
-              <button type="button" onClick={openSuggestedFix}>
-                <Wrench size={15} aria-hidden="true" />
-                اصلاح پیشنهادی
-              </button>
-              {renderState.lastValidSvg && (
-                <button type="button" onClick={restoreLastValid}>
-                  <RotateCcw size={15} aria-hidden="true" />
-                  بازگردانی آخرین تغییر
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       <main
         className={`mermaid-studio-workspace is-${workspaceMode}`}
@@ -593,43 +601,53 @@ export function MermaidStudio({
       >
         <section className="mermaid-studio-editor" aria-label="ساختار نمودار">
           <div className="mermaid-studio-pane-heading">
-            <span>
-              <Code2 size={16} aria-hidden="true" />
-              {workspaceMode === "simple" ? "ساخت آسان" : "کد Mermaid — پیشرفته"}
-            </span>
+            <div className="mermaid-studio-pane-title">
+              <strong>{awaitingKind ? "انتخاب نوع نمودار" : workspaceMode === "simple" ? "ساختار نمودار" : workspaceMode === "guided" ? "راوی هوشمند" : "کد Mermaid"}</strong>
+              <span>{awaitingKind ? `${SIMPLE_DIAGRAM_OPTIONS.length.toLocaleString("fa-IR")} ساختار محلی` : workspaceMode === "simple" ? "ساخت آسان" : workspaceMode === "guided" ? "هدایت‌شده" : "پیشرفته"}</span>
+            </div>
             <div className="mermaid-pane-actions">
-              <div className="mermaid-mode-switch" role="group" aria-label="روش ساخت نمودار">
-                <button
-                  type="button"
-                  className={workspaceMode === "simple" ? "is-active" : ""}
-                  onClick={openSimple}
-                >
-                  ساخت آسان
-                </button>
-                <button
-                  type="button"
-                  className={workspaceMode === "advanced" ? "is-active" : ""}
-                  onClick={openAdvanced}
-                >
-                  کد پیشرفته
-                </button>
-              </div>
+              {!awaitingKind && (
+                <div className="mermaid-mode-switch mermaid-mode-switch--pane" role="group" aria-label="روش ساخت نمودار">
+                  <button
+                    type="button"
+                    className={workspaceMode === "simple" ? "is-active" : ""}
+                    onClick={openSimple}
+                  >
+                    ساخت آسان
+                  </button>
+                  <button
+                    type="button"
+                    className={workspaceMode === "advanced" ? "is-active" : ""}
+                    onClick={openAdvanced}
+                  >
+                    کد پیشرفته
+                  </button>
+                  <button
+                    type="button"
+                    className={workspaceMode === "guided" ? "is-active" : ""}
+                    onClick={openGuided}
+                  >
+                    ساخت با هوش مصنوعی
+                  </button>
+                </div>
+              )}
               {workspaceMode === "advanced" && (
                 <button type="button" onClick={openAdvancedSamples}>
                   <Library size={15} aria-hidden="true" />
-                  نمونه‌های پیشرفته
+                  نمونه‌ها
                 </button>
               )}
             </div>
           </div>
-          {workspaceMode === "simple" ? (
+          <div className={`mermaid-editor-surface ${workspaceMode === "simple" ? "is-active" : ""}`} inert={workspaceMode === "simple" ? undefined : true} aria-hidden={workspaceMode !== "simple"}>
             <MermaidSimpleBuilder
               draft={simpleDraft}
               onChange={updateSimpleDraft}
               onChooseKind={chooseSimpleDraft}
+              onPreviewChange={setGuidedDiagramPreview}
             />
-          ) : (
-            <>
+          </div>
+          <div className={`mermaid-editor-surface ${workspaceMode === "advanced" ? "is-active" : ""}`} inert={workspaceMode === "advanced" ? undefined : true} aria-hidden={workspaceMode !== "advanced"}>
               <MermaidCodeEditor
                 value={code}
                 onChange={setCode}
@@ -642,12 +660,38 @@ export function MermaidStudio({
                 }
                 focusErrorRequest={focusErrorRequest}
               />
+          </div>
+          <div className={`mermaid-editor-surface ${workspaceMode === "guided" ? "is-active" : ""}`} inert={workspaceMode === "guided" ? undefined : true} aria-hidden={workspaceMode !== "guided"}>
+            {activeDiagramKind && <MermaidAiBuilder
+              key={activeDiagramKind}
+              initialText={simpleDraft ? [simpleDraft.title, ...simpleDraft.rows.map((row) => [row.first, row.second, row.value].filter(Boolean).join(" | "))].filter(Boolean).join("\n") : (session.selectedText ?? "")}
+              initialKind={activeDiagramKind}
+              currentCode={code}
+              onCode={(next) => {
+                setCode(next);
+                const parsed = parseSimpleDiagram(next);
+                if (parsed) setSimpleDraft(parsed);
+                setRenderNonce((current) => current + 1);
+              }}
+              onExit={() => {
+                setWorkspaceMode("simple");
+                setGuidedDiagramPreview(null);
+              }}
+              onChooseAnother={() => {
+                setSimpleDraft(null);
+                setWorkspaceMode("simple");
+                setGuidedDiagramPreview(null);
+              }}
+              onPreviewChange={setGuidedDiagramPreview}
+              onStepChange={setGuidedAiStep}
+            />}
+          </div>
+          {workspaceMode === "advanced" && (
               <footer className="mermaid-studio-editor-footer">
                 <span>Ctrl+Space تکمیل خودکار</span>
                 <span>Ctrl+F جست‌وجو</span>
                 <span>Ctrl+Z بازگشت</span>
               </footer>
-            </>
           )}
         </section>
 
@@ -668,11 +712,13 @@ export function MermaidStudio({
 
         <section className="mermaid-studio-preview" aria-label="پیش‌نمایش نمودار">
           <div className="mermaid-studio-pane-heading">
-            <span>
-              <Eye size={16} aria-hidden="true" />
-              پیش‌نمایش زنده
-            </span>
+            <span>پیش‌نمایش زنده</span>
             <div className="mermaid-preview-tools">
+              {previewFullscreen && (
+                <button className="mermaid-preview-close" type="button" onClick={() => setPreviewFullscreen(false)}>
+                  بستن پیش‌نمایش
+                </button>
+              )}
               <button type="button" onClick={() => viewport.zoomBy(-0.15)} aria-label="کوچک‌نمایی" title="کوچک‌نمایی">
                 <ZoomOut size={15} aria-hidden="true" />
               </button>
@@ -685,10 +731,6 @@ export function MermaidStudio({
               <button type="button" onClick={fitPreview} aria-label="جا دادن کامل نمودار در نما" title="جا دادن کامل نمودار در نما">
                 <Scan size={15} aria-hidden="true" />
               </button>
-              <span className="mermaid-pan-indicator" title="برای جابه‌جایی، نمودار یا فضای خالی را بکشید">
-                <Hand size={14} aria-hidden="true" />
-                <span className="visually-hidden">ابزار دست فعال است؛ برای جابه‌جایی بکشید</span>
-              </span>
               <button
                 type="button"
                 onClick={() => setPreviewFullscreen((current) => !current)}
@@ -704,8 +746,56 @@ export function MermaidStudio({
             className={`mermaid-studio-canvas ${viewport.panning ? "is-panning" : ""}`}
             {...viewport.viewportHandlers}
           >
-            {showingLastValid && <span className="mermaid-last-valid">آخرین نسخهٔ سالم</span>}
-            {activeBlobUrl ? (
+            {showingLastValid && !guidedDiagramPreview && !showingGuidedBuild && <span className="mermaid-last-valid">آخرین نسخهٔ سالم</span>}
+            {showingGuidedBuild ? (
+              <Suspense fallback={<div className="mermaid-studio-empty" role="status"><strong>در حال آماده‌سازی پیش‌نمایش…</strong></div>}>
+                <MermaidBuildingPreview />
+              </Suspense>
+            ) : guidedDiagramPreview ? (
+              <div className="mermaid-ai-live-type-preview" role="status" aria-live="polite">
+                <div className="mermaid-ai-live-type-heading">
+                  <strong>{guidedDiagramPreview.title}</strong>
+                  <span dir="ltr">{guidedDiagramPreview.english}</span>
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/mermaid-thumbnails/${guidedDiagramPreview.kind}.png`}
+                  alt={`پیش‌نمایش نمودار ${guidedDiagramPreview.title}`}
+                  draggable={false}
+                />
+                <small>این نمونه فقط برای انتخاب نوع نمودار است؛ پس از انتخاب، پیش‌نمایش داده‌های شما همین‌جا ساخته می‌شود.</small>
+              </div>
+            ) : (applyError || (!awaitingKind && renderState.error)) ? (
+              <div className="mermaid-studio-error" role="alert">
+                <div className="mermaid-error-title">
+                  <AlertTriangle size={18} aria-hidden="true" />
+                  <strong>پیش‌نمایش ساخته نشد</strong>
+                </div>
+                <p>{applyError || renderState.error?.message}</p>
+                {!applyError && renderState.error?.suggestion && (
+                  <div className="mermaid-error-suggestion">{renderState.error.suggestion}</div>
+                )}
+                {!applyError && (
+                  <div className="mermaid-error-actions">
+                    {renderState.error?.line && (
+                      <button type="button" onClick={goToError} aria-label="رفتن به ردیف مشکل‌دار">
+                        رفتن به ردیف
+                      </button>
+                    )}
+                    <button type="button" onClick={openRelevantSample} aria-label="دیدن نمونهٔ صحیح">
+                      نمونهٔ صحیح
+                    </button>
+                    <button type="button" onClick={openSuggestedFix}>اصلاح پیشنهادی</button>
+                    {renderState.error?.technical && (
+                      <details><summary>جزئیات فنی</summary><pre>{renderState.error.technical}</pre></details>
+                    )}
+                    {renderState.lastValidSvg && (
+                      <button type="button" onClick={restoreLastValid}>بازگردانی آخرین تغییر</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : activeBlobUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 ref={renderSurfaceRef}
@@ -732,7 +822,14 @@ export function MermaidStudio({
                       ? "در حال ساخت پیش‌نمایش…"
                       : "اطلاعات نمودار را کامل کنید"}
                 </strong>
+                <span>{awaitingKind ? "از میان ۲۹ ساختار، یک نوع را برای ساخت انتخاب کنید." : renderState.status === "loading" ? "پیش‌نمایش در همین پنجره آماده می‌شود." : "فیلدهای لازم را کامل کنید تا پیش‌نمایش ساخته شود."}</span>
               </div>
+            )}
+            {!guidedDiagramPreview && !showingGuidedBuild && (
+              <span className="mermaid-pan-indicator" title="برای جابه‌جایی، نمودار یا فضای خالی را بکشید">
+                <Hand size={14} aria-hidden="true" />
+                <span className="visually-hidden">ابزار دست فعال است؛ برای جابه‌جایی بکشید</span>
+              </span>
             )}
           </div>
         </section>
@@ -784,25 +881,35 @@ export function MermaidStudio({
           </aside>
         )}
       </main>
+      </div>
 
       {confirmClose && (
-        <div className="mermaid-discard-layer" role="presentation">
-          <div className="mermaid-discard-dialog" role="alertdialog" aria-modal="true" aria-labelledby="mermaid-discard-title">
-            <AlertTriangle size={22} aria-hidden="true" />
+        <AccessibleModal
+          open={confirmClose}
+          isTopLayer={confirmClose}
+          onClose={() => setConfirmClose(false)}
+          dialogRef={confirmDialogRef}
+          initialFocusRef={confirmCancelRef}
+          returnFocusRef={backButtonRef}
+          backdropClassName="mermaid-discard-layer"
+          dialogClassName="mermaid-discard-dialog"
+          labelledBy="mermaid-discard-title"
+          describedBy="mermaid-discard-description"
+          containerRole="alertdialog"
+        >
             <div>
-              <strong id="mermaid-discard-title">پیش‌نویس اعمال نشده است</strong>
-              <p>با خروج، تغییرهای این نشست از سند کنار گذاشته می‌شود. نسخهٔ بازیابی‌شدنی تا زمان انتخاب شما باقی مانده است.</p>
+              <strong id="mermaid-discard-title">تغییرات کنار گذاشته شوند؟</strong>
+              <p id="mermaid-discard-description">پیش‌نویس محلی این نمودار حذف می‌شود و به سند برمی‌گردید.</p>
             </div>
             <div>
-              <button type="button" className="button button--quiet" onClick={() => setConfirmClose(false)}>
-                ادامهٔ ویرایش
+              <button ref={confirmCancelRef} type="button" className="button button--quiet" onClick={() => setConfirmClose(false)}>
+                انصراف
               </button>
               <button type="button" className="button mermaid-discard" onClick={discardAndClose}>
-                خروج بدون اعمال
+                کنار گذاشتن
               </button>
             </div>
-          </div>
-        </div>
+        </AccessibleModal>
       )}
     </AccessibleModal>
   );

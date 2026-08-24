@@ -11,7 +11,15 @@ const supportedImageTypes = new Set([
   "image/webp",
 ]);
 
-export type AnnotationKind = "highlight" | "comment" | "margin";
+export type AnnotationKind = "highlight" | "comment";
+
+export type SmartAnnotationStatus =
+  | "open"
+  | "applying"
+  | "applied"
+  | "rejected"
+  | "resolved"
+  | "detached";
 
 export type RaaviAnnotation = {
   id: string;
@@ -23,6 +31,15 @@ export type RaaviAnnotation = {
   suffix: string;
   body: string;
   createdAt: string;
+  source?: "user" | "raavi-ai";
+  category?: string;
+  suggestion?: string;
+  confidence?: number;
+  status?: SmartAnnotationStatus;
+  blockId?: string;
+  approximateStart?: number;
+  approximateEnd?: number;
+  fingerprint?: string;
 };
 
 export type RaaviImageAsset = {
@@ -39,6 +56,7 @@ export type RaaviVersion = {
   savedAt: string;
   content: string;
   annotations: RaaviAnnotation[];
+  kind?: "autosave" | "manual" | "ai";
 };
 
 export type RaaviDocument = {
@@ -55,11 +73,7 @@ export type RaaviDocument = {
   updatedAt: string;
 };
 
-const annotationKinds = new Set<AnnotationKind>([
-  "highlight",
-  "comment",
-  "margin",
-]);
+const annotationKinds = new Set<AnnotationKind>(["highlight", "comment"]);
 
 function safeText(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.slice(0, maxLength) : "";
@@ -170,7 +184,8 @@ function parseAnnotation(
 ): RaaviAnnotation | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
-  if (!annotationKinds.has(candidate.kind as AnnotationKind)) return null;
+  const kind = candidate.kind === "margin" ? "comment" : candidate.kind;
+  if (!annotationKinds.has(kind as AnnotationKind)) return null;
 
   const start = Number(candidate.start);
   const end = Number(candidate.end);
@@ -189,15 +204,49 @@ function parseAnnotation(
     id:
       safeText(candidate.id, 120).trim() ||
       `ravi-imported-${Date.now()}-${index}`,
-    kind: candidate.kind as AnnotationKind,
+    kind: kind as AnnotationKind,
     start,
     end,
     quote,
     prefix: safeText(candidate.prefix, 160),
     suffix: safeText(candidate.suffix, 160),
     body: safeText(candidate.body, 20_000),
-    createdAt:
-      safeText(candidate.createdAt, 64) || new Date().toISOString(),
+    createdAt: safeText(candidate.createdAt, 64) || new Date().toISOString(),
+    ...(candidate.source === "raavi-ai" || candidate.source === "user"
+      ? { source: candidate.source }
+      : {}),
+    ...(safeText(candidate.category, 80).trim()
+      ? { category: safeText(candidate.category, 80).trim() }
+      : {}),
+    ...(safeText(candidate.suggestion, 20_000)
+      ? { suggestion: safeText(candidate.suggestion, 20_000) }
+      : {}),
+    ...(typeof candidate.confidence === "number" &&
+    Number.isFinite(candidate.confidence)
+      ? { confidence: Math.max(0, Math.min(1, candidate.confidence)) }
+      : {}),
+    ...(candidate.status === "open" ||
+    candidate.status === "applying" ||
+    candidate.status === "applied" ||
+    candidate.status === "rejected" ||
+    candidate.status === "resolved" ||
+    candidate.status === "detached"
+      ? { status: candidate.status }
+      : {}),
+    ...(safeText(candidate.blockId, 160).trim()
+      ? { blockId: safeText(candidate.blockId, 160).trim() }
+      : {}),
+    ...(Number.isSafeInteger(candidate.approximateStart) &&
+    Number(candidate.approximateStart) >= 0
+      ? { approximateStart: Number(candidate.approximateStart) }
+      : {}),
+    ...(Number.isSafeInteger(candidate.approximateEnd) &&
+    Number(candidate.approximateEnd) >= 0
+      ? { approximateEnd: Number(candidate.approximateEnd) }
+      : {}),
+    ...(safeText(candidate.fingerprint, 160).trim()
+      ? { fingerprint: safeText(candidate.fingerprint, 160).trim() }
+      : {}),
   };
 }
 
@@ -217,6 +266,11 @@ function parseVersion(value: unknown): RaaviVersion | null {
     number,
     savedAt: safeText(candidate.savedAt, 64) || new Date().toISOString(),
     content: candidate.content,
+    ...(candidate.kind === "autosave" ||
+    candidate.kind === "manual" ||
+    candidate.kind === "ai"
+      ? { kind: candidate.kind }
+      : {}),
     annotations: Array.isArray(candidate.annotations)
       ? candidate.annotations
           .map(parseAnnotation)
@@ -277,8 +331,7 @@ export function parseRaaviDocument(
     fileName: safeFileName(documentValue.name, fallbackName),
     content: documentValue.markdown,
     annotations,
-    revision:
-      Number.isSafeInteger(revision) && revision > 0 ? revision : 1,
+    revision: Number.isSafeInteger(revision) && revision > 0 ? revision : 1,
     versions,
     assets,
   };

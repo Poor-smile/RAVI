@@ -15,6 +15,7 @@ const MAX_SCALE = 4;
 const SCALE_SYNC_INTERVAL_MS = 100;
 
 type MermaidViewportState = { scale: number; x: number; y: number };
+export type MermaidIntrinsicSize = { width: number; height: number };
 type DragState = {
   pointerId: number;
   clientX: number;
@@ -124,7 +125,11 @@ export function useMermaidViewport({
   }, [updateView]);
 
   const fitView = useCallback(
-    (container: HTMLElement | null, content: HTMLElement | null) => {
+    (
+      container: HTMLElement | null,
+      content: HTMLElement | null,
+      intrinsicSize?: MermaidIntrinsicSize | null,
+    ) => {
       if (!container || !content) {
         resetView();
         return;
@@ -134,11 +139,17 @@ export function useMermaidViewport({
       const paddingInlineEnd = Number.parseFloat(style.paddingInlineEnd) || 0;
       const paddingTop = Number.parseFloat(style.paddingTop) || 0;
       const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
-      // Fit the actual laid-out image box. SVG images without explicit width or
-      // height can report a 300×150 intrinsic fallback even when their viewBox
-      // and CSS-rendered aspect ratio are very different.
-      const contentWidth = content.offsetWidth;
-      const contentHeight = content.offsetHeight;
+      // Blob-backed SVG images may expose the browser's 300×150 fallback as
+      // their natural size. Keep the element at the actual SVG viewBox size so
+      // the viewport transform is calculated from the complete graph bounds.
+      const contentWidth = intrinsicSize?.width ?? content.offsetWidth;
+      const contentHeight = intrinsicSize?.height ?? content.offsetHeight;
+      if (intrinsicSize?.width && intrinsicSize.height) {
+        content.style.width = `${intrinsicSize.width}px`;
+        content.style.height = `${intrinsicSize.height}px`;
+        content.style.maxWidth = "none";
+        content.style.maxHeight = "none";
+      }
       const availableWidth =
         container.clientWidth - paddingInlineStart - paddingInlineEnd;
       const availableHeight = container.clientHeight - paddingTop - paddingBottom;
@@ -148,9 +159,17 @@ export function useMermaidViewport({
         contentWidth,
         contentHeight,
       });
+      const fittedHeight = contentHeight * scale;
       dragRef.current = null;
       setPanning(false);
-      updateView({ scale, x: 0, y: 0 }, true);
+      updateView(
+        {
+          scale,
+          x: 0,
+          y: Math.max(0, (availableHeight - fittedHeight) / 2),
+        },
+        true,
+      );
     },
     [resetView, updateView],
   );

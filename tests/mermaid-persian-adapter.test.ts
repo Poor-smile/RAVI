@@ -27,6 +27,17 @@ test("detects every new Mermaid type supported by the installed parser", () => {
   }
 });
 
+test("detects a diagram after Mermaid directives and leading comments", () => {
+  const source = `%%{init: {"theme": "dark", "themeVariables": {"pie1": "#1E3A5F"}}}%%
+%% نمودار فروش
+pie showData
+  title فروش محصولات (میلیون تومان)
+  "نرم‌افزار" : 58`;
+
+  assert.equal(detectMermaidKind(source), "pie");
+  assert.equal(prepareMermaidForRender(source).kind, "pie");
+});
+
 test("restores Persian labels stored for identifier-only diagrams", () => {
   const prepared = prepareMermaidForRender(`eventmodeling
     tf 01 ui SHOP.CART
