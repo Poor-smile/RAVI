@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const ROOT_PATH = "C:\\یادداشت‌ها\\دفتر راوی";
+const ROOT_PATH = "C:\\یادداشت‌ها\\مخزن راوی";
 
 async function waitForLaunch(page: Page) {
   await page.goto("/");
@@ -21,12 +21,12 @@ test.beforeEach(async ({ page }) => {
       "گزارش سالانه.md",
       "برنامه محصول.md",
       "یادداشت جلسه.md",
-      "راهنمای انتشار.ravi",
+      "راهنمای انتشار.md",
       "تحقیق کاربران.md",
       "پیشنهاد پروژه.md",
-      "چک‌لیست نسخه.ravi",
+      "چک‌لیست نسخه.md",
       "مستند API.md",
-      "آرشیو فصل سوم.ravi",
+      "آرشیو فصل سوم.md",
     ];
     const removedPaths = new Set<string>(
       JSON.parse(sessionStorage.getItem("p20:removed-recents") ?? "[]"),
@@ -34,16 +34,16 @@ test.beforeEach(async ({ page }) => {
     const recents = names.map((name, index) => ({
       path:
         index === 0
-          ? `C:\\بایگانی بیرون دفتر\\${name}`
+          ? `C:\\بایگانی خارج از مخزن\\${name}`
           : `${rootPath}\\${name}`,
       name,
-      documentType: name.endsWith(".ravi") ? "ravi" : "markdown",
+      documentType: "markdown",
       // Deliberately oppose open order and edit order: Launch must use mtime.
       openedAt: new Date(now - (names.length - index) * 3_600_000).toISOString(),
       lastModified: now - index * 3_600_000,
     })).filter((recent) => !removedPaths.has(recent.path));
     const scan = {
-      rootName: "دفتر راوی",
+      rootName: "مخزن راوی",
       rootPath,
       truncated: false,
       errors: [],
@@ -54,7 +54,7 @@ test.beforeEach(async ({ page }) => {
         nativePath: `${rootPath}\\${name}`,
         size: 1200 + index,
         lastModified: now - index * 3_600_000,
-        documentType: name.endsWith(".ravi") ? "ravi" : "markdown",
+        documentType: "markdown",
       })),
     };
     const api = {
@@ -64,8 +64,20 @@ test.beforeEach(async ({ page }) => {
       saveReadingPositions: async () => ({ saved: true }),
       saveReadingPositionsSync: () => ({ saved: true }),
       getLibraryState: async () => ({
-        folders: [{ rootName: "دفتر راوی", rootPath }],
+        folders: [{ rootName: "مخزن راوی", rootPath }],
         recents,
+      }),
+      getCodexConnectionStatus: async () => ({
+        state: "connected" as const,
+        cliInstalled: true,
+        authenticated: true,
+      }),
+      getBackupProviderConnections: async () => ({
+        "google-drive": {
+          state: "connected" as const,
+          accountEmail: "test@example.com",
+        },
+        "proton-drive": { state: "disconnected" as const, accountEmail: "" },
       }),
       clearRecentFiles: async () => ({ folders: [], recents: [] }),
       removeRecentFileIfMissing: async (filePath: string) => {
@@ -76,7 +88,7 @@ test.beforeEach(async ({ page }) => {
           return {
             removed: false,
             state: {
-              folders: [{ rootName: "دفتر راوی", rootPath }],
+              folders: [{ rootName: "مخزن راوی", rootPath }],
               recents,
             },
           };
@@ -89,7 +101,7 @@ test.beforeEach(async ({ page }) => {
         return {
           removed: true,
           state: {
-            folders: [{ rootName: "دفتر راوی", rootPath }],
+            folders: [{ rootName: "مخزن راوی", rootPath }],
             recents: recents.filter((recent) => recent.path !== filePath),
           },
         };
@@ -109,7 +121,7 @@ test.beforeEach(async ({ page }) => {
         return {
           name: path.split(/[\\/]/u).at(-1) ?? "سند.md",
           path,
-          documentType: path.endsWith(".ravi") ? "ravi" : "markdown",
+          documentType: "markdown" as const,
           content: "# سند بازشده\n\nمحتوای محلی",
           annotations: [],
           assets: [],
@@ -135,7 +147,7 @@ test.beforeEach(async ({ page }) => {
         return {
           name: path.split(/[\\/]/u).at(-1) ?? "سند.md",
           path,
-          documentType: path.endsWith(".ravi") ? "ravi" : "markdown",
+          documentType: "markdown" as const,
           content: "# سند بازشده\n\nمحتوای محلی",
           annotations: [],
           assets: [],
@@ -330,7 +342,7 @@ test("New Tab matches the compact 59 Screens template workspace in full RTL", as
   await expect(cards).toHaveCount(12);
   await expect(cards.first()).toBeFocused();
   await expect(cards.first()).toContainText("یادداشت خالی");
-  await expect(newTab.getByText("دفتر راوی", { exact: true })).toBeVisible();
+  await expect(newTab.getByText("مخزن راوی", { exact: true })).toBeVisible();
   const newWorkspaceTab = page.getByRole("tab", { name: "تب جدید", exact: true });
   await expect(newWorkspaceTab).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("button", { name: "بستن تب جدید" })).toBeVisible();
@@ -368,8 +380,8 @@ test("New Tab matches the compact 59 Screens template workspace in full RTL", as
   expect(geometry.surface).toEqual({ x: 0, y: 128, width: 1224, height: 786 });
   expect(geometry.header).toEqual({ x: 232, y: 166, width: 760, height: 58 });
   expect(geometry.office).toEqual({ x: 232, y: 166, width: 280, height: 58 });
-  expect(geometry.grid).toEqual({ x: 232, y: 252, width: 760, height: 458 });
-  expect(geometry.footer).toEqual({ x: 232, y: 760, width: 760, height: 24 });
+  expect(geometry.grid).toEqual({ x: 232, y: 294, width: 760, height: 458 });
+  expect(geometry.footer).toEqual({ x: 232, y: 802, width: 760, height: 24 });
   expect(new Set(geometry.cards.map((card) => card.width))).toEqual(new Set([372]));
   expect(new Set(geometry.cards.map((card) => card.height))).toEqual(new Set([68]));
   expect(new Set(geometry.cards.map((card) => card.direction))).toEqual(new Set(["rtl"]));
@@ -379,7 +391,7 @@ test("New Tab matches the compact 59 Screens template workspace in full RTL", as
     fullPage: false,
   });
 
-  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowLeft");
   await expect(cards.nth(1)).toBeFocused();
   await expect(cards.nth(1)).toContainText("یادداشت سریع");
   await page.keyboard.press("ArrowDown");

@@ -1848,7 +1848,7 @@ export function ShortcutSettingsDialog({
                           <div>
                             <strong dir="auto">
                               {folder.rootName}
-                              {active && <small>دفتر فعال</small>}
+                              {active && <small>مخزن فعال</small>}
                             </strong>
                             <span dir="auto">
                               {folder.fileCount.toLocaleString("fa-IR")} فایل
@@ -1898,7 +1898,7 @@ export function ShortcutSettingsDialog({
                                     )
                                   }
                                 >
-                                  انتخاب به‌عنوان دفتر
+                                  انتخاب به‌عنوان مخزن
                                 </button>
                               )}
                               <button

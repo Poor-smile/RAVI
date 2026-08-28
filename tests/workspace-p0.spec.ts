@@ -7,11 +7,11 @@ test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(() => {
     localStorage.clear();
-    const rootPath = "C:\\یادداشت‌ها\\دفتر راوی";
+    const rootPath = "C:\\یادداشت‌ها\\مخزن راوی";
     let createdContent = "";
     let createdName = "";
     const scan = () => ({
-      rootName: "دفتر راوی",
+      rootName: "مخزن راوی",
       rootPath,
       truncated: false,
       errors: [],
@@ -36,8 +36,20 @@ test.beforeEach(async ({ page }) => {
       saveReadingPositions: async () => ({ saved: true }),
       saveReadingPositionsSync: () => ({ saved: true }),
       getLibraryState: async () => ({
-        folders: [{ rootName: "دفتر راوی", rootPath }],
+        folders: [{ rootName: "مخزن راوی", rootPath }],
         recents: [],
+      }),
+      getCodexConnectionStatus: async () => ({
+        state: "connected" as const,
+        cliInstalled: true,
+        authenticated: true,
+      }),
+      getBackupProviderConnections: async () => ({
+        "google-drive": {
+          state: "connected" as const,
+          accountEmail: "test@example.com",
+        },
+        "proton-drive": { state: "disconnected" as const, accountEmail: "" },
       }),
       clearRecentFiles: async () => ({ folders: [], recents: [] }),
       chooseMarkdownFolder: async () => scan(),
@@ -88,7 +100,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("P0 creates Persian template documents in the active office and keeps keyboard tabs", async ({
+test("P0 creates Persian template documents in the active repository and keeps keyboard tabs", async ({
   page,
 }) => {
   await page.goto("/");
@@ -198,7 +210,7 @@ test("P0 compact settings uses the approved density contract", async ({ page }) 
     .click();
 
   await expect(page.getByRole("heading", { name: "پشتیبان‌گیری ابری" })).toBeVisible();
-  await expect(page.getByText("دفتر فعال")).toBeVisible();
+  await expect(page.getByText("مخزن فعال")).toBeVisible();
   await expect(page.getByRole("switch", { name: "بازیابی تب‌های نشست قبلی" })).toHaveAttribute(
     "aria-checked",
     "true",
@@ -218,10 +230,10 @@ test("P0 compact settings uses the approved density contract", async ({ page }) 
     };
   });
   expect(geometry).toEqual({
-    header: 72,
-    navigation: 280,
-    row: 88,
-    headingSize: "30px",
+    header: 56,
+    navigation: 223,
+    row: 64,
+    headingSize: "24px",
   });
   await page.screenshot({ path: ".artifacts/workspace-p0-settings.png" });
 });

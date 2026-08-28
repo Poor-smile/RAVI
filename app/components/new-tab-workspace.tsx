@@ -74,7 +74,7 @@ function splitRecentFileName(file: LaunchRecentFile) {
 
 function recentFolderName(path: string) {
   const segments = path.split(/[\\/]/u).filter(Boolean);
-  return segments.at(-2) ?? segments.at(0) ?? "دفتر راوی";
+  return segments.at(-2) ?? segments.at(0) ?? "مخزن راوی";
 }
 
 function recentRelativeTime(openedAt: string) {

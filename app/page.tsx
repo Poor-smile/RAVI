@@ -9180,7 +9180,7 @@ export default function Home() {
               openInReadingMode: false,
               draftId: `browser-library:${activeWorkspace.rootId}:${result.nextPath ?? fileName}`,
             },
-            `«${fileName}» در دفتر فعال ساخته شد.`,
+            `«${fileName}» در مخزن فعال ساخته شد.`,
           );
           if (result.nextPath) {
             setActiveLibraryKey(
