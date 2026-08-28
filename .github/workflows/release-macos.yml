@@ -85,7 +85,20 @@ jobs:
         run: npm ci
 
       - name: Generate native application icons
-        run: npm run icons:app
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run icons:app
+          npm run icons:file
+
+          # Releases created before the macOS pipeline only generated file-icon.ico.
+          # Keep old immutable tags buildable by deriving the matching ICNS in CI.
+          if [[ ! -s build/file-icon.icns ]]; then
+            compatibility_icons="${RUNNER_TEMP}/raavi-file-icons"
+            node node_modules/@tauri-apps/cli/tauri.js icon build/file-icon.png -o "${compatibility_icons}"
+            cp "${compatibility_icons}/icon.icns" build/file-icon.icns
+          fi
+          test -s build/file-icon.icns
 
       - name: Build web application
         run: npm run build

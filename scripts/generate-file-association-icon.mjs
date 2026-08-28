@@ -49,9 +49,12 @@ try {
     stdio: "inherit",
   });
   if (result.status !== 0) throw new Error("File icon generation failed.");
-  await copyFile(path.join(temporaryDirectory, "icon.ico"), path.join(buildDirectory, "file-icon.ico"));
+  await Promise.all([
+    copyFile(path.join(temporaryDirectory, "icon.ico"), path.join(buildDirectory, "file-icon.ico")),
+    copyFile(path.join(temporaryDirectory, "icon.icns"), path.join(buildDirectory, "file-icon.icns")),
+  ]);
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }
 
-console.log("Markdown file association icon generated from the approved Brand Identity sketch.");
+console.log("Markdown file association icons for Windows and macOS generated from the approved Brand Identity sketch.");
