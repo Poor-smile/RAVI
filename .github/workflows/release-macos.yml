@@ -1,0 +1,256 @@
+name: Build macOS release assets
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing public release tag, for example v2.2.0
+        required: true
+        type: string
+      publish_release:
+        description: Upload the generated assets to the existing GitHub Release
+        required: true
+        default: true
+        type: boolean
+      allow_unsigned:
+        description: Allow clearly labelled unsigned assets when Apple credentials are unavailable
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-release-${{ github.event.release.tag_name || inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+            expected_slice: arm64
+          - arch: x64
+            runner: macos-15-intel
+            expected_slice: x86_64
+    runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+    steps:
+      - name: Check out the exact release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: macos-${{ matrix.arch }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            macos-${{ matrix.arch }}-electron-
+
+      - name: Validate release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [[ "${RELEASE_TAG}" != "v${version}" ]]; then
+            echo "Release tag ${RELEASE_TAG} does not match package version ${version}." >&2
+            exit 1
+          fi
+          if ! git rev-parse --verify "${RELEASE_TAG}^{commit}" >/dev/null; then
+            echo "Release tag ${RELEASE_TAG} is not available in this checkout." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate native application icons
+        run: npm run icons:app
+
+      - name: Build web application
+        run: npm run build
+
+      - name: Package and verify macOS artifacts
+        id: package
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          arch="${{ matrix.arch }}"
+          expected_slice="${{ matrix.expected_slice }}"
+          signing_mode="unsigned"
+          notarization_mode="not-requested"
+
+          if [[ -n "${CSC_LINK:-}" && -n "${CSC_KEY_PASSWORD:-}" ]]; then
+            signing_mode="developer-id"
+          else
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+
+          if [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
+            notarization_mode="requested"
+          fi
+
+          npx electron-builder --mac dmg zip --"${arch}" --publish never
+
+          source_dmg="release/Raavi-${version}-${arch}.dmg"
+          source_zip="release/Raavi-${version}-${arch}.zip"
+          test -s "${source_dmg}"
+          test -s "${source_zip}"
+          hdiutil verify "${source_dmg}"
+
+          extract_root="$(mktemp -d)"
+          trap 'rm -rf "${extract_root}"' EXIT
+          ditto -x -k "${source_zip}" "${extract_root}"
+          app_path="$(find "${extract_root}" -maxdepth 2 -type d -name '*.app' -print -quit)"
+          if [[ -z "${app_path}" ]]; then
+            echo "The ZIP does not contain a macOS application bundle." >&2
+            exit 1
+          fi
+
+          executable_path="${app_path}/Contents/MacOS/Raavi"
+          test -x "${executable_path}"
+          slices="$(lipo -archs "${executable_path}")"
+          if [[ " ${slices} " != *" ${expected_slice} "* ]]; then
+            echo "Expected ${expected_slice}, found: ${slices}" >&2
+            exit 1
+          fi
+
+          if [[ "${signing_mode}" == "developer-id" ]]; then
+            codesign --verify --deep --strict --verbose=2 "${app_path}"
+          fi
+          if [[ "${notarization_mode}" == "requested" ]]; then
+            spctl --assess --type execute --verbose=4 "${app_path}"
+          fi
+
+          suffix="-unsigned"
+          if [[ "${signing_mode}" == "developer-id" ]]; then
+            suffix=""
+          fi
+          output_dmg="release/Raavi-${version}-macOS-${arch}${suffix}.dmg"
+          output_zip="release/Raavi-${version}-macOS-${arch}${suffix}.zip"
+          mv "${source_dmg}" "${output_dmg}"
+          mv "${source_zip}" "${output_zip}"
+
+          report="release/Raavi-${version}-macOS-${arch}-build-report.txt"
+          {
+            echo "release_tag=${RELEASE_TAG}"
+            echo "source_commit=$(git rev-parse HEAD)"
+            echo "runner=${{ matrix.runner }}"
+            echo "architecture=${arch}"
+            echo "binary_slices=${slices}"
+            echo "signing=${signing_mode}"
+            echo "notarization=${notarization_mode}"
+            echo "dmg=$(basename "${output_dmg}")"
+            echo "zip=$(basename "${output_zip}")"
+          } > "${report}"
+
+          shasum -a 256 "${output_dmg}" "${output_zip}"
+          cat "${report}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: raavi-macos-${{ matrix.arch }}
+          path: |
+            release/Raavi-*-macOS-${{ matrix.arch }}*.dmg
+            release/Raavi-*-macOS-${{ matrix.arch }}*.zip
+            release/Raavi-*-macOS-${{ matrix.arch }}-build-report.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Attach macOS assets to GitHub Release
+    needs:
+      - build
+    if: ${{ github.event_name == 'release' || inputs.publish_release == true }}
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+      ALLOW_UNSIGNED: ${{ inputs.allow_unsigned || false }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: raavi-macos-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Validate release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          expected=(
+            "release-assets/Raavi-${version}-macOS-arm64"
+            "release-assets/Raavi-${version}-macOS-x64"
+          )
+          for prefix in "${expected[@]}"; do
+            compgen -G "${prefix}*.dmg" >/dev/null
+            compgen -G "${prefix}*.zip" >/dev/null
+          done
+
+          if compgen -G 'release-assets/*-unsigned.*' >/dev/null && [[ "${ALLOW_UNSIGNED}" != "true" ]]; then
+            echo "Unsigned assets were built. Configure Apple secrets or explicitly dispatch with allow_unsigned=true." >&2
+            exit 1
+          fi
+
+          cd release-assets
+          find . -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' \) -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            | sed 's#  \./#  #' \
+            > "Raavi-${version}-macOS-SHA256SUMS.txt"
+          test -s "Raavi-${version}-macOS-SHA256SUMS.txt"
+          cat "Raavi-${version}-macOS-SHA256SUMS.txt"
+
+      - name: Upload assets to the existing public release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null
+          gh release upload "${RELEASE_TAG}" \
+            release-assets/*.dmg \
+            release-assets/*.zip \
+            release-assets/*-build-report.txt \
+            release-assets/*-SHA256SUMS.txt \
+            --clobber \
+            --repo "${GITHUB_REPOSITORY}"
+
+      - name: Summarize publication
+        shell: bash
+        run: |
+          {
+            echo "## macOS release assets"
+            echo
+            echo "Tag: \`${RELEASE_TAG}\`"
+            echo
+            find release-assets -maxdepth 1 -type f -printf '%f\n' | sort | sed 's/^/- /'
+          } >> "${GITHUB_STEP_SUMMARY}"

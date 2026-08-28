@@ -1,6 +1,6 @@
 # راهنمای انتشار عمومی راوی
 
-این سند، مسیر مرجع انتشار عمومی نسخهٔ Windows راوی است. در هر انتشار، مقدار
+این سند، مسیر مرجع انتشار عمومی نسخه‌های Windows و macOS راوی است. در هر انتشار، مقدار
 `X.Y.Z` را با نسخهٔ جدید جایگزین کنید. ترتیب مراحل این سند بخشی از گیت انتشار
 است؛ به‌خصوص `stable.json` باید همیشه آخرین فایل منتشرشده باشد.
 
@@ -15,6 +15,7 @@ https://github.com/Poor-smile/RAVI
 | نوع فایل | محل نگهداری | آدرس عمومی |
 | --- | --- | --- |
 | نصب‌کنندهٔ حجیم Windows | هاست دانلود، زیر `public_html/raavi/stable/X.Y.Z/` | `https://dl2.gptt.ir/raavi/stable/X.Y.Z/Raavi-Setup-X.Y.Z-x64.exe` |
+| DMG و ZIP macOS برای Apple Silicon و Intel | GitHub Release همان tag | `https://github.com/Poor-smile/RAVI/releases/tag/vX.Y.Z` |
 | manifest سبک | هاست اصلی، `ravi.poorsmile.ir/updates/stable.json` | `https://ravi.poorsmile.ir/updates/stable.json` |
 | یادداشت نسخه | هاست اصلی، `ravi.poorsmile.ir/updates/releases/X.Y.Z.json` | `https://ravi.poorsmile.ir/updates/releases/X.Y.Z.json` |
 | آرشیو عمومی انتشار | GitHub Release با tag، changelog، Installer و checksum | `https://github.com/Poor-smile/RAVI/releases/tag/vX.Y.Z` |
@@ -25,6 +26,12 @@ https://github.com/Poor-smile/RAVI
 - هر نسخهٔ عمومی باید علاوه بر هاست اختصاصی، یک GitHub Release کامل داشته باشد.
   GitHub آرشیو عمومی و مسیر دانلود دستی جایگزین است؛ منبع اصلی updater داخلی نیست،
   مگر اینکه URL آن صریحاً به `mirrors` اضافه شود.
+- خروجی macOS فقط روی Runner واقعی macOS ساخته می‌شود. `arm64` روی Runner
+  اپل‌سیلیکون و `x64` روی Runner Intel ساخته می‌شود؛ ساخت DMG معتبر روی Windows
+  جزو فرایند انتشار نیست.
+- فایل macOS بدون امضای Developer ID باید در نام خود `unsigned` داشته باشد. انتشار
+  خودکار فایل unsigned ممنوع است و تنها اجرای دستی با تأیید صریح
+  `allow_unsigned=true` می‌تواند آن را به Release پیوست کند.
 - فایل نصب‌کننده در هاست دانلود باید نسخه‌بندی‌شده و immutable باشد؛ نسخهٔ جدید
   نباید روی پوشهٔ نسخهٔ قبلی overwrite شود.
 - مسیر FTP با ریشهٔ وب یکی نیست. فایل عمومی باید زیر `public_html` قرار بگیرد؛
@@ -50,7 +57,9 @@ https://github.com/Poor-smile/RAVI
    رفتار واقعی همان نسخه هماهنگ شود. مرور بدون تغییر README قابل قبول نیست؛ نتیجهٔ
    مرور باید در commit انتشار ثبت شود.
 3. **ثبت GitHub Release عمومی:** commit روی `main`، tag همان نسخه، متن release و
-   assetهای Installer و SHA-256 باید روی GitHub قابل مشاهده و دانلود باشند.
+   assetهای Windows و macOS به‌همراه SHA-256 باید روی GitHub قابل مشاهده و دانلود
+   باشند. اگر نسخه عمداً فقط برای یک پلتفرم منتشر می‌شود، این محدودیت باید در
+   `CHANGELOG.md` و متن Release صریح ثبت شود.
 
 هر سه خروجی باید به یک نسخه و یک commit اشاره کنند. متن GitHub Release باید خلاصهٔ
 همان ورودی `CHANGELOG.md` باشد و README نباید لینک یا فرمان مربوط به نسخهٔ قبلی را
@@ -157,6 +166,63 @@ Tauri و فایل Portable بخشی از مسیر رسمی انتشار Windows 
 ```powershell
 Get-FileHash release\Raavi-Setup-X.Y.Z-x64.exe -Algorithm SHA256
 Get-FileHash release\Raavi-Setup-X.Y.Z-x64.exe -Algorithm SHA512
+```
+
+### 5.1. گیت ساخت macOS روی GitHub Actions
+
+ساخت عمومی macOS با Workflow زیر انجام می‌شود:
+
+```text
+.github/workflows/release-macos.yml
+```
+
+این Workflow در دو حالت اجرا می‌شود:
+
+- پس از `published` شدن GitHub Release؛
+- اجرای دستی `workflow_dispatch` برای یک Release موجود، مانند `vX.Y.Z`.
+
+هر دو build دقیقاً tag انتشار را checkout می‌کنند، نه آخرین وضعیت شاخه را. خروجی‌ها:
+
+```text
+Raavi-X.Y.Z-macOS-arm64.dmg
+Raavi-X.Y.Z-macOS-arm64.zip
+Raavi-X.Y.Z-macOS-x64.dmg
+Raavi-X.Y.Z-macOS-x64.zip
+Raavi-X.Y.Z-macOS-SHA256SUMS.txt
+Raavi-X.Y.Z-macOS-arm64-build-report.txt
+Raavi-X.Y.Z-macOS-x64-build-report.txt
+```
+
+اگر گواهی Apple تنظیم نشده باشد، `-unsigned` پیش از پسوند فایل اضافه می‌شود.
+Workflow معماری باینری را با `lipo`، سلامت DMG را با `hdiutil` و ساختار ZIP و
+`.app` را پیش از انتشار بررسی می‌کند.
+
+برای امضا و notarization عمومی، این Secretها را در GitHub repository ثبت کنید:
+
+```text
+MAC_CSC_LINK
+MAC_CSC_KEY_PASSWORD
+APPLE_ID
+APPLE_APP_SPECIFIC_PASSWORD
+APPLE_TEAM_ID
+```
+
+`MAC_CSC_LINK` باید محتوای base64 گواهی `Developer ID Application` با فرمت
+`.p12` باشد. رمز Apple ID عادی را ثبت نکنید؛ فقط app-specific password مجاز است.
+برای CI بلندمدت، مهاجرت به App Store Connect API Key ارجح است. Secretها نباید در
+log، Markdown، Git یا artifact قرار بگیرند.
+
+ساخت Universal محلی همچنان با فرمان زیر روی macOS ممکن است:
+
+```bash
+npm run desktop:pack:mac
+```
+
+برای ساخت بومی هر معماری:
+
+```bash
+npm run desktop:pack:mac:arm64
+npm run desktop:pack:mac:x64
 ```
 
 ## 6. ساخت بستهٔ امضاشدهٔ بروزرسانی
@@ -486,6 +552,25 @@ gh release view vX.Y.Z `
   --repo Poor-smile/RAVI `
   --json url,isDraft,isPrerelease,tagName,assets
 ```
+
+انتشار Release رویداد ساخت macOS را فعال می‌کند. در صورت نیاز به اجرای دوباره یا
+افزودن خروجی macOS به Release موجود، از تب Actions، Workflow
+`Build macOS release assets` را با `release_tag=vX.Y.Z` اجرا کنید. گزینهٔ
+`publish_release` باید فقط زمانی فعال باشد که Release عمومی موجود و متن آن نهایی
+است. گزینهٔ `allow_unsigned` در انتشار عادی باید خاموش بماند.
+
+پس از پایان Workflow کنترل کنید که هر دو معماری، هر دو قالب و فایل checksum حاضرند:
+
+```powershell
+gh release view vX.Y.Z `
+  --repo Poor-smile/RAVI `
+  --json assets `
+  --jq '.assets[].name'
+```
+
+برای نسخهٔ امضاشده، گزارش هر معماری باید `signing=developer-id` را نشان دهد. برای
+نسخهٔ notarized نیز `notarization=requested` و گیت `spctl` باید موفق باشند. وجود
+فقط یک معماری، DMG بدون ZIP یا فایل فاقد checksum انتشار macOS کامل محسوب نمی‌شود.
 
 صفحهٔ عمومی زیر باید باز شود و هر دو asset قابل دانلود باشند:
 

@@ -4,11 +4,18 @@
 
 ## آخرین نسخهٔ پایدار
 
-**راوی 2.2.0 برای Windows x64**
+**راوی 2.2.0 برای Windows و macOS**
 
-- [دانلود Installer رسمی](https://dl2.gptt.ir/raavi/stable/2.2.0/Raavi-Setup-2.2.0-x64.exe)
+- [دانلود Installer رسمی Windows x64](https://dl2.gptt.ir/raavi/stable/2.2.0/Raavi-Setup-2.2.0-x64.exe)
+- [دانلود macOS برای Apple Silicon](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.dmg)
+- [دانلود macOS برای Intel](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.dmg)
 - [یادداشت انتشار 2.2.0](https://ravi.poorsmile.ir/updates/releases/2.2.0.json)
 - [همهٔ نسخه‌ها در GitHub](https://github.com/Poor-smile/RAVI/releases)
+
+خروجی‌های macOS نسخهٔ 2.2.0 فعلاً بدون امضای Developer ID منتشر می‌شوند و نام
+فایل آن‌ها صریحاً `unsigned` دارد. پس از افزودن گواهی و اطلاعات notarization اپل
+به Secretهای GitHub، همان پایپ‌لاین فایل‌های امضاشده و تأییدشدهٔ اپل را بدون این
+پسوند تولید می‌کند.
 
 راوی بروزرسانی‌های تازه را از manifest امضاشده بررسی می‌کند، فایل را در پس‌زمینه
 دریافت می‌کند و پیش از نصب، اندازه، SHA-512 و امضای Ed25519 آن را اعتبارسنجی می‌کند.
@@ -130,7 +137,7 @@ npm run desktop:pack:linux
 npm run desktop:pack:linux:portable
 ```
 
-ساخت Universal برای Intel و Apple Silicon باید روی macOS انجام شود:
+ساخت Universal محلی برای Intel و Apple Silicon باید روی macOS انجام شود:
 
 ```bash
 npm run desktop:pack:mac
@@ -138,3 +145,16 @@ npm run desktop:pack:mac
 
 این فرمان DMG و ZIP Universal تولید می‌کند. برای انتشار عمومی نسخهٔ macOS،
 گواهی Developer ID و notarization اپل نیز لازم است.
+
+برای ساخت بومی هر معماری به‌صورت جداگانه:
+
+```bash
+npm run desktop:pack:mac:arm64
+npm run desktop:pack:mac:x64
+```
+
+Workflow فایل `.github/workflows/release-macos.yml` روی GitHub Actions هر معماری
+را روی سخت‌افزار واقعی متناظر می‌سازد: `macos-15` برای Apple Silicon و
+`macos-15-intel` برای Intel. هر اجرا DMG، ZIP، گزارش معماری و SHA-256 تولید
+می‌کند و فقط به یک GitHub Release موجود متصل می‌شود. انتشار unsigned به‌صورت
+پیش‌فرض ممنوع است و تنها در اجرای دستیِ صریح با `allow_unsigned=true` مجاز می‌شود.
