@@ -30,6 +30,18 @@ export type CodexConnectionStatus = {
   state: Exclude<CodexConnectionState, "checking" | "unavailable">;
 };
 
+export type ChatGPTModelOption = {
+  id: string;
+  displayName: string;
+  description: string;
+  isDefault: boolean;
+};
+
+export type ChatGPTModelList = {
+  models: ChatGPTModelOption[];
+  defaultModel: string | null;
+};
+
 export type CodexResult = {
   answer: string;
   replacement: string | null;

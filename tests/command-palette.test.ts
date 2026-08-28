@@ -32,6 +32,10 @@ test("palette ranks Persian titles and English aliases without hiding disabled c
   assert.equal(rankPaletteCommands(COMMAND_REGISTRY, "ذخیره", {})[0]?.id, "file.save");
   assert.equal(rankPaletteCommands(COMMAND_REGISTRY, "dark", {})[0]?.id, "view.theme");
   assert.ok(rankPaletteCommands(COMMAND_REGISTRY, "quick open", {}).some((command) => command.id === "file.quickOpen"));
+  assert.equal(
+    rankPaletteCommands(COMMAND_REGISTRY, "جداکننده", {})[0]?.id,
+    "edit.divider",
+  );
 });
 
 test("recent ranking is local, bounded, and tolerant of corrupt storage", () => {

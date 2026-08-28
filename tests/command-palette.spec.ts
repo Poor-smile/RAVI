@@ -29,7 +29,7 @@ test.describe("Persian command palette", () => {
     const returnTarget = page.getByRole("button", { name: "فایل جدید", exact: true });
     await expect(
       page.getByRole("heading", {
-        name: "یک پوشه را به‌عنوان دفتر مرکزی انتخاب کنید",
+        name: "یک پوشه را به‌عنوان مخزن انتخاب کنید",
       }),
     ).toBeVisible();
     await returnTarget.focus();
@@ -45,6 +45,15 @@ test.describe("Persian command palette", () => {
     const quickOpen = palette.getByRole("option", { name: /بازکردن سریع از کتابخانه/ });
     await expect(quickOpen).toHaveAttribute("aria-disabled", "true");
     await expect(quickOpen).toContainText("پس از اتصال یک پوشه فعال می‌شود");
+
+    await input.fill("جداکننده");
+    const divider = palette.getByRole("option", { name: /درج جداکننده/ });
+    await expect(divider).toBeVisible();
+    await expect(divider).toContainText("Alt+Shift+H");
+    await page.screenshot({
+      path: ".artifacts/divider-command-center.png",
+      fullPage: false,
+    });
 
     await input.fill("dark");
     const theme = palette.getByRole("option", { name: /تغییر تم روشن و تاریک/ });
@@ -118,8 +127,11 @@ test.describe("Persian command palette", () => {
     await page.keyboard.type("/");
     const slashMenu = page.getByRole("menu", { name: "نوع بلوک" });
     await expect(slashMenu).toBeVisible();
-    await expect(slashMenu.getByRole("menuitemradio")).toHaveCount(12);
+    await expect(slashMenu.getByRole("menuitemradio")).toHaveCount(14);
     await expect(slashMenu).toContainText("تیتر ۱");
+    await expect(
+      slashMenu.getByRole("menuitemradio", { name: "جداکننده" }),
+    ).toBeVisible();
     await expect(slashMenu).not.toContainText("تغییر تم روشن و تاریک");
   });
 });

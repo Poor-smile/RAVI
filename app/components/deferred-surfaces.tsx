@@ -31,6 +31,9 @@ export const ShortcutHelpDialog = lazy(() =>
 export const ShortcutSettingsDialog = lazy(() =>
   import("./shortcut-settings-dialog").then((module) => ({ default: module.ShortcutSettingsDialog })),
 );
+export const FirstRunOnboarding = lazy(() =>
+  import("./first-run-onboarding").then((module) => ({ default: module.FirstRunOnboarding })),
+);
 export const FormulaDocumentBlock = lazy(() =>
   import("./formula-document-block").then((module) => ({ default: module.FormulaDocumentBlock })),
 );

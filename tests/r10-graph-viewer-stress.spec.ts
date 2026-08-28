@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { expect, test } from "@playwright/test";
+import { activatePointerAction } from "./helpers/pointer-action";
 
 const stressFixturePath = process.env.RAAVI_STRESS_FIXTURE;
 
@@ -53,7 +54,9 @@ test("R10 fills the Graph Viewer canvas with the supplied Mermaid stress documen
     `.mermaid-diagram.is-reading[data-mermaid-block-id="${blockId}"]`,
   );
   const surface = diagram.locator(".mermaid-render-surface");
-  await diagram.getByRole("button", { name: "نمایش تمام‌صفحهٔ نمودار" }).click();
+  await activatePointerAction(
+    diagram.getByRole("button", { name: "نمایش تمام‌صفحهٔ نمودار" }),
+  );
   await expect(diagram).toHaveAttribute("data-mermaid-view", "graph-viewer");
   await expect(surface).toHaveAttribute("src", /^blob:/u, { timeout: 120_000 });
 

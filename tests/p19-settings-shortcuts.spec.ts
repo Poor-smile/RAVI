@@ -14,7 +14,7 @@ async function openShortcutSettings(page: Page) {
     .click();
 }
 
-test("P19 matches the compact Figma shortcut reference and real Windows bindings", async ({
+test("P19 lists the complete active catalog with search and real keycaps", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1024 });
@@ -27,64 +27,96 @@ test("P19 matches the compact Figma shortcut reference and real Windows bindings
 
   const dialog = page.getByRole("dialog", { name: "میان‌برها" });
   await expect(
-    dialog.getByRole("heading", { name: "میان‌برهای ویرایش" }),
+    dialog.getByRole("heading", { name: "میان‌برهای صفحه‌کلید" }),
   ).toBeVisible();
   await expect(dialog.locator(".shortcut-settings-autosave")).toHaveCount(0);
 
-  const sections = dialog.locator(".settings-shortcut-section");
-  await expect(sections).toHaveCount(3);
-  await expect(sections.getByRole("heading")).toHaveText([
-    "ساخت و مدیریت بلاک",
-    "منوی / و انتخاب نوع",
-    "قالب‌بندی Selection",
-  ]);
-  await expect(dialog.locator("[data-settings-shortcut-id]")).toHaveCount(9);
+  const search = dialog.getByRole("searchbox", {
+    name: "جست‌وجوی میان‌برها",
+  });
+  const summary = dialog.locator(".settings-shortcut-summary");
+  await expect(search).toBeVisible();
+  const totalCount = Number(await summary.getAttribute("data-total-count"));
+  expect(totalCount).toBeGreaterThan(45);
+  await expect(dialog.locator("[data-settings-shortcut-id]")).toHaveCount(
+    totalCount,
+  );
+  expect(await dialog.locator(".settings-shortcut-section").count()).toBeGreaterThan(5);
+
+  const saveRow = dialog.locator('[data-settings-shortcut-id="file.save"]');
+  await expect(saveRow).toContainText("ذخیره");
+  await expect(saveRow.locator("kbd")).toHaveText(["Ctrl", "S"]);
   await expect(
-    dialog.locator('[data-settings-shortcut-id="block-insert-after"]'),
-  ).toContainText("Ctrl+Enter");
+    dialog.locator('[data-settings-shortcut-id="block-insert-after"] kbd'),
+  ).toHaveText(["Ctrl", "Enter"]);
   await expect(
-    dialog.locator('[data-settings-shortcut-id="block-insert-after"]'),
-  ).toContainText("Enter در List Block برای آیتم داخلی آزاد می‌ماند.");
+    dialog.locator('[data-settings-shortcut-id="block-reorder"] kbd'),
+  ).toHaveText(["Alt", "↑", "Alt", "↓"]);
+  const dividerRow = dialog.locator(
+    '[data-settings-shortcut-id="edit.divider"]',
+  );
+  await expect(dividerRow).toContainText("درج جداکننده");
+  await expect(dividerRow.locator("kbd")).toHaveText(["Alt", "Shift", "H"]);
+  await search.fill("جداکننده");
+  await expect(dividerRow).toBeVisible();
+  await page.screenshot({
+    path: ".artifacts/divider-shortcut-settings.png",
+    fullPage: false,
+  });
+  await search.fill("");
+
+  await search.fill("ذخیره");
+  await expect(saveRow).toBeVisible();
+  const persianResultCount = Number(
+    await summary.getAttribute("data-visible-count"),
+  );
+  expect(persianResultCount).toBeGreaterThan(0);
+  expect(persianResultCount).toBeLessThan(totalCount);
+
+  await search.fill("Ctrl+S");
+  await expect(saveRow).toBeVisible();
   await expect(
-    dialog.locator('[data-settings-shortcut-id="selection-format"]'),
-  ).toContainText("Ctrl+B · Ctrl+I · Ctrl+U · Ctrl+`");
-  await expect(
-    dialog.locator('[data-settings-shortcut-id="selection-format"]'),
-  ).toHaveAttribute("data-context-dependent", "true");
+    dialog.locator('[data-settings-shortcut-id="file.saveAs"]'),
+  ).toBeVisible();
+
+  await search.fill("فرمان-ناموجود-راوی");
+  await expect(dialog.getByText("میان‌بری پیدا نشد", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "نمایش همهٔ میان‌برها" }).click();
+  await expect(search).toHaveValue("");
+  await expect(dialog.locator("[data-settings-shortcut-id]")).toHaveCount(
+    totalCount,
+  );
 
   const geometry = await page.evaluate(() => {
-    const rect = (element: Element) => {
-      const bounds = element.getBoundingClientRect();
-      return {
-        width: Math.round(bounds.width),
-        height: Math.round(bounds.height),
-      };
-    };
-    const section = document.querySelector(".settings-shortcut-section")!;
-    const rows = Array.from(
-      document.querySelectorAll(".settings-shortcut-section li"),
-    );
-    const firstRow = rows[0];
-    const copy = firstRow.querySelector(".settings-shortcut-copy")!;
-    const shortcut = firstRow.querySelector(".settings-shortcut-key")!;
-    const sectionStyle = getComputedStyle(section);
+    const content = document.querySelector<HTMLElement>(
+      ".shortcut-settings-content",
+    )!;
+    const firstRow = document.querySelector<HTMLElement>(
+      ".settings-shortcut-section li",
+    )!;
+    const copy = firstRow.querySelector<HTMLElement>(
+      ".settings-shortcut-copy",
+    )!;
+    const keys = firstRow.querySelector<HTMLElement>(
+      ".settings-shortcut-keycaps",
+    )!;
+    const toolbar = document.querySelector<HTMLElement>(
+      ".settings-shortcut-toolbar",
+    )!;
     return {
-      section: rect(section),
-      rowWidths: rows.map((row) => Math.round(row.getBoundingClientRect().width)),
-      rowHeights: rows.map((row) => Math.round(row.getBoundingClientRect().height)),
-      radius: sectionStyle.borderRadius,
-      border: sectionStyle.borderTopWidth,
-      shortcutIsPhysicallyLeft:
-        shortcut.getBoundingClientRect().right <= copy.getBoundingClientRect().left,
+      rowHeight: Math.round(firstRow.getBoundingClientRect().height),
+      keycapsArePhysicallyLeft:
+        keys.getBoundingClientRect().right <= copy.getBoundingClientRect().left,
+      horizontalOverflow: content.scrollWidth - content.clientWidth,
+      toolbarPosition: getComputedStyle(toolbar).position,
+      keycapElements: firstRow.querySelectorAll("kbd").length,
     };
   });
-  expect(geometry.section.width).toBe(1040);
-  expect(geometry.section.height).toBe(184);
-  expect(new Set(geometry.rowWidths)).toEqual(new Set([1012]));
-  expect(new Set(geometry.rowHeights)).toEqual(new Set([44]));
-  expect(geometry.radius).toBe("14px");
-  expect(geometry.border).toBe("0px");
-  expect(geometry.shortcutIsPhysicallyLeft).toBe(true);
+  expect(geometry.rowHeight).toBeGreaterThanOrEqual(60);
+  expect(geometry.keycapsArePhysicallyLeft).toBe(true);
+  expect(geometry.horizontalOverflow).toBeLessThanOrEqual(0);
+  expect(geometry.toolbarPosition).toBe("sticky");
+  expect(geometry.keycapElements).toBeGreaterThan(0);
 
   await page.screenshot({
     path: ".artifacts/p19-settings-shortcuts-desktop.png",
@@ -92,7 +124,7 @@ test("P19 matches the compact Figma shortcut reference and real Windows bindings
   });
 });
 
-test("P19 formats macOS bindings and keeps the compact page responsive", async ({
+test("P19 formats macOS keycaps and keeps the full catalog responsive", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -110,35 +142,58 @@ test("P19 formats macOS bindings and keeps the compact page responsive", async (
   await openShortcutSettings(page);
 
   const dialog = page.getByRole("dialog", { name: "میان‌برها" });
+  const search = dialog.getByRole("searchbox", {
+    name: "جست‌وجوی میان‌برها",
+  });
   await expect(
-    dialog.locator('[data-settings-shortcut-id="block-insert-after"]'),
-  ).toContainText("⌘+Enter");
+    dialog.locator('[data-settings-shortcut-id="block-insert-after"] kbd'),
+  ).toHaveText(["⌘", "Enter"]);
   await expect(
-    dialog.locator('[data-settings-shortcut-id="block-reorder"]'),
-  ).toContainText("Option+↑ / Option+↓");
-  await expect(
-    dialog.locator('[data-settings-shortcut-id="selection-format"]'),
-  ).toContainText("⌘+B · ⌘+I · ⌘+U · Ctrl+`");
+    dialog.locator('[data-settings-shortcut-id="block-reorder"] kbd'),
+  ).toHaveText(["Option", "↑", "Option", "↓"]);
 
-  const mobile = await page.evaluate(() => ({
-    pageOverflow:
-      document.documentElement.scrollWidth -
-      document.documentElement.clientWidth,
-    sectionWidths: Array.from(
-      document.querySelectorAll<HTMLElement>(".settings-shortcut-section"),
-      (section) => Math.round(section.getBoundingClientRect().width),
-    ),
-    rowMinHeights: Array.from(
+  await search.fill("⌘ S");
+  await expect(
+    dialog.locator('[data-settings-shortcut-id="file.save"]'),
+  ).toBeVisible();
+  await dialog
+    .getByRole("button", { name: "پاک‌کردن جست‌وجوی میان‌برها" })
+    .click();
+
+  const lastShortcut = dialog.locator('[data-settings-shortcut-id="layer.dismiss"]');
+  await lastShortcut.scrollIntoViewIfNeeded();
+  await expect(lastShortcut).toBeVisible();
+
+  const mobile = await page.evaluate(() => {
+    const input = document.querySelector<HTMLInputElement>(
+      ".settings-shortcut-search input",
+    )!;
+    const rows = Array.from(
       document.querySelectorAll<HTMLElement>(".settings-shortcut-section li"),
-      (row) => Math.round(row.getBoundingClientRect().height),
-    ),
-  }));
+    );
+    return {
+      pageOverflow:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+      contentOverflow:
+        document.querySelector<HTMLElement>(".shortcut-settings-content")!
+          .scrollWidth -
+        document.querySelector<HTMLElement>(".shortcut-settings-content")!
+          .clientWidth,
+      inputHeight: Math.round(input.getBoundingClientRect().height),
+      rowsStacked: rows.every((row) =>
+        getComputedStyle(row).gridTemplateColumns.split(" ").length === 1,
+      ),
+    };
+  });
   expect(mobile.pageOverflow).toBeLessThanOrEqual(0);
-  expect(new Set(mobile.sectionWidths)).toEqual(new Set([358]));
-  for (const height of mobile.rowMinHeights) {
-    expect(height).toBeGreaterThanOrEqual(68);
-  }
+  expect(mobile.contentOverflow).toBeLessThanOrEqual(0);
+  expect(mobile.inputHeight).toBeGreaterThanOrEqual(44);
+  expect(mobile.rowsStacked).toBe(true);
 
+  await dialog.locator(".shortcut-settings-content").evaluate((element) => {
+    element.scrollTop = 0;
+  });
   await page.screenshot({
     path: ".artifacts/p19-settings-shortcuts-mobile.png",
     fullPage: false,

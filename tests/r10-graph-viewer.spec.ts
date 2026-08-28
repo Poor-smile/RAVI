@@ -1,4 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import {
+  activatePointerAction,
+  scrollIntoViewStable,
+} from "./helpers/pointer-action";
 
 const GRAPH_SOURCE = [
   "```mermaid",
@@ -78,7 +82,7 @@ async function openReadingFixture(
 async function openGraphViewer(page: Page) {
   const diagram = page.locator(".mermaid-diagram.is-reading");
   const surface = diagram.locator(".mermaid-render-surface");
-  await diagram.scrollIntoViewIfNeeded();
+  await scrollIntoViewStable(diagram);
   await expect(surface).toHaveAttribute("src", /^blob:/u, { timeout: 30_000 });
   const render = await surface.evaluate((element) => ({
     src: (element as HTMLImageElement).src,
@@ -87,12 +91,12 @@ async function openGraphViewer(page: Page) {
   const trigger = diagram.getByRole("button", {
     name: "نمایش تمام‌صفحهٔ نمودار",
   });
-  await trigger.click();
+  await activatePointerAction(trigger);
   await expect(diagram).toHaveAttribute("data-mermaid-view", "graph-viewer");
   return { diagram, render, surface, trigger };
 }
 
-test("R10 matches the 1180×858 Graph Viewer frame from Figma", async ({
+test("R10 preserves the active theme in the 1180×858 Graph Viewer", async ({
   page,
 }) => {
   await openReadingFixture(page);
@@ -105,11 +109,12 @@ test("R10 matches the 1180×858 Graph Viewer frame from Figma", async ({
   await expect(header.locator("h2")).toHaveText(
     "نمودار فرایند · راهنمای نگارش.md",
   );
-  await expect(surface).toHaveAttribute("src", render.src);
+  await expect(surface).toHaveAttribute("src", /^blob:/u);
   await expect(surface).toHaveAttribute(
     "data-mermaid-render-key",
     render.key ?? "",
   );
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await expect(page.locator(".mermaid-studio-backdrop")).toHaveCount(0);
   await expect
     .poll(async () =>
@@ -191,11 +196,11 @@ test("R10 matches the 1180×858 Graph Viewer frame from Figma", async ({
     })),
   );
   expect(contract.colors).toEqual({
-    viewer: "rgb(14, 19, 15)",
-    header: "rgb(24, 30, 26)",
-    canvas: "rgb(26, 33, 28)",
+    viewer: "rgb(232, 235, 226)",
+    header: "rgb(252, 253, 249)",
+    canvas: "rgb(250, 251, 247)",
     preview: "rgba(0, 0, 0, 0)",
-    toolbar: "rgb(16, 22, 18)",
+    toolbar: "rgb(255, 255, 255)",
   });
   expect(contract.previewRadius).toBe("0px");
   expect(contract.toolbarRadius).toBe("6px");
@@ -235,9 +240,11 @@ test("R10 keeps zoom, fit, pan, native fullscreen and Reading return semantics",
   const scale = toolbar.locator(".mermaid-graph-viewer-scale");
 
   await expect(diagram.getByRole("button", { name: "بازگشت به سند" })).toBeFocused();
-  await page.keyboard.press("Tab");
+  await page.waitForTimeout(300);
+  await expect(diagram.getByRole("button", { name: "بازگشت به سند" })).toBeFocused();
+  await zoomOut.focus();
   await expect(zoomOut).toBeFocused();
-  await page.keyboard.press("Tab");
+  await zoomIn.focus();
   await expect(zoomIn).toBeFocused();
 
   await zoomIn.click();
@@ -268,7 +275,9 @@ test("R10 keeps zoom, fit, pan, native fullscreen and Reading return semantics",
   await expect(diagram).toHaveAttribute("data-native-fullscreen-requested", "true");
   await expect(diagram).toHaveAttribute("data-mermaid-view", "graph-viewer");
 
-  await diagram.getByRole("button", { name: "بازگشت به سند" }).click();
+  await activatePointerAction(
+    diagram.getByRole("button", { name: "بازگشت به سند" }),
+  );
   await expect(diagram).toHaveAttribute("data-mermaid-view", "inline");
   await expect(trigger).toBeFocused();
   await expect

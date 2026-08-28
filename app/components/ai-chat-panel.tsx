@@ -180,15 +180,15 @@ export function AiChatPanel({
             icon={
               <RefreshCw className="is-spinning" size={24} aria-hidden="true" />
             }
-            title="در حال بررسی Codex CLI"
+            title="در حال بررسی اتصال ChatGPT"
             detail="هیچ بخشی از سند در این مرحله ارسال نمی‌شود."
           />
         ) : connectionState === "cli_missing" ? (
           <SetupState
             icon={<Download size={24} aria-hidden="true" />}
-            title="Codex CLI نصب نیست"
-            detail="فقط Codex CLI را نصب کنید؛ برنامهٔ ChatGPT و API Key لازم نیست."
-            actionLabel="راهنمای نصب"
+            title="ChatGPT متصل نیست"
+            detail="در تنظیمات وارد حساب ChatGPT شوید و اتصال را بررسی کنید."
+            actionLabel="بازکردن تنظیمات"
             onAction={onOpenInstallGuide}
             secondaryLabel="بررسی دوباره"
             onSecondary={() => void onCheckConnection()}
@@ -196,9 +196,9 @@ export function AiChatPanel({
         ) : connectionState === "auth_required" ? (
           <SetupState
             icon={<LockOpen size={24} aria-hidden="true" />}
-            title="ورود با حساب ChatGPT"
-            detail="ورود امن در مرورگر انجام می‌شود و راوی به رمز شما دسترسی ندارد."
-            actionLabel="شروع ورود"
+            title="ورود با ChatGPT کامل نشده است"
+            detail="ورود در مرورگر و از مسیر رسمی OpenAI انجام می‌شود؛ راوی اعتبارنامهٔ شما را نمی‌خواند."
+            actionLabel="ادامهٔ ورود"
             onAction={() => void onStartLogin()}
             secondaryLabel="بررسی دوباره"
             onSecondary={() => void onCheckConnection()}
@@ -223,7 +223,7 @@ export function AiChatPanel({
           <SetupState
             icon={<RefreshCw size={24} aria-hidden="true" />}
             title="اتصال برقرار نشد"
-            detail="Codex CLI را ببندید و دوباره بررسی کنید."
+            detail="وضعیت اتصال ChatGPT را در تنظیمات بررسی کنید."
             actionLabel="تلاش دوباره"
             onAction={() => void onCheckConnection()}
           />

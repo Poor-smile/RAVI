@@ -26,6 +26,10 @@ const eslintConfig = defineConfig([
     ".qa-library/**",
     ".tmp-video-audit/**",
     ".codex-video-review/**",
+    ".codex-release-stage-*/**",
+    ".codex-temp/**",
+    ".tmp-figma/**",
+    "electron-dist-*/**",
     "next-env.d.ts",
   ]),
 ]);

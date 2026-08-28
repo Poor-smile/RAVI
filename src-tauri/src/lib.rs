@@ -12,7 +12,7 @@ use tauri::{
     AppHandle, Emitter, Manager, State, WebviewWindow,
     ipc::{InvokeBody, Request},
 };
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+use tauri_plugin_dialog::DialogExt;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use walkdir::WalkDir;
 
@@ -52,6 +52,8 @@ struct RecentFile {
     name: String,
     document_type: String,
     opened_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_modified: Option<u128>,
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -71,6 +73,13 @@ struct LibraryFolder {
 struct LibrarySnapshot {
     folders: Vec<LibraryFolder>,
     recents: Vec<RecentFile>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecentPruneResponse {
+    removed: bool,
+    state: LibrarySnapshot,
 }
 
 #[derive(Serialize)]
@@ -108,6 +117,18 @@ struct OpenedDocument {
     open_in_reading_mode: bool,
 }
 
+#[derive(Serialize)]
+struct SearchText {
+    content: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DocumentVersions {
+    revision: u64,
+    versions: Vec<Value>,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DocumentPayload {
@@ -118,6 +139,7 @@ struct DocumentPayload {
     assets: Vec<Value>,
     revision: u64,
     versions: Vec<Value>,
+    #[allow(dead_code)]
     raavi: Value,
 }
 
@@ -347,6 +369,10 @@ fn record_recent(app: &AppHandle, path: &Path, document_type: &str) -> Result<()
             name: path_file_name(&resolved),
             document_type: document_type.to_owned(),
             opened_at: now_iso(),
+            last_modified: fs::metadata(&resolved)
+                .ok()
+                .and_then(|metadata| metadata.modified().ok())
+                .map(modified_millis),
         },
     );
     state.recents.truncate(MAX_RECENT_FILES);
@@ -552,11 +578,6 @@ fn validate_payload(payload: &DocumentPayload) -> Result<(), String> {
     }
 }
 
-fn raavi_payload_is_valid(payload: &DocumentPayload) -> bool {
-    payload.raavi.get("format").and_then(Value::as_str) == Some("ravi")
-        && payload.raavi.get("version").and_then(Value::as_u64) == Some(1)
-}
-
 fn dialog_path(value: tauri_plugin_dialog::FilePath) -> Result<PathBuf, String> {
     value.into_path().map_err(|error| error.to_string())
 }
@@ -756,9 +777,87 @@ async fn get_library_state(
             access.allowed_roots.insert(key);
         }
     }
+    for recent in &mut value.recents {
+        if let Ok(metadata) = fs::metadata(&recent.path) {
+            recent.last_modified = metadata.modified().ok().map(modified_millis);
+        }
+    }
     Ok(LibrarySnapshot {
         folders,
         recents: value.recents,
+    })
+}
+
+#[tauri::command]
+async fn clear_recent_files(app: AppHandle) -> Result<LibrarySnapshot, String> {
+    let mut value = library_state(&app)?;
+    value.recents.clear();
+    save_library_state(&app, &value)?;
+    Ok(LibrarySnapshot {
+        folders: value
+            .folders
+            .iter()
+            .map(Path::new)
+            .map(|path| LibraryFolder {
+                root_name: root_name(path),
+                root_path: path_text(path),
+            })
+            .collect(),
+        recents: Vec::new(),
+    })
+}
+
+#[tauri::command]
+async fn remove_recent_file_if_missing(
+    app: AppHandle,
+    file_path: String,
+) -> Result<RecentPruneResponse, String> {
+    match fs::metadata(&file_path) {
+        Ok(_) => {
+            let value = library_state(&app)?;
+            return Ok(RecentPruneResponse {
+                removed: false,
+                state: LibrarySnapshot {
+                    folders: value
+                        .folders
+                        .iter()
+                        .map(Path::new)
+                        .map(|path| LibraryFolder {
+                            root_name: root_name(path),
+                            root_path: path_text(path),
+                        })
+                        .collect(),
+                    recents: value.recents,
+                },
+            });
+        }
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            return Err(error.to_string());
+        }
+        Err(_) => {}
+    }
+    let target_key = path_key(Path::new(&file_path))?;
+    let mut value = library_state(&app)?;
+    value.recents.retain(|recent| {
+        path_key(Path::new(&recent.path))
+            .map(|key| key != target_key)
+            .unwrap_or(true)
+    });
+    save_library_state(&app, &value)?;
+    Ok(RecentPruneResponse {
+        removed: true,
+        state: LibrarySnapshot {
+        folders: value
+            .folders
+            .iter()
+            .map(Path::new)
+            .map(|path| LibraryFolder {
+                root_name: root_name(path),
+                root_path: path_text(path),
+            })
+            .collect(),
+            recents: value.recents,
+        },
     })
 }
 
@@ -786,6 +885,42 @@ async fn choose_markdown_folder(
         .insert(path_key(&root)?);
     remember_folder(&app, &root)?;
     scan_folder(&root).map(Some)
+}
+
+#[tauri::command]
+async fn disconnect_library_folder(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    root_path: String,
+) -> Result<LibrarySnapshot, String> {
+    let root = PathBuf::from(root_path);
+    let key = path_key(&root)?;
+    let mut value = library_state(&app)?;
+    value.folders.retain(|folder| {
+        path_key(Path::new(folder))
+            .map(|folder_key| folder_key != key)
+            .unwrap_or(true)
+    });
+    save_library_state(&app, &value)?;
+    state
+        .access
+        .lock()
+        .map_err(|_| "Desktop access state is unavailable.".to_owned())?
+        .allowed_roots
+        .remove(&key);
+
+    Ok(LibrarySnapshot {
+        folders: value
+            .folders
+            .iter()
+            .map(Path::new)
+            .map(|path| LibraryFolder {
+                root_name: root_name(path),
+                root_path: path_text(path),
+            })
+            .collect(),
+        recents: value.recents,
+    })
 }
 
 #[tauri::command]
@@ -842,6 +977,30 @@ async fn read_library_document(
 }
 
 #[tauri::command]
+async fn read_library_search_text(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    file_path: String,
+) -> Result<SearchText, String> {
+    let file = PathBuf::from(file_path)
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    let roots = library_state(&app)?.folders;
+    let inside_root = roots.iter().any(|root| {
+        Path::new(root)
+            .canonicalize()
+            .map(|resolved| file.starts_with(resolved))
+            .unwrap_or(false)
+    });
+    if !inside_root {
+        return Err("File access is outside the selected library.".to_owned());
+    }
+    read_document(&app, &state.access, &file, false, false).map(|document| SearchText {
+        content: document.content,
+    })
+}
+
+#[tauri::command]
 async fn choose_document(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -874,11 +1033,51 @@ async fn open_recent_document(
 }
 
 #[tauri::command]
+async fn read_document_versions(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    file_path: String,
+) -> Result<DocumentVersions, String> {
+    let file = PathBuf::from(file_path)
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    let requested = path_key(&file)?;
+    let already_allowed = state
+        .access
+        .lock()
+        .map_err(|_| "Desktop access state is unavailable.".to_owned())?
+        .allowed_documents
+        .contains(&requested);
+    if !already_allowed {
+        let library = library_state(&app)?;
+        let is_recent = library
+            .recents
+            .iter()
+            .any(|item| path_key(Path::new(&item.path)).is_ok_and(|key| key == requested));
+        let is_in_library = library.folders.iter().any(|root| {
+            Path::new(root)
+                .canonicalize()
+                .is_ok_and(|resolved| file.starts_with(resolved))
+        });
+        if !is_recent && !is_in_library {
+            return Err("Document version access is not allowed.".to_owned());
+        }
+    }
+
+    let document = read_document(&app, &state.access, &file, false, false)?;
+    Ok(DocumentVersions {
+        revision: document.revision,
+        versions: document.versions,
+    })
+}
+
+#[tauri::command]
 async fn save_markdown(
     app: AppHandle,
     state: State<'_, AppState>,
     file_name: String,
     document: DocumentPayload,
+    default_directory: Option<String>,
 ) -> Result<SaveResult, String> {
     validate_payload(&document)?;
     let name = safe_file_name(&file_name, "نوشته-راوی.md", ".md");
@@ -888,7 +1087,11 @@ async fn save_markdown(
         .set_title("ذخیره فایل Markdown")
         .set_file_name(name)
         .add_filter("Markdown", &["md", "markdown"]);
-    if let Ok(directory) = app.path().document_dir() {
+    let preferred_directory = default_directory
+        .map(PathBuf::from)
+        .filter(|directory| directory.is_dir())
+        .or_else(|| app.path().document_dir().ok());
+    if let Some(directory) = preferred_directory {
         dialog = dialog.set_directory(directory);
     }
     let Some(selected) = dialog.blocking_save_file() else {
@@ -914,70 +1117,6 @@ async fn save_markdown(
 }
 
 #[tauri::command]
-async fn save_raavi(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    file_name: String,
-    document: DocumentPayload,
-) -> Result<SaveResult, String> {
-    validate_payload(&document)?;
-    if !raavi_payload_is_valid(&document) {
-        return Err("Raavi document payload is invalid.".to_owned());
-    }
-    let name = safe_file_name(&file_name, "نوشته-راوی.ravi", ".ravi");
-    let mut dialog = app
-        .dialog()
-        .file()
-        .set_title("ذخیره فایل راوی")
-        .set_file_name(name)
-        .add_filter("سند راوی", &["ravi"]);
-    if let Ok(directory) = app.path().document_dir() {
-        dialog = dialog.set_directory(directory);
-    }
-    let Some(selected) = dialog.blocking_save_file() else {
-        return Ok(SaveResult::canceled());
-    };
-    let ravi_path = ensure_extension(dialog_path(selected)?, &["ravi"], ".ravi");
-    let markdown_path = ravi_path.with_extension("md");
-    if markdown_path.exists() {
-        let overwrite = app
-            .dialog()
-            .message(format!(
-                "یک فایل Markdown با همین نام وجود دارد. آیا «{}» جایگزین شود؟",
-                path_file_name(&markdown_path)
-            ))
-            .title("جایگزینی فایل Markdown")
-            .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "جایگزین شود".to_owned(),
-                "انصراف".to_owned(),
-            ))
-            .blocking_show();
-        if !overwrite {
-            return Ok(SaveResult::canceled());
-        }
-    }
-    let ravi_text =
-        serde_json::to_string_pretty(&document.raavi).map_err(|error| error.to_string())?;
-    fs::write(&ravi_path, ravi_text).map_err(|error| error.to_string())?;
-    fs::write(&markdown_path, &document.content).map_err(|error| error.to_string())?;
-    state
-        .access
-        .lock()
-        .map_err(|_| "Desktop access state is unavailable.".to_owned())?
-        .allowed_documents
-        .insert(path_key(&ravi_path)?);
-    record_recent(&app, &ravi_path, "ravi")?;
-    Ok(SaveResult {
-        saved: true,
-        file_path: Some(path_text(&ravi_path)),
-        ravi_path: Some(path_text(&ravi_path)),
-        markdown_path: Some(path_text(&markdown_path)),
-        document_type: Some("ravi".to_owned()),
-    })
-}
-
-#[tauri::command]
 async fn save_current_document(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -996,27 +1135,18 @@ async fn save_current_document(
     if !allowed {
         return Err("This document must be opened before it can be saved.".to_owned());
     }
-    let document_type = if is_raavi(&file) { "ravi" } else { "markdown" };
-    if document_type == "ravi" {
-        if !raavi_payload_is_valid(&document) {
-            return Err("Raavi document payload is invalid.".to_owned());
-        }
-        let ravi_text =
-            serde_json::to_string_pretty(&document.raavi).map_err(|error| error.to_string())?;
-        fs::write(&file, ravi_text).map_err(|error| error.to_string())?;
-        fs::write(file.with_extension("md"), &document.content)
-            .map_err(|error| error.to_string())?;
-    } else {
-        fs::write(&file, &document.content).map_err(|error| error.to_string())?;
-        save_history(&app, &file, document.revision, document.versions)?;
+    if is_raavi(&file) {
+        return Err("LEGACY_DOCUMENT_REQUIRES_MARKDOWN_SAVE_AS".to_owned());
     }
-    record_recent(&app, &file, document_type)?;
+    fs::write(&file, &document.content).map_err(|error| error.to_string())?;
+    save_history(&app, &file, document.revision, document.versions)?;
+    record_recent(&app, &file, "markdown")?;
     Ok(SaveResult {
         saved: true,
         file_path: Some(path_text(&file)),
         ravi_path: None,
         markdown_path: None,
-        document_type: Some(document_type.to_owned()),
+        document_type: Some("markdown".to_owned()),
     })
 }
 
@@ -1107,13 +1237,17 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_library_state,
+            clear_recent_files,
+            remove_recent_file_if_missing,
             choose_markdown_folder,
+            disconnect_library_folder,
             scan_markdown_folder,
             read_library_document,
+            read_library_search_text,
             choose_document,
             open_recent_document,
+            read_document_versions,
             save_markdown,
-            save_raavi,
             save_current_document,
             save_word_export,
             export_pdf,

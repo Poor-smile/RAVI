@@ -41,6 +41,8 @@ const FULLSCREEN_FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+let activeFallbackGraphViewerKey: string | null = null;
+
 function fullscreenFocusableElements(container: HTMLElement) {
   return Array.from(
     container.querySelectorAll<HTMLElement>(FULLSCREEN_FOCUSABLE_SELECTOR),
@@ -113,9 +115,12 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   const fullscreenWasOpenRef = useRef(false);
   const displayStartedRef = useRef(0);
   const hintId = useId();
+  const graphViewerKey = `${documentName}::${block.id}`;
   const [renderNonce, setRenderNonce] = useState(0);
   const [nativeFullscreen, setNativeFullscreen] = useState(false);
-  const [fallbackFullscreen, setFallbackFullscreen] = useState(false);
+  const [fallbackFullscreen, setFallbackFullscreen] = useState(
+    () => activeFallbackGraphViewerKey === graphViewerKey,
+  );
   const fullscreen = fallbackFullscreen;
   const reportedFullscreenRef = useRef(false);
   const reportFullscreenChange = useCallback(
@@ -219,6 +224,9 @@ export const MermaidDiagram = memo(function MermaidDiagram({
   }, [fullscreen, reportFullscreenChange]);
 
   const closeGraphViewer = useCallback(async () => {
+    if (activeFallbackGraphViewerKey === graphViewerKey) {
+      activeFallbackGraphViewerKey = null;
+    }
     setFallbackFullscreen(false);
     if (document.fullscreenElement === figureRef.current) {
       try {
@@ -227,11 +235,48 @@ export const MermaidDiagram = memo(function MermaidDiagram({
         // The viewer still closes even when the host rejects a fullscreen exit.
       }
     }
-  }, []);
+  }, [graphViewerKey]);
 
   const openGraphViewer = useCallback(() => {
+    activeFallbackGraphViewerKey = graphViewerKey;
     setFallbackFullscreen(true);
-  }, []);
+  }, [graphViewerKey]);
+
+  const handleFullscreenKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (!fullscreen) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void closeGraphViewer();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const figure = figureRef.current;
+      if (!figure) return;
+      const focusable = fullscreenFocusableElements(figure);
+      if (!focusable.length) {
+        event.preventDefault();
+        figure.focus();
+        return;
+      }
+      const activeIndex = focusable.indexOf(
+        document.activeElement as HTMLElement,
+      );
+      const nextIndex = event.shiftKey
+        ? activeIndex <= 0
+          ? focusable.length - 1
+          : activeIndex - 1
+        : activeIndex === -1 || activeIndex === focusable.length - 1
+          ? 0
+          : activeIndex + 1;
+      event.preventDefault();
+      focusable[nextIndex]?.focus();
+    },
+    [closeGraphViewer, fullscreen],
+  );
 
   const toggleNativeFullscreen = useCallback(async () => {
     const figure = figureRef.current;
@@ -256,52 +301,29 @@ export const MermaidDiagram = memo(function MermaidDiagram({
     const restoreOutsideInert = fallbackFullscreen
       ? makeOutsideSubtreeInert(figure)
       : null;
-    const handleFullscreenKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        void closeGraphViewer();
-        return;
-      }
-
-      if (event.key !== "Tab") return;
-      const focusable = fullscreenFocusableElements(figure);
-      if (!focusable.length) {
-        event.preventDefault();
-        figure.focus();
-        return;
-      }
-      const activeIndex = focusable.indexOf(
-        document.activeElement as HTMLElement,
-      );
-      const nextIndex = event.shiftKey
-        ? activeIndex <= 0
-          ? focusable.length - 1
-          : activeIndex - 1
-        : activeIndex === -1 || activeIndex === focusable.length - 1
-          ? 0
-          : activeIndex + 1;
-      event.preventDefault();
-      focusable[nextIndex]?.focus();
-    };
-    document.addEventListener("keydown", handleFullscreenKey, true);
+    figure.addEventListener("keydown", handleFullscreenKeyDown, true);
     return () => {
       if (fallbackFullscreen) document.body.style.overflow = previousOverflow;
       restoreOutsideInert?.();
-      document.removeEventListener("keydown", handleFullscreenKey, true);
+      figure.removeEventListener("keydown", handleFullscreenKeyDown, true);
     };
-  }, [closeGraphViewer, fallbackFullscreen, fullscreen]);
+  }, [fallbackFullscreen, fullscreen, handleFullscreenKeyDown]);
 
   useEffect(() => {
     if (fullscreen) {
       fullscreenWasOpenRef.current = true;
-      const frame = window.requestAnimationFrame(() => {
+      const focusClose = () =>
         (fullscreenCloseRef.current ?? figureRef.current)?.focus({
           preventScroll: true,
         });
+      const frame = window.requestAnimationFrame(() => {
+        focusClose();
       });
-      return () => window.cancelAnimationFrame(frame);
+      const settleFocus = window.setTimeout(focusClose, 220);
+      return () => {
+        window.cancelAnimationFrame(frame);
+        window.clearTimeout(settleFocus);
+      };
     }
 
     if (!fullscreenWasOpenRef.current) return;
@@ -314,6 +336,9 @@ export const MermaidDiagram = memo(function MermaidDiagram({
 
   useEffect(() => {
     if (readingMode) return;
+    if (activeFallbackGraphViewerKey === graphViewerKey) {
+      activeFallbackGraphViewerKey = null;
+    }
     const resetFallback = window.setTimeout(
       () => setFallbackFullscreen(false),
       0,
@@ -322,7 +347,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
       void document.exitFullscreen();
     }
     return () => window.clearTimeout(resetFallback);
-  }, [readingMode]);
+  }, [graphViewerKey, readingMode]);
 
   useEffect(() => {
     if (!fullscreen) {
@@ -400,6 +425,24 @@ export const MermaidDiagram = memo(function MermaidDiagram({
             className="mermaid-graph-viewer-return"
             dir="ltr"
             type="button"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void closeGraphViewer();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Tab") return;
+              const figure = figureRef.current;
+              if (!figure) return;
+              const focusable = fullscreenFocusableElements(figure);
+              event.preventDefault();
+              event.stopPropagation();
+              event.nativeEvent.stopImmediatePropagation();
+              const next = event.shiftKey
+                ? focusable.at(-1)
+                : focusable.find((element) => element !== event.currentTarget);
+              next?.focus();
+            }}
             onClick={() => void closeGraphViewer()}
             aria-label="بازگشت به سند"
           >
@@ -520,9 +563,26 @@ export const MermaidDiagram = memo(function MermaidDiagram({
             className="mermaid-diagram-action"
             dir={readingMode ? "ltr" : undefined}
             type="button"
-            onClick={() =>
-              readingMode ? openGraphViewer() : onEdit(block)
-            }
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              if (readingMode) {
+                openGraphViewer();
+              }
+            }}
+            onMouseUp={(event) => event.stopPropagation()}
+            onClickCapture={(event) => {
+              if (!readingMode) return;
+              event.preventDefault();
+              event.stopPropagation();
+              event.nativeEvent.stopImmediatePropagation();
+              openGraphViewer();
+            }}
+            onClick={(event) => {
+              if (readingMode) {
+                return;
+              }
+              onEdit(block);
+            }}
             aria-label={
               readingMode
                 ? "نمایش تمام‌صفحهٔ نمودار"

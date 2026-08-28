@@ -8,14 +8,16 @@ export type EditorBlockType =
   | "ordered-list"
   | "code-block"
   | "quote"
+  | "divider"
   | "table"
   | "mermaid"
   | "image"
+  | "audio"
   | "formula";
 
 export type DirectEditorBlockType = Exclude<
   EditorBlockType,
-  "table" | "mermaid" | "image"
+  "table" | "mermaid" | "image" | "audio"
 >;
 
 export type ConvertedMarkdownBlock = {
@@ -27,11 +29,13 @@ export type MarkdownBlockKind =
   | "text"
   | "heading"
   | "quote"
+  | "divider"
   | "list"
   | "table"
   | "code"
   | "mermaid"
   | "image"
+  | "audio"
   | "formula"
   | "blank";
 
@@ -50,7 +54,7 @@ export type MarkdownBlockRange = {
 const BLOCK_PREFIX = /^(?:#{1,6}[\t ]+|>[\t ]?(?:\[![^\]]+\][\t ]*)?|(?:[-+*][\t ]+(?:\[[ xX]\][\t ]*)?)|(?:\d+[.)][\t ]+))/u;
 
 const PREFIX_BY_TYPE: Record<
-  Exclude<DirectEditorBlockType, "code-block" | "formula">,
+  Exclude<DirectEditorBlockType, "code-block" | "formula" | "divider">,
   string
 > = {
   "heading-1": "# ",
@@ -66,7 +70,7 @@ const PREFIX_BY_TYPE: Record<
 function convertMarkdownLine(
   line: string,
   selectionColumn: number,
-  type: Exclude<DirectEditorBlockType, "code-block" | "formula">,
+  type: Exclude<DirectEditorBlockType, "code-block" | "formula" | "divider">,
   stripExistingPrefix: boolean,
 ): ConvertedMarkdownBlock {
   const indentation = line.match(/^[\t ]*/u)?.[0] ?? "";
@@ -99,6 +103,14 @@ export function convertMarkdownLineToBlock(
   selectionColumn: number,
   type: DirectEditorBlockType,
 ): ConvertedMarkdownBlock {
+  if (type === "divider") {
+    const indentation = line.match(/^[\t ]*/u)?.[0] ?? "";
+    return {
+      markdown: `${indentation}---`,
+      selectionOffset: indentation.length + 3,
+    };
+  }
+
   if (type === "formula") {
     const plain = convertMarkdownLine(
       line,
@@ -147,6 +159,11 @@ export function convertMarkdownBlockToType(
   type: DirectEditorBlockType,
 ): ConvertedMarkdownBlock {
   const safeSelection = Math.max(0, Math.min(selectionOffset, block.length));
+
+  if (type === "divider") {
+    return { markdown: "---", selectionOffset: 3 };
+  }
+
   const firstBreak = block.indexOf("\n");
   const lastBreak = block.lastIndexOf("\n");
   const firstLine = firstBreak === -1 ? block : block.slice(0, firstBreak);

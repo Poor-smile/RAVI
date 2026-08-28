@@ -1,15 +1,21 @@
 "use client";
 
 import {
+  AlertTriangle,
   ArrowRight,
+  BrainCircuit,
   BookOpen,
   Check,
   Computer,
+  Download,
   Folder,
+  FolderOpen,
   FolderPlus,
+  History,
   Home,
   Keyboard,
   Library,
+  LoaderCircle,
   Moon,
   Palette,
   PencilLine,
@@ -49,15 +55,35 @@ import type {
   LibraryFileVisibility,
 } from "../settings/file-library-preferences";
 import type {
+  GeneralPreferences,
+  StartupView,
+} from "../settings/general-preferences";
+import type {
   ExternalImagePolicy,
   PrivacyPreferences,
 } from "../settings/privacy-preferences";
+import type { AiPreferences } from "../settings/ai-preferences";
+import {
+  evaluateDriveQuota,
+  type BackupPreferences,
+  type BackupProviderId,
+  type BackupStatus,
+  type CloudBackupSummary,
+  type CloudRestoreResult,
+} from "../backup/policy";
 import type { CommandEnvironment } from "../keyboard/command-registry";
 import { AccessibleModal } from "./accessible-modal";
+import { AiSpeechSettings } from "./ai-speech-settings";
+import {
+  SoftwareUpdateStatusCard,
+  type SoftwareUpdateActions,
+} from "./software-update-ui";
 import { SettingsShortcutSections } from "./settings-shortcut-sections";
+import type { SoftwareUpdateState } from "../software-update/types";
 
 export type SettingsCategoryId =
   | "general"
+  | "ai"
   | "appearance"
   | "reading"
   | "editing"
@@ -94,6 +120,12 @@ const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     icon: Palette,
   },
   {
+    id: "ai",
+    label: "هوش مصنوعی و گفتار",
+    description: "اتصال ChatGPT و پردازش گفتار محلی را مدیریت کنید.",
+    icon: BrainCircuit,
+  },
+  {
     id: "reading",
     label: "مطالعه",
     description: "نمایش متن را برای مطالعهٔ طولانی، راحت و شخصی کنید.",
@@ -107,8 +139,8 @@ const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
   },
   {
     id: "files",
-    label: "فایل‌ها و دفتر",
-    description: "پوشهٔ مرکزی، تب‌های نشست و رفتار ذخیره‌سازی را مدیریت کنید.",
+    label: "فایل‌ها و کتابخانه",
+    description: "فضای ابری، دامنهٔ بکاپ و نسخه‌ها بدون دکمهٔ ذخیره اعمال می‌شوند.",
     icon: Library,
   },
   {
@@ -122,10 +154,53 @@ const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     id: "shortcuts",
     label: "میان‌برها",
     description:
-      "فرمان‌های سریع بلاک و قالب‌بندی را مرور کنید؛ همهٔ مسیرها بدون ماوس قابل استفاده‌اند.",
+      "همهٔ میان‌برهای فعال را جست‌وجو کنید و کلیدهای مناسب دستگاه‌تان را ببینید.",
     icon: Keyboard,
   },
 ] as const;
+
+const BACKUP_PROVIDERS: ReadonlyArray<{
+  id: BackupProviderId;
+  name: string;
+  description: string;
+  logo: string;
+}> = [
+  {
+    id: "google-drive",
+    name: "Google Drive",
+    description: "فضای حساب Google",
+    logo: "/brands/google/google-drive-2026.svg",
+  },
+  {
+    id: "proton-drive",
+    name: "Proton Drive",
+    description: "رمزنگاری سرتاسری",
+    logo: "/brands/proton/proton-drive.svg",
+  },
+];
+
+function formatStorageBytes(value: number) {
+  const bytes = Math.max(0, Number(value) || 0);
+  const units = ["بایت", "کیلوبایت", "مگابایت", "گیگابایت", "ترابایت"];
+  let amount = bytes;
+  let unit = 0;
+  while (amount >= 1024 && unit < units.length - 1) {
+    amount /= 1024;
+    unit += 1;
+  }
+  return `${amount.toLocaleString("fa-IR", {
+    maximumFractionDigits: unit > 2 ? 1 : 0,
+  })} ${units[unit]}`;
+}
+
+function formatBackupDate(value: string) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "زمان نامشخص";
+  return new Intl.DateTimeFormat("fa-IR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(timestamp);
+}
 
 function SettingsHeading({
   category,
@@ -135,23 +210,25 @@ function SettingsHeading({
   titleRef: RefObject<HTMLHeadingElement | null>;
 }) {
   return (
-    <>
-      <div className="shortcut-settings-heading">
+    <div className="shortcut-settings-heading">
+      <div className="shortcut-settings-heading-copy">
         <h2 id="shortcut-settings-title" ref={titleRef} tabIndex={-1}>
           {category.id === "editing"
             ? "ویرایش و نمای کد"
             : category.id === "shortcuts"
-              ? "میان‌برهای ویرایش"
+              ? "میان‌برهای صفحه‌کلید"
+              : category.id === "files"
+                ? "پشتیبان‌گیری ابری"
               : category.label}
         </h2>
         <p id="shortcut-settings-description">{category.description}</p>
       </div>
       {category.id !== "editing" && category.id !== "shortcuts" && (
         <p className="shortcut-settings-autosave">
-          تغییرها خودکار روی این دستگاه ذخیره می‌شوند.
+          ذخیرهٔ خودکار روی این دستگاه
         </p>
       )}
-    </>
+    </div>
   );
 }
 
@@ -163,19 +240,36 @@ export function ShortcutSettingsDialog({
   onCodeViewPreferencesChange,
   appearancePreferences,
   onAppearancePreferencesChange,
+  generalPreferences,
+  onGeneralPreferencesChange,
   readingPreferences,
   onReadingPreferencesChange,
   fileLibraryPreferences,
   onFileLibraryPreferencesChange,
+  backupStatus,
+  onBackupPreferencesChange,
+  onBackupProviderChange,
+  onConnectBackupProvider,
+  onDisconnectBackupProvider,
+  onListCloudBackups,
+  onRestoreCloudBackups,
+  onRevealCloudRestore,
   privacyPreferences,
   onPrivacyPreferencesChange,
+  aiPreferences,
+  onAiPreferencesChange,
+  onOpenExternal,
   libraryFolders,
   libraryFileCount,
   onConnectLibrary,
   onRefreshLibrary,
+  onChooseDefaultSaveFolder,
   onDisconnectLibrary,
   onClearRecentFiles,
   onResetSettings,
+  onReplayOnboarding,
+  softwareUpdateState,
+  softwareUpdateActions,
   onClose,
   returnFocusRef,
   initialCategory = "general",
@@ -187,19 +281,36 @@ export function ShortcutSettingsDialog({
   onCodeViewPreferencesChange: (preferences: CodeViewPreferences) => void;
   appearancePreferences: AppearancePreferences;
   onAppearancePreferencesChange: (preferences: AppearancePreferences) => void;
+  generalPreferences: GeneralPreferences;
+  onGeneralPreferencesChange: (preferences: GeneralPreferences) => void;
   readingPreferences: ReadingPreferences;
   onReadingPreferencesChange: (preferences: ReadingPreferences) => void;
   fileLibraryPreferences: FileLibraryPreferences;
   onFileLibraryPreferencesChange: (preferences: FileLibraryPreferences) => void;
+  backupStatus: BackupStatus;
+  onBackupPreferencesChange: (preferences: BackupPreferences) => Promise<void>;
+  onBackupProviderChange: (providerId: BackupProviderId) => Promise<BackupStatus | void>;
+  onConnectBackupProvider: (providerId: BackupProviderId) => Promise<BackupStatus | void>;
+  onDisconnectBackupProvider: (providerId: BackupProviderId) => Promise<void>;
+  onListCloudBackups: () => Promise<CloudBackupSummary[]>;
+  onRestoreCloudBackups: (documentIds: string[]) => Promise<CloudRestoreResult>;
+  onRevealCloudRestore: (restoreRoot: string) => Promise<{ revealed: boolean }>;
   privacyPreferences: PrivacyPreferences;
   onPrivacyPreferencesChange: (preferences: PrivacyPreferences) => void;
+  aiPreferences: AiPreferences;
+  onAiPreferencesChange: (preferences: AiPreferences) => void;
+  onOpenExternal: (url: string) => void;
   libraryFolders: readonly SettingsLibraryFolder[];
   libraryFileCount: number;
   onConnectLibrary: () => Promise<void>;
   onRefreshLibrary: () => Promise<void>;
+  onChooseDefaultSaveFolder: () => Promise<void>;
   onDisconnectLibrary: (rootId: string) => Promise<void>;
   onClearRecentFiles: () => Promise<void>;
   onResetSettings: () => Promise<void>;
+  onReplayOnboarding: () => void;
+  softwareUpdateState: SoftwareUpdateState;
+  softwareUpdateActions: SoftwareUpdateActions;
   onClose: () => void;
   returnFocusRef?: RefObject<HTMLElement | null>;
   initialCategory?: SettingsCategoryId;
@@ -228,6 +339,20 @@ export function ShortcutSettingsDialog({
   const [libraryAction, setLibraryAction] = useState<
     "connect" | "refresh" | "disconnect" | null
   >(null);
+  const [backupAction, setBackupAction] = useState<
+    "connect" | "disconnect" | "preferences" | "provider" | null
+  >(null);
+  const [restorePhase, setRestorePhase] = useState<
+    "idle" | "listing" | "ready" | "restoring" | "success" | "error"
+  >("idle");
+  const [cloudBackups, setCloudBackups] = useState<CloudBackupSummary[]>([]);
+  const [selectedBackupIds, setSelectedBackupIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [restoreResult, setRestoreResult] = useState<CloudRestoreResult | null>(
+    null,
+  );
+  const [restoreError, setRestoreError] = useState("");
   const [pendingPrivacyAction, setPendingPrivacyAction] = useState<
     "recents" | "settings" | null
   >(null);
@@ -252,6 +377,10 @@ export function ShortcutSettingsDialog({
     onAppearancePreferencesChange({ ...appearancePreferences, motion });
   };
 
+  const updateStartupView = (startupView: StartupView) => {
+    onGeneralPreferencesChange({ ...generalPreferences, startupView });
+  };
+
   const updateReadingPreference = <Key extends keyof ReadingPreferences>(
     key: Key,
     value: ReadingPreferences[Key],
@@ -266,6 +395,109 @@ export function ShortcutSettingsDialog({
     value: FileLibraryPreferences[Key],
   ) => {
     onFileLibraryPreferencesChange({ ...fileLibraryPreferences, [key]: value });
+  };
+
+  const updateBackupPreference = async <Key extends keyof BackupPreferences>(
+    key: Key,
+    value: BackupPreferences[Key],
+  ) => {
+    setBackupAction("preferences");
+    try {
+      await onBackupPreferencesChange({
+        ...backupStatus.preferences,
+        [key]: value,
+      });
+    } finally {
+      setBackupAction(null);
+    }
+  };
+
+  const runBackupConnectionAction = async (
+    action: "connect" | "disconnect",
+  ) => {
+    setBackupAction(action);
+    try {
+      await (action === "connect"
+        ? onConnectBackupProvider(backupStatus.providerId)
+        : onDisconnectBackupProvider(backupStatus.providerId));
+    } finally {
+      setBackupAction(null);
+    }
+  };
+
+  const selectBackupProvider = async (providerId: BackupProviderId) => {
+    if (providerId === backupStatus.providerId) return;
+    setBackupAction("provider");
+    setRestorePhase("idle");
+    setCloudBackups([]);
+    setSelectedBackupIds(new Set());
+    setRestoreResult(null);
+    setRestoreError("");
+    try {
+      await onBackupProviderChange(providerId);
+    } finally {
+      setBackupAction(null);
+    }
+  };
+
+  const loadCloudBackups = async () => {
+    setRestorePhase("listing");
+    setRestoreError("");
+    setRestoreResult(null);
+    try {
+      const backups = await onListCloudBackups();
+      setCloudBackups(backups);
+      setSelectedBackupIds(
+        new Set(
+          backups
+            .filter((backup) => backup.categories.textAndStructure !== false)
+            .map((backup) => backup.documentId),
+        ),
+      );
+      setRestorePhase("ready");
+    } catch {
+      setRestoreError(
+        `فهرست بکاپ‌ها از ${activeProvider.name} دریافت نشد؛ اتصال را بررسی و دوباره تلاش کنید.`,
+      );
+      setRestorePhase("error");
+    }
+  };
+
+  const toggleBackupSelection = (documentId: string) => {
+    setSelectedBackupIds((current) => {
+      const next = new Set(current);
+      if (next.has(documentId)) next.delete(documentId);
+      else next.add(documentId);
+      return next;
+    });
+  };
+
+  const selectAllBackups = () => {
+    setSelectedBackupIds((current) =>
+      current.size === cloudBackups.length
+        ? new Set()
+        : new Set(cloudBackups.map((backup) => backup.documentId)),
+    );
+  };
+
+  const restoreSelectedBackups = async () => {
+    if (!selectedBackupIds.size) return;
+    setRestorePhase("restoring");
+    setRestoreError("");
+    try {
+      const result = await onRestoreCloudBackups([...selectedBackupIds]);
+      if (result.canceled) {
+        setRestorePhase("ready");
+        return;
+      }
+      setRestoreResult(result);
+      setRestorePhase("success");
+    } catch {
+      setRestoreError(
+        "بازیابی کامل نشد؛ فایل‌های موجود دست‌نخورده‌اند. اتصال و فضای مقصد را بررسی کنید و دوباره تلاش کنید.",
+      );
+      setRestorePhase("error");
+    }
   };
 
   const updatePrivacyPreference = <Key extends keyof PrivacyPreferences>(
@@ -389,6 +621,45 @@ export function ShortcutSettingsDialog({
     buttons[nextIndex]?.click();
   };
 
+  const driveQuotaState = backupStatus.quota
+    ? evaluateDriveQuota(backupStatus.quota)
+    : null;
+  const driveUsagePercent = driveQuotaState
+    ? Math.round(driveQuotaState.usageRatio * 100)
+    : 0;
+  const cloudConnected = backupStatus.connection.state === "connected";
+  const activeProvider =
+    BACKUP_PROVIDERS.find(
+      (provider) => provider.id === backupStatus.providerId,
+    ) ?? BACKUP_PROVIDERS[0];
+  const backupPreferenceRows = [
+    {
+      key: "textAndStructure",
+      title: "متن و ساختار",
+      description: "یادداشت‌ها، عنوان، برچسب‌ها و ساختار پوشه‌ها",
+    },
+    {
+      key: "optimizedImages",
+      title: "تصاویر بهینه‌شده",
+      description: "فشرده‌سازی یک‌باره و آپلود براساس هش محتوا",
+    },
+    {
+      key: "audio",
+      title: "فایل‌های صوتی",
+      description: "پیش‌فرض خاموش؛ هنگام بکاپ یک‌بار به Opus کم‌حجم تبدیل می‌شود",
+    },
+    {
+      key: "otherAttachments",
+      title: "سایر پیوست‌ها",
+      description: "فقط در صورت انتخاب کاربر وارد Drive شوند",
+    },
+    {
+      key: "versionHistory",
+      title: "تاریخچهٔ نسخه‌ها",
+      description: "متن تا ۳۰ روز یا ۵۰ نسخه؛ نسخهٔ جاری همیشه محفوظ است",
+    },
+  ] as const;
+
   return (
     <AccessibleModal
       open={open}
@@ -407,7 +678,12 @@ export function ShortcutSettingsDialog({
           <Settings size={20} aria-hidden="true" />
           <strong>تنظیمات</strong>
         </div>
-        <button type="button" onClick={onClose} aria-label="بازگشت به سند">
+        <button
+          type="button"
+          className="shortcut-settings-back-button"
+          onClick={onClose}
+          aria-label="بازگشت به سند"
+        >
           <span>بازگشت به سند</span>
           <ArrowRight size={18} aria-hidden="true" />
         </button>
@@ -441,7 +717,7 @@ export function ShortcutSettingsDialog({
             })}
           </ul>
           <p className="shortcut-settings-device-note">
-            Raavi 2.0&nbsp; · &nbsp;تنظیم‌ها روی این دستگاه
+            راوی ۲٫۲&nbsp; · &nbsp;تنظیم‌ها روی این دستگاه
           </p>
         </nav>
 
@@ -451,7 +727,185 @@ export function ShortcutSettingsDialog({
         >
           <SettingsHeading category={category} titleRef={titleRef} />
 
-          {categoryId === "appearance" ? (
+          {categoryId === "general" ? (
+            <div className="general-settings" aria-label="تنظیمات عمومی">
+              <SoftwareUpdateStatusCard
+                state={softwareUpdateState}
+                actions={softwareUpdateActions}
+              />
+              <section
+                className="general-onboarding-row"
+                aria-labelledby="general-onboarding-title"
+              >
+                <div>
+                  <strong id="general-onboarding-title">
+                    نمایش دوبارهٔ خوش‌آمدگویی
+                  </strong>
+                  <p>
+                    مراحل انتخاب مخزن، اتصال هوش مصنوعی و پشتیبان‌گیری را دوباره اجرا کنید.
+                  </p>
+                </div>
+                <button type="button" onClick={onReplayOnboarding}>
+                  اجرای دوباره
+                </button>
+              </section>
+              <section
+                className="settings-card general-settings-section general-startup-section"
+                aria-labelledby="general-startup-title"
+              >
+                <div className="settings-card-heading">
+                  <h3 id="general-startup-title">هنگام باز شدن راوی</h3>
+                  <p>انتخاب کنید اولین صفحه‌ای که می‌بینید چه باشد.</p>
+                </div>
+                <div
+                  className="general-startup-options"
+                  role="radiogroup"
+                  aria-label="صفحهٔ آغاز راوی"
+                >
+                  {(
+                    [
+                      {
+                        id: "recent",
+                        label: "فایل‌های اخیر",
+                        description: "نمایش ۹ فایل اخیر",
+                      },
+                      {
+                        id: "workspace",
+                        label: "آخرین فضای کار",
+                        description: "بازگشت به آخرین سند باز",
+                      },
+                      {
+                        id: "blank",
+                        label: "صفحهٔ خالی",
+                        description: "شروع سریع با یک سند تازه",
+                      },
+                    ] as const
+                  ).map((option) => {
+                    const selected = generalPreferences.startupView === option.id;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        tabIndex={selected ? 0 : -1}
+                        className={`general-startup-choice${selected ? " is-selected" : ""}`}
+                        onClick={() => updateStartupView(option.id)}
+                        onKeyDown={navigateRadioGroup}
+                      >
+                        <span className="general-choice-copy">
+                          <strong>{option.label}</strong>
+                          <small>{option.description}</small>
+                        </span>
+                        <span className="general-choice-radio" aria-hidden="true" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section
+                className="settings-card general-settings-section general-resume-section"
+                aria-labelledby="general-resume-title"
+              >
+                <div className="settings-card-heading">
+                  <h3 id="general-resume-title">ادامهٔ کار</h3>
+                  <p>این گزینه‌ها روی بازیابی وضعیت آخر اثر می‌گذارند.</p>
+                </div>
+                <div className="settings-preference-row general-preference-row">
+                  <div>
+                    <strong>بازیابی تب‌ها و پنل‌ها</strong>
+                    <p>چیدمان آخرین فضای کار در اجرای بعدی باز شود.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="settings-switch"
+                    role="switch"
+                    aria-label="بازیابی تب‌ها و پنل‌ها"
+                    aria-checked={fileLibraryPreferences.restoreDocumentTabs}
+                    onClick={() =>
+                      updateFileLibraryPreference(
+                        "restoreDocumentTabs",
+                        !fileLibraryPreferences.restoreDocumentTabs,
+                      )
+                    }
+                  >
+                    <strong>
+                      {fileLibraryPreferences.restoreDocumentTabs
+                        ? "فعال"
+                        : "غیرفعال"}
+                    </strong>
+                    <span className="settings-switch-track" aria-hidden="true">
+                      <span />
+                    </span>
+                  </button>
+                </div>
+                <div className="settings-preference-row general-preference-row">
+                  <div>
+                    <strong>باز کردن آخرین مکان مطالعه</strong>
+                    <p>سند از همان بخشی باز شود که آخرین بار رها کردید.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="settings-switch"
+                    role="switch"
+                    aria-label="باز کردن آخرین مکان مطالعه"
+                    aria-checked={readingPreferences.rememberPosition}
+                    onClick={() =>
+                      updateReadingPreference(
+                        "rememberPosition",
+                        !readingPreferences.rememberPosition,
+                      )
+                    }
+                  >
+                    <strong>
+                      {readingPreferences.rememberPosition
+                        ? "فعال"
+                        : "غیرفعال"}
+                    </strong>
+                    <span className="settings-switch-track" aria-hidden="true">
+                      <span />
+                    </span>
+                  </button>
+                </div>
+              </section>
+
+              <section
+                className="settings-card general-settings-section general-storage-section"
+                aria-labelledby="general-storage-title"
+              >
+                <div className="settings-card-heading">
+                  <h3 id="general-storage-title">ذخیره‌سازی</h3>
+                  <p>مکان پیشنهادی ذخیرهٔ فایل‌های تازه.</p>
+                </div>
+                <div className="settings-preference-row general-preference-row">
+                  <div>
+                    <strong>پوشهٔ پیش‌فرض ذخیره</strong>
+                    <p dir="auto">
+                      {libraryFolders.find(
+                        (folder) =>
+                          folder.rootId ===
+                          fileLibraryPreferences.activeWorkspaceRootId,
+                      )?.rootPath ?? "اسناد / Raavi"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="general-folder-action"
+                    onClick={() => void onChooseDefaultSaveFolder()}
+                  >
+                    تغییر پوشه
+                  </button>
+                </div>
+              </section>
+            </div>
+          ) : categoryId === "ai" ? (
+            <AiSpeechSettings
+              preferences={aiPreferences}
+              onPreferencesChange={onAiPreferencesChange}
+              onOpenExternal={onOpenExternal}
+            />
+          ) : categoryId === "appearance" ? (
             <div className="appearance-settings" aria-label="تنظیمات ظاهر">
               <section
                 className="settings-card appearance-theme-section"
@@ -757,7 +1211,455 @@ export function ShortcutSettingsDialog({
               </section>
             </div>
           ) : categoryId === "files" ? (
-            <div className="file-library-settings" aria-label="تنظیمات فایل‌ها و دفتر">
+            <div className="file-library-settings" aria-label="تنظیمات فایل‌ها و کتابخانه">
+              <section
+                className={`settings-card backup-drive-card is-${backupStatus.connection.state}`}
+                aria-labelledby="backup-drive-account-title"
+              >
+                <div className="settings-card-heading backup-drive-heading">
+                  <div>
+                    <h3 id="backup-drive-account-title">حساب و فضای ذخیره‌سازی</h3>
+                    <p>
+                      {cloudConnected
+                        ? `اتصال ${activeProvider.name} فعال است و تغییرها خودکار ارسال می‌شوند.`
+                        : activeProvider.id === "google-drive"
+                          ? "بدون ساخت حساب جداگانه، Drive خودتان را به راوی متصل کنید."
+                          : "ورود امن Proton در مرورگر انجام می‌شود و رمز عبور وارد راوی نمی‌شود."}
+                    </p>
+                  </div>
+                  <img
+                    className="backup-drive-brand"
+                    src={activeProvider.logo}
+                    width="32"
+                    height="32"
+                    alt={activeProvider.name}
+                  />
+                </div>
+
+                <div
+                  className="backup-provider-options"
+                  role="radiogroup"
+                  aria-label="فضای پشتیبان‌گیری"
+                >
+                  {BACKUP_PROVIDERS.map((provider) => {
+                    const selected = provider.id === backupStatus.providerId;
+                    return (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        className={selected ? "is-selected" : ""}
+                        role="radio"
+                        aria-checked={selected}
+                        disabled={backupAction !== null}
+                        onClick={() => void selectBackupProvider(provider.id)}
+                      >
+                        <img
+                          src={provider.logo}
+                          width="28"
+                          height="28"
+                          alt=""
+                          aria-hidden="true"
+                        />
+                        <span>
+                          <strong>{provider.name}</strong>
+                          <small>{provider.description}</small>
+                        </span>
+                        <span className="backup-provider-indicator" aria-hidden="true">
+                          {selected && <Check size={16} />}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="backup-drive-account-row">
+                  <div className="backup-drive-account-copy">
+                    <strong>
+                      {cloudConnected
+                        ? backupStatus.connection.accountEmail || `${activeProvider.name} متصل`
+                        : backupStatus.connection.state === "reauth"
+                          ? "نیاز به ورود دوباره"
+                          : backupStatus.connection.state === "error"
+                            ? "اتصال کامل نشد"
+                            : `${activeProvider.name} متصل نیست`}
+                    </strong>
+                    <span>
+                      {cloudConnected
+                        ? backupStatus.syncState === "up-to-date"
+                          ? "همگام است؛ تغییرهای بعدی خودکار ارسال می‌شوند."
+                          : `${backupStatus.queuedDocuments.toLocaleString("fa-IR")} سند در صف همگام‌سازی`
+                        : "ذخیرهٔ محلی و مخزن بدون اتصال هم ادامه دارد."}
+                    </span>
+                  </div>
+                  {cloudConnected ? (
+                    <button
+                      type="button"
+                      className="backup-drive-secondary-action"
+                      disabled={backupAction !== null}
+                      onClick={() => void runBackupConnectionAction("disconnect")}
+                    >
+                      {backupAction === "disconnect" ? "در حال قطع" : "قطع اتصال"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`backup-provider-connect is-${activeProvider.id}`}
+                      disabled={backupAction !== null}
+                      onClick={() => void runBackupConnectionAction("connect")}
+                    >
+                      <img
+                        src={
+                          activeProvider.id === "google-drive"
+                            ? "/brands/google/google-sign-in-g.svg"
+                            : activeProvider.logo
+                        }
+                        width="40"
+                        height="40"
+                        alt=""
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {backupAction === "connect"
+                          ? "در حال اتصال"
+                          : backupStatus.connection.state === "reauth"
+                            ? `ورود دوباره به ${activeProvider.name}`
+                            : `اتصال به ${activeProvider.name}`}
+                      </span>
+                    </button>
+                  )}
+                </div>
+
+                {(backupStatus.connectionError || backupStatus.lastError) && (
+                  <p className="backup-drive-error" role="alert">
+                    <AlertTriangle size={18} aria-hidden="true" />
+                    <span>
+                      {backupStatus.connectionError?.code === "oauth-client-missing"
+                        ? "شناسهٔ OAuth این نسخه هنوز تنظیم نشده است؛ RAAVI_GOOGLE_CLIENT_ID را برای نسخهٔ توسعه قرار دهید."
+                        : backupStatus.connectionError?.code === "oauth-client-secret-missing"
+                          ? "مجوز اتصال Google Drive در این نسخه کامل بسته‌بندی نشده است."
+                          : backupStatus.connectionError?.code === "proton-cli-missing"
+                            ? "فایل رسمی proton-drive.exe پیدا نشد؛ آن را در پوشهٔ Downloads بگذارید و دوباره تلاش کنید."
+                            : backupStatus.connectionError?.code === "proton-cli-checksum"
+                              ? "فایل Proton Drive معتبر نیست یا نسخهٔ آن با راوی سازگار نیست."
+                              : backupStatus.connectionError?.code === "proton-cli-busy"
+                                ? "یک اجرای دیگر Proton Drive باز مانده است؛ آن را ببندید و دوباره تلاش کنید."
+                                : backupStatus.connectionError?.code === "proton-network"
+                                  ? "شبکهٔ فعلی به سرورهای Proton دسترسی ندارد؛ مسیر اینترنت، VPN یا Proxy را بررسی کنید."
+                        : "اتصال یا همگام‌سازی کامل نشد؛ فایل‌های محلی محفوظ‌اند و می‌توانید دوباره تلاش کنید."}
+                    </span>
+                  </p>
+                )}
+
+                {backupStatus.lastWarning && (
+                  <p className="backup-drive-warning" role="status">
+                    <AlertTriangle size={18} aria-hidden="true" />
+                    <span>{backupStatus.lastWarning}</span>
+                  </p>
+                )}
+
+                {activeProvider.id === "proton-drive" && cloudConnected && (
+                  <p className="backup-provider-note">
+                    سهمیه و جزئیات فضا در حساب Proton مدیریت می‌شود؛ راوی محدودیت جداگانه‌ای اعمال نمی‌کند.
+                  </p>
+                )}
+
+                {backupStatus.quota && driveQuotaState && (
+                  <div
+                    className={`backup-storage-meter is-${driveQuotaState.level}`}
+                    aria-label={`${driveUsagePercent.toLocaleString("fa-IR")} درصد فضای ${activeProvider.name} استفاده شده`}
+                  >
+                    <div>
+                      <strong>
+                        {formatStorageBytes(backupStatus.quota.usageBytes)} استفاده شده
+                      </strong>
+                      <span>
+                        از {formatStorageBytes(backupStatus.quota.limitBytes)}
+                      </span>
+                    </div>
+                    <span className="backup-storage-track" aria-hidden="true">
+                      <span style={{ width: `${Math.min(100, driveUsagePercent)}%` }} />
+                    </span>
+                    <small>
+                      حاشیهٔ امن: {formatStorageBytes(driveQuotaState.safetyReserveBytes)}
+                    </small>
+                  </div>
+                )}
+              </section>
+
+              <section
+                className="settings-card backup-restore-section"
+                aria-labelledby="backup-restore-title"
+              >
+                <div className="settings-card-heading backup-restore-heading">
+                  <div>
+                    <h3 id="backup-restore-title">بازیابی روی این دستگاه</h3>
+                    <p>
+                      بکاپ‌های قبلی را پیدا کنید؛ راوی آن‌ها را بدون بازنویسی
+                      فایل‌های موجود داخل یک پوشهٔ تازه برمی‌گرداند.
+                    </p>
+                  </div>
+                  <span className="backup-restore-icon" aria-hidden="true">
+                    <History size={20} />
+                  </span>
+                </div>
+
+                {(restorePhase === "idle" || restorePhase === "listing") && (
+                  <div className="backup-restore-start">
+                    <div>
+                      <strong>
+                        {cloudConnected
+                          ? `مخزن قبلی ${activeProvider.name} آمادهٔ بررسی است`
+                          : `ابتدا ${activeProvider.name} را متصل کنید`}
+                      </strong>
+                      <span>
+                        همهٔ اسناد به‌صورت پیش‌فرض انتخاب می‌شوند و مقصد را خودتان
+                        تعیین می‌کنید.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="backup-restore-primary"
+                      disabled={!cloudConnected || restorePhase === "listing"}
+                      onClick={() => void loadCloudBackups()}
+                    >
+                      {restorePhase === "listing" ? (
+                        <LoaderCircle className="is-spinning" size={18} aria-hidden="true" />
+                      ) : (
+                        <Download size={18} aria-hidden="true" />
+                      )}
+                      <span>
+                        {restorePhase === "listing"
+                          ? "در حال یافتن بکاپ‌ها"
+                          : cloudConnected
+                            ? "پیدا کردن بکاپ‌ها"
+                            : "نیاز به اتصال"}
+                      </span>
+                    </button>
+                  </div>
+                )}
+
+                {restorePhase === "ready" && cloudBackups.length === 0 && (
+                  <div className="backup-restore-empty" role="status">
+                    <History size={22} aria-hidden="true" />
+                    <div>
+                      <strong>بکاپی در این حساب پیدا نشد</strong>
+                      <span>
+                        اگر با حساب دیگری بکاپ گرفته‌اید، اتصال را عوض کنید و
+                        دوباره بررسی کنید.
+                      </span>
+                    </div>
+                    <button type="button" onClick={() => void loadCloudBackups()}>
+                      بررسی دوباره
+                    </button>
+                  </div>
+                )}
+
+                {restorePhase === "ready" && cloudBackups.length > 0 && (
+                  <div className="backup-restore-picker">
+                    <div className="backup-restore-selection-bar">
+                      <div>
+                        <strong>
+                          {selectedBackupIds.size.toLocaleString("fa-IR")} از{" "}
+                          {cloudBackups.length.toLocaleString("fa-IR")} سند
+                        </strong>
+                        <span>نسخهٔ جاری و تاریخچهٔ موجود بازیابی می‌شوند.</span>
+                      </div>
+                      <button type="button" onClick={selectAllBackups}>
+                        {selectedBackupIds.size === cloudBackups.length
+                          ? "لغو انتخاب همه"
+                          : "انتخاب همه"}
+                      </button>
+                    </div>
+                    <ul className="backup-restore-list">
+                      {cloudBackups.map((backup) => {
+                        const mediaCount =
+                          backup.assetCount +
+                          backup.audioCount +
+                          backup.attachmentCount;
+                        return (
+                          <li key={backup.documentId}>
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={selectedBackupIds.has(backup.documentId)}
+                                onChange={() =>
+                                  toggleBackupSelection(backup.documentId)
+                                }
+                              />
+                              <span className="backup-restore-check" aria-hidden="true">
+                                <Check size={14} />
+                              </span>
+                              <span className="backup-restore-copy">
+                                <strong>{backup.fileName}</strong>
+                                <small>
+                                  {formatBackupDate(backup.backedUpAt)}
+                                  {` · ${backup.versionCount.toLocaleString("fa-IR")} نسخه`}
+                                  {mediaCount
+                                    ? ` · ${mediaCount.toLocaleString("fa-IR")} رسانه`
+                                    : ""}
+                                </small>
+                              </span>
+                              {backup.categories.textAndStructure === false && (
+                                <span className="backup-restore-media-only">
+                                  فقط رسانه
+                                </span>
+                              )}
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <div className="backup-restore-actions">
+                      <button
+                        type="button"
+                        className="backup-restore-secondary"
+                        onClick={() => void loadCloudBackups()}
+                      >
+                        به‌روزرسانی فهرست
+                      </button>
+                      <button
+                        type="button"
+                        className="backup-restore-primary"
+                        disabled={!selectedBackupIds.size}
+                        onClick={() => void restoreSelectedBackups()}
+                      >
+                        <Download size={18} aria-hidden="true" />
+                        بازیابی {selectedBackupIds.size.toLocaleString("fa-IR")} سند
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {restorePhase === "restoring" && (
+                  <div className="backup-restore-progress" role="status" aria-live="polite">
+                    <LoaderCircle className="is-spinning" size={24} aria-hidden="true" />
+                    <div>
+                      <strong>در حال بازیابی امن فایل‌ها</strong>
+                      <span>
+                        این مرحله ممکن است برای رسانه‌ها کمی طول بکشد؛ فایل‌های
+                        فعلی شما تغییر نمی‌کنند.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {restorePhase === "success" && restoreResult && (
+                  <div className="backup-restore-success" role="status" aria-live="polite">
+                    <span className="backup-restore-success-icon" aria-hidden="true">
+                      <Check size={18} />
+                    </span>
+                    <div>
+                      <strong>
+                        {restoreResult.restored.length.toLocaleString("fa-IR")} سند
+                        بازیابی شد
+                        {restoreResult.failed.length > 0
+                          ? `؛ ${restoreResult.failed.length.toLocaleString("fa-IR")} سند ناموفق بود`
+                          : ""}
+                      </strong>
+                      <span>
+                        {restoreResult.failed.length > 0
+                          ? "پوشهٔ تازه به کتابخانه اضافه شد و خطاهای باقی‌مانده به سندهای سالم آسیبی نزدند."
+                          : "پوشهٔ تازه به کتابخانهٔ راوی اضافه شد و برای استفاده آماده است."}
+                      </span>
+                      {restoreResult.restoreRoot && (
+                        <code dir="ltr">{restoreResult.restoreRoot}</code>
+                      )}
+                    </div>
+                    <div className="backup-restore-success-actions">
+                      {restoreResult.restoreRoot && (
+                        <button
+                          type="button"
+                          className="backup-restore-primary"
+                          onClick={() =>
+                            void onRevealCloudRestore(
+                              restoreResult.restoreRoot ?? "",
+                            )
+                          }
+                        >
+                          <FolderOpen size={18} aria-hidden="true" />
+                          نمایش پوشه
+                        </button>
+                      )}
+                      <button type="button" onClick={() => void loadCloudBackups()}>
+                        بازیابی دوباره
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {restorePhase === "error" && (
+                  <div className="backup-restore-error" role="alert">
+                    <AlertTriangle size={20} aria-hidden="true" />
+                    <div>
+                      <strong>بازیابی ادامه پیدا نکرد</strong>
+                      <span>{restoreError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!cloudConnected}
+                      onClick={() => void loadCloudBackups()}
+                    >
+                      تلاش دوباره
+                    </button>
+                  </div>
+                )}
+              </section>
+
+              <section
+                className="settings-card backup-policy-section"
+                aria-labelledby="backup-policy-title"
+              >
+                <div className="settings-card-heading">
+                  <h3 id="backup-policy-title">چه چیزهایی بکاپ شوند؟</h3>
+                  <p>این قاعده روی فایل‌های داخل مخزن اعمال می‌شود؛ کش مطالعه همیشه خارج می‌ماند.</p>
+                </div>
+                <div className="backup-policy-rows">
+                  {backupPreferenceRows.map((row) => {
+                    const checked = backupStatus.preferences[row.key];
+                    return (
+                      <div className="settings-preference-row" key={row.key}>
+                        <div>
+                          <strong>{row.title}</strong>
+                          <p>{row.description}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="settings-switch"
+                          role="switch"
+                          aria-label={row.title}
+                          aria-checked={checked}
+                          disabled={backupAction === "preferences"}
+                          onClick={() =>
+                            void updateBackupPreference(row.key, !checked)
+                          }
+                        >
+                          <strong>{checked ? "فعال" : "غیرفعال"}</strong>
+                          <span className="settings-switch-track" aria-hidden="true">
+                            <span />
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {driveQuotaState?.level === "critical" && (
+                <section
+                  className="settings-card backup-critical-section"
+                  aria-labelledby="backup-critical-title"
+                >
+                  <div className="settings-card-heading">
+                    <h3 id="backup-critical-title">فضای امن کافی نیست</h3>
+                    <p>آپلود رسانه موقتاً متوقف است؛ ذخیرهٔ فوری متن در مخزن ادامه دارد.</p>
+                  </div>
+                  <div className="backup-critical-protection">
+                    <Check size={18} aria-hidden="true" />
+                    <span>فایل جاری، نسخه‌های سنجاق‌شده و دارایی‌های دارای ارجاع حذف نمی‌شوند.</span>
+                  </div>
+                </section>
+              )}
+
               <section
                 className="settings-card file-library-settings-section is-single-row"
                 aria-labelledby="file-open-title"

@@ -1,0 +1,12 @@
+{
+  "name": "Raavi Dialog Sheet Builder",
+  "id": "1524522876962682377",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  }
+}

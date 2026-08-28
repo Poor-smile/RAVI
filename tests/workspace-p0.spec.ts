@@ -194,10 +194,10 @@ test("P0 compact settings uses the approved density contract", async ({ page }) 
   await page.locator('[data-overflow-action="shortcut-settings"]').click();
   await page
     .getByRole("navigation", { name: "دسته‌های تنظیمات" })
-    .getByRole("button", { name: "فایل‌ها و دفتر" })
+    .getByRole("button", { name: "فایل‌ها و کتابخانه" })
     .click();
 
-  await expect(page.getByRole("heading", { name: "فایل‌ها و دفتر" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "پشتیبان‌گیری ابری" })).toBeVisible();
   await expect(page.getByText("دفتر فعال")).toBeVisible();
   await expect(page.getByRole("switch", { name: "بازیابی تب‌های نشست قبلی" })).toHaveAttribute(
     "aria-checked",

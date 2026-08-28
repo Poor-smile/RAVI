@@ -198,8 +198,16 @@ export function createLiveLinkPopoverExtension() {
       private readonly error = document.createElement("small");
       private readonly openLink = document.createElement("a");
       private descriptor: LinkDescriptor | null = null;
-      private readonly onEditorClick: (event: MouseEvent) => void;
+      private readonly onEditorPointerDown: (event: PointerEvent) => void;
+      private readonly onDocumentPointerUp: (event: PointerEvent) => void;
       private readonly onDocumentPointerDown: (event: PointerEvent) => void;
+      private pendingLinkInteraction: {
+        descriptor: LinkDescriptor;
+        targetRect: DOMRect;
+        clientX: number;
+        clientY: number;
+        pointerId: number;
+      } | null = null;
 
       constructor(private readonly view: EditorView) {
         linkPopoverId += 1;
@@ -268,7 +276,8 @@ export function createLiveLinkPopoverExtension() {
           }
         });
 
-        this.onEditorClick = (event) => {
+        this.onEditorPointerDown = (event) => {
+          if (event.button !== 0) return;
           if (!(event.target instanceof Element)) return;
           const link = event.target.closest<HTMLElement>(".cm-live-link");
           if (!link || !view.contentDOM.contains(link)) return;
@@ -278,7 +287,26 @@ export function createLiveLinkPopoverExtension() {
           const urlTo = Number(link.dataset.liveLinkUrlTo);
           const url = link.dataset.liveLinkUrl ?? "";
           if (![from, to, urlFrom, urlTo].every(Number.isFinite)) return;
-          this.open(link, { from, to, urlFrom, urlTo, url });
+          this.pendingLinkInteraction = {
+            descriptor: { from, to, urlFrom, urlTo, url },
+            targetRect: link.getBoundingClientRect(),
+            clientX: event.clientX,
+            clientY: event.clientY,
+            pointerId: event.pointerId,
+          };
+        };
+        this.onDocumentPointerUp = (event) => {
+          const pending = this.pendingLinkInteraction;
+          if (!pending || pending.pointerId !== event.pointerId) return;
+          this.pendingLinkInteraction = null;
+          const movement = Math.hypot(
+            event.clientX - pending.clientX,
+            event.clientY - pending.clientY,
+          );
+          // A short click edits the link. A real drag remains available for
+          // native text selection, including drags that begin on link text.
+          if (movement > 6) return;
+          this.open(pending.targetRect, pending.descriptor);
         };
         this.onDocumentPointerDown = (event) => {
           if (this.dom.hidden || !(event.target instanceof Node)) return;
@@ -288,7 +316,8 @@ export function createLiveLinkPopoverExtension() {
           if (link && view.contentDOM.contains(link)) return;
           this.close(false);
         };
-        view.dom.addEventListener("click", this.onEditorClick);
+        view.dom.addEventListener("pointerdown", this.onEditorPointerDown);
+        document.addEventListener("pointerup", this.onDocumentPointerUp);
         document.addEventListener("pointerdown", this.onDocumentPointerDown);
       }
 
@@ -296,7 +325,7 @@ export function createLiveLinkPopoverExtension() {
         if (update.docChanged || update.viewportChanged) this.close(false);
       }
 
-      private open(target: HTMLElement, descriptor: LinkDescriptor) {
+      private open(targetRect: DOMRect, descriptor: LinkDescriptor) {
         this.descriptor = descriptor;
         this.input.value = descriptor.url;
         this.error.textContent = "";
@@ -304,7 +333,6 @@ export function createLiveLinkPopoverExtension() {
         this.refreshValidation();
 
         const rootRect = this.view.dom.getBoundingClientRect();
-        const targetRect = target.getBoundingClientRect();
         const width = Math.min(320, Math.max(240, rootRect.width - 16));
         this.dom.style.width = `${width}px`;
         const left = Math.max(
@@ -360,7 +388,8 @@ export function createLiveLinkPopoverExtension() {
       }
 
       destroy() {
-        this.view.dom.removeEventListener("click", this.onEditorClick);
+        this.view.dom.removeEventListener("pointerdown", this.onEditorPointerDown);
+        document.removeEventListener("pointerup", this.onDocumentPointerUp);
         document.removeEventListener("pointerdown", this.onDocumentPointerDown);
         this.dom.remove();
       }

@@ -5,6 +5,7 @@ import { createServer, type Server } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { waitForRaaviWindow } from "./helpers/electron-main-window";
 
 type ReadingMetric = {
   mode: "reading" | "desk";
@@ -548,7 +549,7 @@ async function launchAuditApp(
   ];
   if (documentPath) args.push(documentPath);
   const app = await electron.launch({ cwd: projectRoot, args, timeout: 20_000 });
-  return { app, page: await app.firstWindow() };
+  return { app, page: await waitForRaaviWindow(app) };
 }
 
 test.describe("reading continuity audit", () => {

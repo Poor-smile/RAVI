@@ -213,7 +213,7 @@ export function MermaidAiBuilder({
     }
     const run = window.raaviDesktop?.runCodexPrompt;
     if (!run) {
-      setError("Codex CLI متصل نیست؛ ابتدا اتصال را از تنظیمات هوش مصنوعی برقرار کنید.");
+      setError("ChatGPT متصل نیست؛ ابتدا اتصال را از تنظیمات هوش مصنوعی برقرار کنید.");
       setStep("error");
       return;
     }
@@ -250,7 +250,7 @@ export function MermaidAiBuilder({
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "";
       setError(message.includes("AUTH")
-        ? "ورود Codex CLI کامل نیست؛ دوباره وارد حساب شوید."
+        ? "ورود با ChatGPT کامل نیست؛ دوباره وارد حساب شوید."
         : "نمودار آماده نشد؛ اتصال یا اطلاعات ورودی را بررسی و دوباره تلاش کنید.");
       setStep("error");
     }

@@ -62,7 +62,7 @@ const stages = [
     ],
   },
   {
-    name: "ED-KB persistence — .ravi save/reopen block boundaries",
+    name: "ED-KB persistence — Markdown save/reopen block boundaries",
     command: process.execPath,
     args: [
       playwrightCli,

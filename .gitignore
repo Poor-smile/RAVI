@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+!/build/update-public-key.pem
 
 # debug
 npm-debug.log*
@@ -51,11 +52,21 @@ next-env.d.ts
 /dist-tauri/
 /src-tauri/target/
 /.deploy-raavi-web/
+/.deploy-raavi-publish/downloads/
 /.codex-video-review/
 /.artifacts/
+/.codex-release-stage-*/
+/.codex-temp/
 /.codex-temp-*
 /.codex/
+/.tmp-figma/
 /.logs/
 /.tmp/
 /tmp/
+/artifacts/
+/electron-dist-*/
+/landing/downloads/*.exe
+/build/google-oauth-client-id.txt
+/build/google-oauth-client-secret.txt
+/docs/exec-*.png
 /*.fig

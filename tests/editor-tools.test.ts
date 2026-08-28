@@ -35,6 +35,7 @@ test("formatting context comes from Markdown syntax and active block", () => {
   assert.equal(context("[راوی](https://ravi.example)", "راوی").link, true);
   assert.equal(context("- [ ] کار", "کار").block, "task");
   assert.equal(context("> [!NOTE] یادداشت", "یادداشت").block, "callout");
+  assert.equal(context("قبل\n\n---\n\nبعد", "---").block, "divider");
   assert.equal(context("| نام | مقدار |\n| --- | --- |\n| الف | ب |", "الف").block, "table");
 });
 
@@ -54,7 +55,7 @@ test("slash scorer accepts Persian, English and subsequence queries", () => {
   assert.ok(scoreCommandText(image, "تصویر") > 0);
 });
 
-test("slash menu exposes only the twelve approved block aliases", () => {
+test("slash menu exposes the approved structural block aliases", () => {
   assert.deepEqual(
     SLASH_MENU_ITEMS.map((item) => item.alias),
     [
@@ -62,6 +63,7 @@ test("slash menu exposes only the twelve approved block aliases", () => {
       "/h2",
       "/h3",
       "/text",
+      "/divider",
       "/todo",
       "/bullet",
       "/number",
@@ -69,6 +71,7 @@ test("slash menu exposes only the twelve approved block aliases", () => {
       "/table",
       "/mermaid",
       "/image",
+      "/audio",
       "/formula",
     ],
   );
@@ -91,6 +94,7 @@ test("slash search normalizes Persian and fuzzily ranks English", () => {
   assert.equal(rankSlashMenuItems("تصوير")[0]?.type, "image");
   assert.equal(rankSlashMenuItems("tbl")[0]?.type, "table");
   assert.equal(rankSlashMenuItems("frml")[0]?.type, "formula");
+  assert.equal(rankSlashMenuItems("جداکننده")[0]?.type, "divider");
 });
 
 test("block type conversion preserves content and the logical cursor", () => {
@@ -105,6 +109,10 @@ test("block type conversion preserves content and the logical cursor", () => {
   const emptyTask = convertMarkdownLineToBlock("/", 1, "task");
   assert.equal(emptyTask.markdown, "- [ ] ");
   assert.equal(emptyTask.selectionOffset, 6);
+
+  const divider = convertMarkdownLineToBlock("/", 1, "divider");
+  assert.equal(divider.markdown, "---");
+  assert.equal(divider.selectionOffset, 3);
 });
 
 test("code conversion creates a fenced block without placeholder content", () => {

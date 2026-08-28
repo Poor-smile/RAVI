@@ -3,6 +3,7 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { waitForRaaviWindow } from "./helpers/electron-main-window";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -30,7 +31,7 @@ test("desktop explorer protects dirty text and completes rename, delete and undo
     timeout: 25_000,
   });
   try {
-    const window = await app.firstWindow();
+    const window = await waitForRaaviWindow(app);
     await expect(window.locator(".app-shell")).toHaveAttribute(
       "data-hydrated",
       "true",

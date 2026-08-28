@@ -6,6 +6,7 @@ const BLOCK_TYPE_LABELS = [
   "تیتر ۲\n/h2",
   "تیتر ۳\n/h3",
   "متن معمولی\n/text",
+  "جداکننده\n/divider",
   "چک‌لیست\n/todo",
   "فهرست بولت\n/bullet",
   "فهرست مراحل\n/number",
@@ -13,10 +14,11 @@ const BLOCK_TYPE_LABELS = [
   "جدول\n/table",
   "Mermaid\n/mermaid",
   "تصویر\n/image",
+  "صوت\n/audio",
   "فرمول\n/formula",
 ];
 
-test("W05 matches the 12-option block menu and preserves keyboard editing flow", async ({
+test("W05 matches the complete block menu and preserves keyboard editing flow", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 914 });
@@ -36,7 +38,7 @@ test("W05 matches the 12-option block menu and preserves keyboard editing flow",
   const menu = page.getByRole("menu", { name: "نوع بلوک" });
   const items = menu.getByRole("menuitemradio");
   await expect(menu).toBeVisible();
-  await expect(items).toHaveCount(12);
+  await expect(items).toHaveCount(14);
   expect(await items.allInnerTexts()).toEqual(BLOCK_TYPE_LABELS);
   await expect(menu.getByRole("separator")).toHaveCount(2);
   await expect(trigger).toHaveAttribute("aria-expanded", "true");
@@ -137,7 +139,7 @@ test("W05 matches the 12-option block menu and preserves keyboard editing flow",
 
   await page.keyboard.press("ArrowDown");
   await expect(
-    menu.getByRole("menuitemradio", { name: "چک‌لیست" }),
+    menu.getByRole("menuitemradio", { name: "جداکننده" }),
   ).toBeFocused();
   await page.keyboard.press("ArrowUp");
   await expect(paragraph).toBeFocused();
@@ -153,7 +155,9 @@ test("W05 matches the 12-option block menu and preserves keyboard editing flow",
   await expect(menu).toBeHidden();
   await expect(trigger).toBeFocused();
 
+  await page.getByRole("button", { name: "متن خام", exact: true }).click();
   await editor.fill("");
+  await page.getByRole("button", { name: "ویرایش روان", exact: true }).click();
   await editor.focus();
   await page.keyboard.type("/formula");
   await expect(menu).toBeVisible();

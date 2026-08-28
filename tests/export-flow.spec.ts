@@ -42,6 +42,10 @@ async function openExportDialog(page: Page) {
   // A newly opened document starts in Reading, whose compact chrome does not
   // expose the desktop overflow menu. The export command remains available
   // from the shared command registry on every document surface.
+  await expect(page.locator(".app-shell")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
   await page.keyboard.press("Control+Shift+KeyE");
   await expect(page.getByRole("dialog", { name: "خروجی سند" })).toBeVisible();
 }

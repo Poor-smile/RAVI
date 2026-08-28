@@ -27,7 +27,7 @@ test("Ctrl+Enter and Duplicate share undoable whole-block operations", async ({
     "data-hydrated",
     "true",
   );
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
 
   const editor = page.locator("#markdown-editor .cm-content");
   await editor.fill("بلوک اول\n\nبلوک دوم");
@@ -62,7 +62,7 @@ test("Ctrl/Cmd+D prevents the browser default, duplicates multiline metadata and
     "data-hydrated",
     "true",
   );
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
 
   const editor = page.locator("#markdown-editor .cm-content");
   const block = [
@@ -126,7 +126,7 @@ test("Enter continues a List Block while Ctrl+Enter exits to an independent Text
     "data-hydrated",
     "true",
   );
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
 
   const editor = page.locator("#markdown-editor .cm-content");
   await editor.fill("- مورد اول\n- مورد دوم");
@@ -172,7 +172,7 @@ test("Alt+Arrow moves one complete multiline block in one undo step", async ({
     "data-hydrated",
     "true",
   );
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
 
   const editor = page.locator("#markdown-editor .cm-content");
   const original = [
@@ -220,7 +220,7 @@ test("Alt+Arrow announces direction, consumes document boundaries and ignores IM
     "data-hydrated",
     "true",
   );
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
 
   const editor = page.locator("#markdown-editor .cm-content");
   const announced = page.locator("#markdown-editor .cm-announced");
@@ -275,7 +275,7 @@ test("Drag routes through moveTo and remains one undoable operation", async ({
     "data-hydrated",
     "true",
   );
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
 
   const editor = page.locator("#markdown-editor .cm-content");
   const original = ["بلوک اول", "", "بلوک دوم", "", "بلوک سوم"].join("\n");
@@ -304,7 +304,7 @@ test("Pointer Drag captures the handle, previews before/after, matches Alt+Arrow
     "data-hydrated",
     "true",
   );
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
 
   const editor = page.locator("#markdown-editor .cm-content");
   const host = page.locator("#markdown-editor");

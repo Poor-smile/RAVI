@@ -59,9 +59,11 @@ const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})([^\r\n]*)$/u;
 const FORMULA_EDGE = /^\s*\$\$/u;
 const ATX_HEADING = /^ {0,3}#{1,6}(?:[\t ]+|$)/u;
 const SETEXT_HEADING = /^ {0,3}(?:=+|-+)[\t ]*$/u;
+const THEMATIC_BREAK = /^ {0,3}(?:(?:\*[\t ]*){3,}|(?:-[\t ]*){3,}|(?:_[\t ]*){3,})$/u;
 const QUOTE_LINE = /^ {0,3}>/u;
 const LIST_ITEM = /^([\t ]*)(?:[-+*]|\d{1,9}[.)])(?:[\t ]+|$)/u;
 const IMAGE_LINE = /^\s*!\[[^\]]*\]\(.*\)\s*$/u;
+const AUDIO_LINE = /^\s*\[[^\]\r\n]+\]\(\s*(?:<[^>]+>|[^\s)]+)\s+["']raavi-audio["']\s*\)\s*$/u;
 const TABLE_DELIMITER = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/u;
 
 function markdownSourceLines(source: string): MarkdownSourceLine[] {
@@ -155,8 +157,10 @@ function listEnd(lines: MarkdownSourceLine[], start: number) {
       FENCE_OPEN.test(text) ||
       FORMULA_EDGE.test(text) ||
       ATX_HEADING.test(text) ||
+      THEMATIC_BREAK.test(text) ||
       QUOTE_LINE.test(text) ||
       IMAGE_LINE.test(text) ||
+      AUDIO_LINE.test(text) ||
       isTableStart(lines, index)
     ) {
       break;
@@ -219,6 +223,12 @@ export function resolveMarkdownBlockRanges(source: string): MarkdownBlockRange[]
       continue;
     }
 
+    if (THEMATIC_BREAK.test(text)) {
+      ranges.push(rangeFromLines(lines, index, index, "divider"));
+      index += 1;
+      continue;
+    }
+
     if (LIST_ITEM.test(text)) {
       const end = listEnd(lines, index);
       ranges.push(rangeFromLines(lines, index, end, "list"));
@@ -252,6 +262,12 @@ export function resolveMarkdownBlockRanges(source: string): MarkdownBlockRange[]
       continue;
     }
 
+    if (AUDIO_LINE.test(text)) {
+      ranges.push(rangeFromLines(lines, index, index, "audio"));
+      index += 1;
+      continue;
+    }
+
     let end = index;
     while (end + 1 < lines.length) {
       const next = lines[end + 1].text;
@@ -263,7 +279,9 @@ export function resolveMarkdownBlockRanges(source: string): MarkdownBlockRange[]
         LIST_ITEM.test(next) ||
         QUOTE_LINE.test(next) ||
         ATX_HEADING.test(next) ||
+        THEMATIC_BREAK.test(next) ||
         IMAGE_LINE.test(next) ||
+        AUDIO_LINE.test(next) ||
         (end + 2 < lines.length && SETEXT_HEADING.test(lines[end + 2].text))
       ) {
         break;

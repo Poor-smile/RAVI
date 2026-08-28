@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { waitForRaaviWindow } from "./helpers/electron-main-window";
 
 test.describe("Persian Mermaid Studio", () => {
   test.skip(process.platform !== "win32", "The packaged desktop target is Windows.");
@@ -27,7 +28,7 @@ test.describe("Persian Mermaid Studio", () => {
     });
 
     try {
-      const window = await app.firstWindow();
+      const window = await waitForRaaviWindow(app);
       await window.evaluate(() => {
         const content = "# سند جدید\n\n";
         localStorage.setItem(

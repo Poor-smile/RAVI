@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, system-ui, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--figma-color-bg);
+        color: var(--figma-color-text);
+        font-size: 12px;
+      }
+
+      h1 {
+        margin: 0 0 6px;
+        font-size: 16px;
+        line-height: 1.5;
+      }
+
+      p {
+        margin: 0 0 14px;
+        color: var(--figma-color-text-secondary);
+        line-height: 1.6;
+      }
+
+      .grid {
+        display: grid;
+        gap: 8px;
+      }
+
+      button {
+        min-height: 36px;
+        border: 1px solid var(--figma-color-border);
+        border-radius: 8px;
+        background: var(--figma-color-bg-secondary);
+        color: var(--figma-color-text);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button:hover { background: var(--figma-color-bg-hover); }
+      button:disabled { opacity: .45; cursor: progress; }
+
+      #run-all {
+        color: var(--figma-color-text-onbrand);
+        background: var(--figma-color-bg-brand);
+        border-color: transparent;
+        font-weight: 600;
+      }
+
+      #status {
+        min-height: 36px;
+        margin: 12px 0 8px;
+        padding: 9px 10px;
+        border-radius: 8px;
+        background: var(--figma-color-bg-secondary);
+        color: var(--figma-color-text-secondary);
+        line-height: 1.5;
+      }
+
+      #status[data-kind="ok"] { color: var(--figma-color-text-success); }
+      #status[data-kind="error"] { color: var(--figma-color-text-danger); }
+
+      textarea {
+        width: 100%;
+        min-height: 126px;
+        padding: 8px;
+        resize: vertical;
+        direction: ltr;
+        text-align: left;
+        border: 1px solid var(--figma-color-border);
+        border-radius: 8px;
+        background: var(--figma-color-bg-secondary);
+        color: var(--figma-color-text);
+        font: 10px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+
+      .tools {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>سازندهٔ Dialog و Sheet راوی</h1>
+    <p>هر مرحله مستقل و تکرارپذیر است. خروجی JSON را بعد از هر مرحله کپی کنید.</p>
+
+    <div class="grid">
+      <button data-stage="danger-buttons">۱. افزودن Button / Danger</button>
+      <button data-stage="dialogs">۲. ساخت Dialog (۸ حالت)</button>
+      <button data-stage="sheets">۳. ساخت Sheet (۸ حالت)</button>
+      <button data-stage="confirmations">۴. ساخت Confirmation (۱۲ حالت)</button>
+      <button data-stage="usage">۵. ساخت Usage &amp; QA</button>
+      <button data-stage="audit">۶. ممیزی و خروجی PNG</button>
+      <button id="run-all">اجرای همهٔ مراحل</button>
+    </div>
+
+    <div id="status">آماده</div>
+    <textarea id="output" readonly spellcheck="false"></textarea>
+    <div class="tools">
+      <button id="copy">کپی JSON</button>
+      <button id="close">بستن افزونه</button>
+    </div>
+
+    <script>
+      const buttons = [...document.querySelectorAll('[data-stage]')];
+      const runAllButton = document.getElementById('run-all');
+      const status = document.getElementById('status');
+      const output = document.getElementById('output');
+      let running = false;
+
+      function setRunning(value, label) {
+        running = value;
+        [...buttons, runAllButton].forEach((button) => button.disabled = value);
+        status.dataset.kind = '';
+        status.textContent = label || (value ? 'در حال اجرا…' : 'آماده');
+      }
+
+      function run(stage) {
+        if (running) return;
+        setRunning(true, `در حال اجرای ${stage}…`);
+        parent.postMessage({ pluginMessage: { type: 'run', stage } }, '*');
+      }
+
+      buttons.forEach((button) => button.addEventListener('click', () => run(button.dataset.stage)));
+      runAllButton.addEventListener('click', () => run('all'));
+
+      document.getElementById('copy').addEventListener('click', async () => {
+        output.focus();
+        output.select();
+        try {
+          await navigator.clipboard.writeText(output.value);
+        } catch (_) {
+          document.execCommand('copy');
+        }
+        status.dataset.kind = 'ok';
+        status.textContent = 'JSON در کلیپ‌بورد کپی شد.';
+      });
+
+      document.getElementById('close').addEventListener('click', () => {
+        parent.postMessage({ pluginMessage: { type: 'close' } }, '*');
+      });
+
+      window.onmessage = (event) => {
+        const message = event.data.pluginMessage;
+        if (!message) return;
+
+        if (message.type === 'result') {
+          output.value = JSON.stringify(message.result, null, 2);
+          setRunning(false, `مرحلهٔ ${message.stage} کامل شد.`);
+          status.dataset.kind = 'ok';
+        }
+
+        if (message.type === 'error') {
+          output.value = JSON.stringify(message.error, null, 2);
+          setRunning(false, `خطا در ${message.stage}: ${message.error.message}`);
+          status.dataset.kind = 'error';
+        }
+
+        if (message.type === 'export') {
+          const bytes = new Uint8Array(message.bytes);
+          const blob = new Blob([bytes], { type: 'image/png' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = message.filename;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        }
+      };
+    </script>
+  </body>
+</html>

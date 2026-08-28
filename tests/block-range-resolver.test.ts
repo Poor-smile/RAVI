@@ -124,6 +124,20 @@ test("quote, table, Mermaid, image and formula resolve to their complete ranges"
   }
 });
 
+test("an isolated thematic break resolves as one divider block", () => {
+  const source = ["بخش نخست", "", "---", "", "بخش دوم"].join("\n");
+  const range = resolveMarkdownBlockRange(source, source.indexOf("---") + 1);
+
+  assert.equal(range.kind, "divider");
+  assert.equal(source.slice(range.from, range.to), "---");
+  assert.deepEqual(
+    resolveMarkdownBlockRanges(source)
+      .filter((item) => item.kind !== "blank")
+      .map((item) => item.kind),
+    ["text", "divider", "text"],
+  );
+});
+
 test("duplicate and insertion plans use the entire active block and preserve both neighbors", () => {
   const source = ["قبل", "", "- یک", "- دو", "", "بعد"].join("\n");
   const duplicate = planMarkdownBlockDuplicate(source, source.indexOf("دو"));

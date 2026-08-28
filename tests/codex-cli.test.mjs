@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CODEX_CLI_INSTALL_COMMAND,
+  buildAudioCleanupPrompt,
   buildCodexPrompt,
   buildPersianReviewPrompt,
   getCodexConnectionStatus,
+  getCodexModels,
   resolveCodexCommand,
 } from "../desktop/codex-cli.mjs";
+
+test("First Run exposes only the fixed official Codex CLI install command", () => {
+  assert.equal(
+    CODEX_CLI_INSTALL_COMMAND,
+    "npm install -g @openai/codex@latest",
+  );
+  assert.doesNotMatch(CODEX_CLI_INSTALL_COMMAND, /[;&|`]/);
+});
 
 test("Codex prompt isolates the frozen context from the user request", () => {
   const prompt = buildCodexPrompt({
@@ -15,6 +26,17 @@ test("Codex prompt isolates the frozen context from the user request", () => {
   assert.match(prompt, /<frozen_context>\nفرمول: x \+ = 2\n<\/frozen_context>/);
   assert.match(prompt, /<user_request>\nفرمول را اصلاح کن\n<\/user_request>/);
   assert.match(prompt, /replacement/);
+});
+
+test("audio cleanup hides the raw transcript and preserves uncertainty", () => {
+  const prompt = buildAudioCleanupPrompt({
+    transcript: "[0s–3s] راڈیو هاکرانی [صدای شدید]",
+    suggestedKind: "general",
+  });
+  assert.match(prompt, /noisy local Persian speech transcript/i);
+  assert.match(prompt, /Do not expose a raw transcript section/);
+  assert.match(prompt, /Never invent missing facts/);
+  assert.match(prompt, /نیاز به شنیدن دوباره/u);
 });
 
 test("Persian review prompt requires exact quotes and protects technical text", () => {
@@ -33,4 +55,17 @@ test("installed Codex CLI exposes a connection state", async () => {
   if (!command) return;
   const status = await getCodexConnectionStatus();
   assert.ok(["connected", "auth_required", "connection_error"].includes(status.state));
+});
+
+test("connected ChatGPT account returns picker-visible models", async () => {
+  const command = await resolveCodexCommand();
+  if (!command) return;
+  const status = await getCodexConnectionStatus();
+  if (status.state !== "connected") return;
+  const catalog = await getCodexModels();
+  assert.ok(catalog.models.length > 0);
+  assert.ok(catalog.models.every((model) => model.id && model.displayName));
+  if (catalog.defaultModel) {
+    assert.ok(catalog.models.some((model) => model.id === catalog.defaultModel));
+  }
 });

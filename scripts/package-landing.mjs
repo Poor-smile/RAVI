@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,11 +37,9 @@ const bundledHtml = html
     `    <script>\n      document.addEventListener("DOMContentLoaded", () => {\n${embeddedJavascript}\n      });\n    </script>\n  </body>`,
   );
 
+await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
 await cp(join(sourceRoot, "assets"), join(outputRoot, "assets"), {
-  recursive: true,
-});
-await cp(join(sourceRoot, "downloads"), join(outputRoot, "downloads"), {
   recursive: true,
 });
 await Promise.all([

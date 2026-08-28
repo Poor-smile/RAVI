@@ -4,7 +4,7 @@ import { openWritingDocument } from "./helpers/open-writing-document";
 async function writingEditor(page: Page) {
   await page.goto("/");
   await expect(page.locator(".app-shell")).toHaveAttribute("data-hydrated", "true");
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
   const editor = page.locator("#markdown-editor .cm-content");
   await expect(editor).toBeVisible();
   return editor;
@@ -21,6 +21,18 @@ async function markdownFromClipboard(page: Page) {
 async function selectedTextFromClipboard(page: Page) {
   await page.keyboard.press("Control+c");
   return page.evaluate(() => navigator.clipboard.readText());
+}
+
+async function replaceDocumentInLiveEdit(
+  page: Page,
+  editor: ReturnType<Page["locator"]>,
+  source: string,
+) {
+  await page.getByRole("button", { name: "متن خام", exact: true }).click();
+  await editor.fill(source);
+  await page
+    .getByRole("button", { name: "ویرایش روان", exact: true })
+    .click();
 }
 
 test.describe("ابزارهای contextual ویرایش", () => {
@@ -43,7 +55,7 @@ test.describe("ابزارهای contextual ویرایش", () => {
       name: "قالب‌بندی متن انتخاب‌شده",
     });
     await expect(selectionToolbar).toBeVisible();
-    await expect(selectionToolbar.getByRole("button")).toHaveCount(10);
+    await expect(selectionToolbar.getByRole("button")).toHaveCount(8);
     await selectionToolbar
       .getByRole("button", { name: "پررنگ", exact: true })
       .click();
@@ -53,6 +65,58 @@ test.describe("ابزارهای contextual ویرایش", () => {
       .getByRole("button", { name: "واگرد آخرین تغییر", exact: true })
       .click();
     expect(await markdownFromClipboard(page)).toBe("خط اول\nخط دوم");
+  });
+
+  test("copies and pastes the active selection from the mini menu", async ({ page }) => {
+    const editor = await writingEditor(page);
+    const toolbar = page.getByRole("toolbar", {
+      name: "قالب‌بندی متن انتخاب‌شده",
+    });
+
+    await editor.fill("متن نخست");
+    await editor.focus();
+    await page.keyboard.press("Control+Home");
+    await page.keyboard.press("Shift+End");
+    await expect(toolbar).toBeVisible();
+
+    const copy = toolbar.getByRole("button", { name: "کپی", exact: true });
+    const paste = toolbar.getByRole("button", {
+      name: "جای‌گذاری",
+      exact: true,
+    });
+    await expect(copy).toHaveAttribute("aria-keyshortcuts", "Control+C Meta+C");
+    await expect(paste).toHaveAttribute("aria-keyshortcuts", "Control+V Meta+V");
+    const more = toolbar.getByRole("button", {
+      name: "ابزارهای بیشتر",
+      exact: true,
+    });
+    await more.click();
+    const moreMenu = page.getByRole("menu", {
+      name: "ابزارهای بیشتر متن انتخاب‌شده",
+    });
+    await expect(moreMenu).toBeVisible();
+    await expect(moreMenu.getByRole("menuitem")).toHaveCount(5);
+    await page.waitForTimeout(180);
+    await page.screenshot({
+      path: ".artifacts/editor-mini-menu-copy-paste.png",
+      fullPage: true,
+    });
+    await moreMenu.screenshot({
+      path: ".artifacts/editor-mini-menu-more.png",
+    });
+    await page.keyboard.press("Escape");
+    await expect(moreMenu).toBeHidden();
+    await expect(more).toBeFocused();
+
+    await copy.click();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toContain("متن نخست");
+
+    await page.evaluate(() => navigator.clipboard.writeText("متن جایگزین"));
+    await paste.click();
+    await expect(editor).toContainText("متن جایگزین");
+    await expect(page.locator(".toast")).toContainText("متن جای‌گذاری شد");
   });
 
   test("inserts a link without syntax knowledge and restores focus on Escape", async ({ page }) => {
@@ -87,11 +151,25 @@ test.describe("ابزارهای contextual ویرایش", () => {
     });
 
     const applyAndRead = async (buttonName: string, source: string) => {
-      await editor.fill(source);
+      await replaceDocumentInLiveEdit(page, editor, source);
       await editor.focus();
       await page.keyboard.press("Control+a");
       await expect(toolbar).toBeVisible();
-      await toolbar.getByRole("button", { name: buttonName, exact: true }).click();
+      const primaryAction = toolbar.getByRole("button", {
+        name: buttonName,
+        exact: true,
+      });
+      if (await primaryAction.count()) {
+        await primaryAction.click();
+      } else {
+        await toolbar
+          .getByRole("button", { name: "ابزارهای بیشتر", exact: true })
+          .click();
+        await page
+          .getByRole("menu", { name: "ابزارهای بیشتر متن انتخاب‌شده" })
+          .getByRole("menuitem", { name: buttonName, exact: true })
+          .click();
+      }
       expect(await selectedTextFromClipboard(page)).toBe("راوی");
       return markdownFromClipboard(page);
     };
@@ -103,8 +181,10 @@ test.describe("ابزارهای contextual ویرایش", () => {
       await applyAndRead("پاک‌کردن قالب‌بندی", "**_<u>راوی</u>_**"),
     ).toBe("راوی");
 
-    await editor.fill("<u>راوی</u>");
-    await page.getByRole("button", { name: "نمونه‌خوانی دوبرگی", exact: true }).click();
+    await replaceDocumentInLiveEdit(page, editor, "<u>راوی</u>");
+    await page
+      .getByRole("button", { name: "نمونه‌خوانی دوبرگی", exact: true })
+      .click();
     await expect(page.locator("#writing-editor .cm-live-underline")).toHaveText("راوی");
   });
 
@@ -113,12 +193,16 @@ test.describe("ابزارهای contextual ویرایش", () => {
     const toolbar = page.getByRole("toolbar", {
       name: "قالب‌بندی متن انتخاب‌شده",
     });
+    const copy = toolbar.getByRole("button", { name: "کپی", exact: true });
+    const paste = toolbar.getByRole("button", { name: "جای‌گذاری", exact: true });
     const bold = toolbar.getByRole("button", { name: "پررنگ", exact: true });
     const italic = toolbar.getByRole("button", { name: "مورب", exact: true });
-    const underline = toolbar.getByRole("button", { name: "زیرخط‌دار", exact: true });
-    const clear = toolbar.getByRole("button", {
-      name: "پاک‌کردن قالب‌بندی",
+    const more = toolbar.getByRole("button", {
+      name: "ابزارهای بیشتر",
       exact: true,
+    });
+    const moreMenu = page.getByRole("menu", {
+      name: "ابزارهای بیشتر متن انتخاب‌شده",
     });
 
     await editor.fill("راوی");
@@ -131,28 +215,37 @@ test.describe("ابزارهای contextual ویرایش", () => {
       altKey: true,
     });
     await expect(toolbar).toHaveAttribute("aria-keyshortcuts", "Alt+F10");
-    await expect(bold).toBeFocused();
+    await expect(copy).toBeFocused();
     await expect(toolbar.locator('button[tabindex="0"]')).toHaveCount(1);
-    await expect(toolbar.locator('button[tabindex="-1"]')).toHaveCount(9);
+    await expect(toolbar.locator('button[tabindex="-1"]')).toHaveCount(7);
 
     await page.keyboard.press("ArrowLeft");
-    await expect(clear).toBeFocused();
+    await expect(more).toBeFocused();
     await page.keyboard.press("ArrowRight");
-    await expect(bold).toBeFocused();
+    await expect(copy).toBeFocused();
     await page.keyboard.press("ArrowRight");
-    await expect(italic).toBeFocused();
+    await expect(paste).toBeFocused();
     await page.keyboard.press("End");
-    await expect(clear).toBeFocused();
+    await expect(more).toBeFocused();
     await page.keyboard.press("Home");
+    await expect(copy).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
     await expect(bold).toBeFocused();
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("End");
+    await expect(more).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(moreMenu).toBeVisible();
+    const underline = moreMenu.getByRole("menuitem", {
+      name: "زیرخط‌دار",
+      exact: true,
+    });
     await expect(underline).toBeFocused();
     await page.keyboard.press("Enter");
     expect(await selectedTextFromClipboard(page)).toBe("راوی");
     expect(await markdownFromClipboard(page)).toBe("<u>راوی</u>");
 
-    await editor.fill("راوی");
+    await replaceDocumentInLiveEdit(page, editor, "راوی");
     await expect(toolbar).toBeHidden();
     await editor.focus();
     await page.keyboard.press("Control+a");
@@ -165,12 +258,14 @@ test.describe("ابزارهای contextual ویرایش", () => {
     await expect(page.locator(".editor-selection-mini-menu button:focus")).toHaveCount(1);
     await page.keyboard.press("Home");
     await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
     await expect(italic).toBeFocused();
     await page.keyboard.press("Space");
     expect(await selectedTextFromClipboard(page)).toBe("راوی");
     expect(await markdownFromClipboard(page)).toBe("_راوی_");
 
-    await editor.fill("راوی");
+    await replaceDocumentInLiveEdit(page, editor, "راوی");
     await expect(toolbar).toBeHidden();
     await editor.focus();
     await page.keyboard.press("Control+a");
@@ -192,15 +287,7 @@ test.describe("ابزارهای contextual ویرایش", () => {
     const toolbar = page.getByRole("toolbar", {
       name: "قالب‌بندی متن انتخاب‌شده",
     });
-    const actions = [
-      { name: "پررنگ", source: "راوی", expected: "**راوی**" },
-      { name: "مورب", source: "راوی", expected: "_راوی_" },
-      { name: "زیرخط‌دار", source: "راوی", expected: "<u>راوی</u>" },
-      { name: "خط‌خورده", source: "راوی", expected: "~~راوی~~" },
-      { name: "کد درون‌خطی", source: "راوی", expected: "`راوی`" },
-    ] as const;
-
-    const focusAction = async (index: number, source = "راوی") => {
+    const focusToolbar = async (source = "راوی") => {
       await page.getByRole("button", { name: "متن خام", exact: true }).click();
       await editor.fill(source);
       await page.getByRole("button", { name: "ویرایش روان", exact: true }).click();
@@ -217,22 +304,40 @@ test.describe("ابزارهای contextual ویرایش", () => {
       await expect(toolbar.locator("button:focus")).toHaveCount(1);
       await page.keyboard.press("Home");
       await expect(toolbar.getByRole("button").first()).toBeFocused();
+    };
+
+    const focusPrimaryAction = async (index: number, source = "راوی") => {
+      await focusToolbar(source);
       for (let step = 0; step < index; step += 1) {
         await page.keyboard.press("ArrowRight");
       }
       await expect(toolbar.getByRole("button").nth(index)).toBeFocused();
     };
 
-    for (const [index, action] of actions.entries()) {
-      await focusAction(index, action.source);
-      await expect(
-        toolbar.getByRole("button", { name: action.name, exact: true }),
-      ).toBeFocused();
-      await page.keyboard.press(index % 2 === 0 ? "Enter" : "Space");
-      expect(await markdownFromClipboard(page)).toBe(action.expected);
-    }
+    const focusMoreAction = async (index: number, source = "راوی") => {
+      await focusPrimaryAction(7, source);
+      await page.keyboard.press("Enter");
+      const menu = page.getByRole("menu", {
+        name: "ابزارهای بیشتر متن انتخاب‌شده",
+      });
+      await expect(menu).toBeVisible();
+      await page.keyboard.press("Home");
+      for (let step = 0; step < index; step += 1) {
+        await page.keyboard.press("ArrowDown");
+      }
+      await expect(menu.getByRole("menuitem").nth(index)).toBeFocused();
+      return menu;
+    };
 
-    await focusAction(5);
+    await focusPrimaryAction(2);
+    await page.keyboard.press("Enter");
+    expect(await markdownFromClipboard(page)).toBe("**راوی**");
+
+    await focusPrimaryAction(3);
+    await page.keyboard.press("Space");
+    expect(await markdownFromClipboard(page)).toBe("_راوی_");
+
+    await focusPrimaryAction(4);
     await page.keyboard.press("Enter");
     const linkDialog = page.getByRole("dialog", { name: "پیوند" });
     await expect(linkDialog).toBeVisible();
@@ -245,11 +350,21 @@ test.describe("ابزارهای contextual ویرایش", () => {
       "[راوی](https://ravi.example/keyboard)",
     );
 
-    await focusAction(6);
+    await focusPrimaryAction(5);
     await page.keyboard.press("Enter");
     await expect(page.getByText("هایلایت ثبت شد.", { exact: true })).toBeVisible();
 
-    await focusAction(7);
+    for (const action of [
+      { index: 0, expected: "<u>راوی</u>" },
+      { index: 1, expected: "~~راوی~~" },
+      { index: 2, expected: "`راوی`" },
+    ]) {
+      await focusMoreAction(action.index);
+      await page.keyboard.press(action.index % 2 === 0 ? "Enter" : "Space");
+      expect(await markdownFromClipboard(page)).toBe(action.expected);
+    }
+
+    await focusMoreAction(3);
     await page.keyboard.press("Enter");
     const commentComposer = page.locator(".annotation-toolbar:not([hidden])");
     await expect(commentComposer).toBeVisible();
@@ -257,7 +372,7 @@ test.describe("ابزارهای contextual ویرایش", () => {
     await page.keyboard.press("Escape");
     await expect(commentComposer).toBeHidden();
 
-    await focusAction(8, "**راوی**");
+    await focusMoreAction(4, "**راوی**");
     await page.keyboard.press("Enter");
     expect(await markdownFromClipboard(page)).toBe("راوی");
   });
@@ -293,7 +408,13 @@ test.describe("ابزارهای contextual ویرایش", () => {
 
     await editor.focus();
     await page.keyboard.press("Control+a");
-    await toolbar.getByRole("button", { name: "نظر", exact: true }).click();
+    await toolbar
+      .getByRole("button", { name: "ابزارهای بیشتر", exact: true })
+      .click();
+    await page
+      .getByRole("menu", { name: "ابزارهای بیشتر متن انتخاب‌شده" })
+      .getByRole("menuitem", { name: "نظر", exact: true })
+      .click();
     const composer = page.locator(".annotation-toolbar:not([hidden])");
     await expect(composer).toBeVisible();
     await expect(composer.locator("q")).toHaveText("راوی");
@@ -313,7 +434,14 @@ test.describe("ابزارهای contextual ویرایش", () => {
     await trigger.click();
     const blockMenu = page.getByRole("menu", { name: "نوع بلوک" });
     await expect(blockMenu).toBeVisible();
-    await expect(blockMenu.getByRole("menuitemradio")).toHaveCount(12);
+    await expect(blockMenu.getByRole("menuitemradio")).toHaveCount(14);
+    await expect(
+      blockMenu.getByRole("menuitemradio", { name: "جداکننده" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: ".artifacts/divider-block-menu.png",
+      fullPage: false,
+    });
     await blockMenu.getByRole("menuitemradio", { name: "جدول" }).click();
     const table = page.getByRole("dialog", { name: "جدول" });
     const tableGrid = table.getByRole("grid", {
@@ -347,7 +475,7 @@ test.describe("ابزارهای contextual ویرایش", () => {
     await page.keyboard.type("/");
     const slash = page.getByRole("menu", { name: "نوع بلوک" });
     await expect(slash).toBeVisible();
-    await expect(slash.getByRole("menuitemradio")).toHaveCount(12);
+    await expect(slash.getByRole("menuitemradio")).toHaveCount(14);
     await expect(slash.getByRole("menuitemradio", { name: "کد" })).toHaveCount(0);
     await expect(slash.getByRole("menuitemradio", { name: "فرمول" })).toBeVisible();
 
@@ -388,5 +516,20 @@ test.describe("ابزارهای contextual ویرایش", () => {
       return { width: box.width, height: box.height };
     }));
     expect(boxes.every((box) => box.width >= 44 && box.height >= 44), JSON.stringify(boxes)).toBe(true);
+  });
+
+  test("inserts a portable divider with its registered shortcut", async ({ page }) => {
+    const editor = await writingEditor(page);
+    await page.getByRole("button", { name: "متن خام", exact: true }).click();
+    await editor.focus();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.insertText("بخش نخست");
+    await page.waitForTimeout(100);
+    await editor.focus();
+    await page.keyboard.press("Control+End");
+    await page.keyboard.press("Alt+Shift+H");
+    expect(
+      (await editor.locator(".cm-line").allTextContents()).join("\n"),
+    ).toBe("بخش نخست\n\n---");
   });
 });

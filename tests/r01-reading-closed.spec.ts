@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { activatePointerAction } from "./helpers/pointer-action";
 
 const READING_FIXTURE = [
   "---",
@@ -234,7 +235,7 @@ test("R01 assembles the closed 760px reading surface and four-item rail", async 
       },
     });
   });
-  await fullscreenTrigger.click();
+  await activatePointerAction(fullscreenTrigger);
   await expect(diagram).toHaveClass(/is-detail-open/);
   await expect(diagram).toHaveAttribute("role", "dialog");
   await expect(diagram).toHaveAttribute("aria-modal", "true");

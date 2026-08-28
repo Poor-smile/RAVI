@@ -40,6 +40,9 @@ export type RaaviAnnotation = {
   approximateStart?: number;
   approximateEnd?: number;
   fingerprint?: string;
+  audioSource?: string;
+  audioStartMs?: number;
+  audioEndMs?: number;
 };
 
 export type RaaviImageAsset = {
@@ -246,6 +249,19 @@ function parseAnnotation(
       : {}),
     ...(safeText(candidate.fingerprint, 160).trim()
       ? { fingerprint: safeText(candidate.fingerprint, 160).trim() }
+      : {}),
+    ...(safeText(candidate.audioSource, 1_024).trim()
+      ? { audioSource: safeText(candidate.audioSource, 1_024).trim() }
+      : {}),
+    ...(typeof candidate.audioStartMs === "number" &&
+    Number.isFinite(candidate.audioStartMs) &&
+    candidate.audioStartMs >= 0
+      ? { audioStartMs: Math.round(candidate.audioStartMs) }
+      : {}),
+    ...(typeof candidate.audioEndMs === "number" &&
+    Number.isFinite(candidate.audioEndMs) &&
+    candidate.audioEndMs >= 0
+      ? { audioEndMs: Math.round(candidate.audioEndMs) }
       : {}),
   };
 }

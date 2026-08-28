@@ -3,6 +3,8 @@ import { isolateHistory } from "@codemirror/commands";
 import { Transaction } from "@codemirror/state";
 import katex from "katex";
 import type { FormulaBlock } from "../formula/blocks";
+import type { AudioDescriptor, AudioSourceResolution } from "../audio/types";
+import { MATERIAL_SYMBOL_PATHS } from "../icons/material-symbol-paths";
 import { formulaAccessibleText } from "../formula/model";
 import { createMermaidBlobUrl, type MermaidBlobUrl } from "../mermaid/blob-url";
 import { mermaidSvgAccessibleName } from "../mermaid/use-mermaid-render";
@@ -29,8 +31,37 @@ export type LiveImageResolution =
   | { status: "ready"; source: string }
   | { status: "blocked"; message: string };
 
+export type LiveAudioResolution = AudioSourceResolution;
+
+function createMaterialSymbol(
+  symbol: "pause" | "play_arrow" | "speech_to_text",
+) {
+  const namespace = "http://www.w3.org/2000/svg";
+  const vector = MATERIAL_SYMBOL_PATHS[symbol];
+  const svg = document.createElementNS(namespace, "svg");
+  svg.setAttribute("viewBox", vector.viewBox);
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  svg.classList.add("cm-audio-symbol");
+  for (const pathData of vector.outline) {
+    const iconPath = document.createElementNS(namespace, "path");
+    iconPath.setAttribute("d", pathData);
+    iconPath.setAttribute("fill", "currentColor");
+    svg.append(iconPath);
+  }
+  return svg;
+}
+
 export type RichWidgetOptions = {
   resolveImage?: (source: string) => LiveImageResolution;
+  resolveAudio?: (
+    source: string,
+  ) => LiveAudioResolution | Promise<LiveAudioResolution>;
+  openAudioTranscription?: (
+    descriptor: AudioDescriptor,
+    from: number,
+    to: number,
+  ) => void;
   openMermaidStudio?: (from: number, to: number) => void;
   openFormulaStudio?: (
     from: number,
@@ -1235,6 +1266,199 @@ export class ImageBlockWidget extends SourceBlockWidget {
     this.disposed = true;
     if (this.image) this.image.removeAttribute("src");
     this.image = null;
+  }
+}
+
+function formatAudioTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "۰:۰۰";
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.floor(seconds % 60);
+  return `${minutes.toLocaleString("fa-IR")}:${remainder
+    .toString()
+    .padStart(2, "0")
+    .replace(/\d/gu, (digit) => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)])}`;
+}
+
+export class AudioBlockWidget extends SourceBlockWidget {
+  private audio: HTMLAudioElement | null = null;
+  private disposed = false;
+  private removeSegmentListener: (() => void) | null = null;
+
+  constructor(
+    from: number,
+    to: number,
+    source: string,
+    private readonly audioData: AudioDescriptor,
+    private readonly resolveAudio?: RichWidgetOptions["resolveAudio"],
+    private readonly openAudioTranscription?: RichWidgetOptions["openAudioTranscription"],
+  ) {
+    super(from, to, source);
+  }
+
+  eq(other: AudioBlockWidget) {
+    return (
+      other.from === this.from &&
+      other.to === this.to &&
+      other.source === this.source
+    );
+  }
+
+  toDOM(view: EditorView) {
+    this.disposed = false;
+    const shell = widgetShell(
+      "audio",
+      `فایل صوتی ${this.audioData.fileName}`,
+      this.from,
+      this.to,
+      view,
+    );
+    shell.dataset.audioSource = this.audioData.source;
+
+    const header = document.createElement("figcaption");
+    header.className = "cm-audio-header";
+    const status = document.createElement("small");
+    status.textContent = "در حال آماده‌سازی پخش…";
+    const name = document.createElement("strong");
+    name.dir = "auto";
+    name.textContent = this.audioData.fileName;
+    header.append(status, name);
+
+    const controls = document.createElement("div");
+    controls.className = "cm-audio-controls";
+    const transcribe = actionButton("تبدیل به متن", () => {
+      this.openAudioTranscription?.(
+        this.audioData,
+        this.from,
+        this.to,
+      );
+    }, "cm-audio-transcribe");
+    const transcribeLabel = document.createElement("span");
+    transcribeLabel.textContent = "تبدیل به متن";
+    transcribe.replaceChildren(
+      createMaterialSymbol("speech_to_text"),
+      transcribeLabel,
+    );
+
+    const timeline = document.createElement("div");
+    timeline.className = "cm-audio-timeline";
+    const range = document.createElement("input");
+    range.type = "range";
+    range.min = "0";
+    range.max = "1000";
+    range.value = "0";
+    range.dir = "ltr";
+    range.setAttribute("aria-label", "موقعیت پخش صوت");
+    const time = document.createElement("span");
+    time.textContent = "۰:۰۰ / ۰:۰۰";
+    timeline.append(range, time);
+
+    const play = document.createElement("button");
+    play.type = "button";
+    play.className = "cm-audio-play";
+    play.setAttribute("aria-label", "پخش صوت");
+    play.append(createMaterialSymbol("play_arrow"));
+    const audio = document.createElement("audio");
+    this.audio = audio;
+    audio.preload = "metadata";
+
+    let playingState = false;
+    const sync = () => {
+      const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+      const current = Math.min(audio.currentTime, duration || audio.currentTime);
+      range.value = duration ? String(Math.round((current / duration) * 1000)) : "0";
+      time.textContent = `${formatAudioTime(current)} / ${formatAudioTime(duration)}`;
+      if (playingState !== !audio.paused) {
+        playingState = !audio.paused;
+        play.replaceChildren(
+          createMaterialSymbol(playingState ? "pause" : "play_arrow"),
+        );
+      }
+      play.setAttribute("aria-label", audio.paused ? "پخش صوت" : "توقف موقت صوت");
+    };
+    audio.addEventListener("loadedmetadata", () => {
+      status.textContent = "آمادهٔ پخش";
+      shell.classList.remove("is-loading");
+      sync();
+    });
+    audio.addEventListener("timeupdate", sync);
+    audio.addEventListener("play", sync);
+    audio.addEventListener("pause", sync);
+    audio.addEventListener("ended", sync);
+    audio.addEventListener("error", () => {
+      status.textContent = "فایل صوتی در دسترس نیست";
+      shell.classList.add("is-error");
+    });
+    play.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!audio.src) return;
+      if (audio.paused) void audio.play();
+      else audio.pause();
+    });
+    range.addEventListener("input", () => {
+      if (!Number.isFinite(audio.duration) || !audio.duration) return;
+      audio.currentTime = (Number(range.value) / 1000) * audio.duration;
+      sync();
+    });
+    for (const eventName of ["pointerdown", "mousedown", "click", "keydown"]) {
+      range.addEventListener(eventName, (event) => event.stopPropagation());
+    }
+
+    const onPlaySegment = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        source?: string;
+        startMs?: number;
+        endMs?: number;
+      }>).detail;
+      if (!detail || detail.source !== this.audioData.source || !audio.src) return;
+      audio.currentTime = Math.max(0, Number(detail.startMs ?? 0) / 1000);
+      void audio.play();
+      const endSeconds = Number(detail.endMs ?? 0) / 1000;
+      if (endSeconds > audio.currentTime) {
+        const stopAtEnd = () => {
+          if (audio.currentTime < endSeconds) return;
+          audio.pause();
+          audio.removeEventListener("timeupdate", stopAtEnd);
+        };
+        audio.addEventListener("timeupdate", stopAtEnd);
+      }
+    };
+    window.addEventListener("raavi:play-audio-segment", onPlaySegment);
+    this.removeSegmentListener = () =>
+      window.removeEventListener("raavi:play-audio-segment", onPlaySegment);
+
+    controls.append(transcribe, timeline, play, audio);
+    shell.append(header, controls);
+
+    void Promise.resolve(
+      this.resolveAudio?.(this.audioData.source) ?? {
+        status: "ready" as const,
+        source: this.audioData.source,
+      },
+    ).then((resolved) => {
+      if (this.disposed) return;
+      if (resolved.status === "blocked") {
+        status.textContent = resolved.message;
+        shell.classList.add("is-error");
+        return;
+      }
+      audio.src = resolved.source;
+      audio.load();
+    });
+
+    return shell;
+  }
+
+  destroy() {
+    this.disposed = true;
+    this.removeSegmentListener?.();
+    this.removeSegmentListener = null;
+    if (this.audio) {
+      this.audio.pause();
+      this.audio.removeAttribute("src");
+      this.audio.load();
+    }
+    this.audio = null;
   }
 }
 

@@ -12,7 +12,7 @@ async function openWritingEditor(page: Page) {
     "data-hydrated",
     "true",
   );
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
   await page.getByRole("button", { name: "متن خام", exact: true }).click();
   return page.locator("#markdown-editor .cm-content");
 }
@@ -24,7 +24,7 @@ async function openWritingLiveEditor(page: Page) {
     "data-hydrated",
     "true",
   );
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
   return page.locator("#markdown-editor .cm-content");
 }
 
@@ -178,8 +178,55 @@ test("Arrow navigation traverses every list item before crossing a block boundar
   await secondItem.click();
   await page.keyboard.press("End");
   await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("ArrowDown");
   await expect.poll(activeLineText).toContain("متن پایین");
+});
+
+test("Arrow navigation keeps the active line inside the central reading band", async ({
+  page,
+}) => {
+  const editor = await openWritingLiveEditor(page);
+  const lines = Array.from({ length: 80 }, (_, index) => `خط شماره ${index + 1}`);
+  await editor.fill(lines.join("\n"));
+
+  await editor.locator(".cm-line").first().click();
+  for (let index = 0; index < 35; index += 1) {
+    await page.keyboard.press("ArrowDown");
+  }
+
+  const assertInsideReadingBand = async () => {
+    const geometry = await editor.evaluate((content) => {
+      const scroller = content.closest(".cm-editor")?.querySelector<HTMLElement>(".cm-scroller");
+      const activeLine = content.querySelector<HTMLElement>(".cm-activeLine");
+      if (!scroller || !activeLine) throw new Error("Editor geometry is unavailable");
+      const viewport = scroller.getBoundingClientRect();
+      const line = activeLine.getBoundingClientRect();
+      return {
+        viewportTop: viewport.top,
+        viewportBottom: viewport.bottom,
+        viewportHeight: viewport.height,
+        lineTop: line.top,
+        lineBottom: line.bottom,
+      };
+    });
+    const tolerance = 20;
+    expect(geometry.lineTop).toBeGreaterThanOrEqual(
+      geometry.viewportTop + geometry.viewportHeight * 0.3 - tolerance,
+    );
+    expect(geometry.lineBottom).toBeLessThanOrEqual(
+      geometry.viewportBottom - geometry.viewportHeight * 0.3 + tolerance,
+    );
+  };
+
+  await assertInsideReadingBand();
+  for (let index = 0; index < 25; index += 1) {
+    await page.keyboard.press("ArrowUp");
+  }
+  await assertInsideReadingBand();
+
+  // The final line needs real trailing scroll space. Scroll margins alone
+  // cannot keep it in the reading band once the document reaches its end.
+  await page.keyboard.press("Control+End");
+  await assertInsideReadingBand();
 });
 
 test("Ctrl or Cmd+A selects only the complete active block", async ({

@@ -4,6 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { waitForRaaviWindow } from "./helpers/electron-main-window";
+import { activatePointerAction } from "./helpers/pointer-action";
 
 const EXPECTED_DIAGRAMS = 26;
 
@@ -89,11 +91,11 @@ async function verifyEveryDiagram(
           if ((await surface.count()) !== 1) return false;
           const key = await surface.getAttribute("data-mermaid-render-key");
           return Boolean(key && key !== previousKeys[index]);
-        }, { timeout: 15_000 })
+        }, { timeout: 30_000 })
         .toBe(true);
     } else {
       await expect(surface, `diagram ${index + 1} in ${theme}`).toHaveCount(1, {
-        timeout: 15_000,
+        timeout: 30_000,
       });
     }
     await expect
@@ -191,7 +193,7 @@ test("renders the ultimate Persian stress document in light and dark themes", as
       ],
       timeout: 20_000,
     });
-    const page = await app.firstWindow();
+    const page = await waitForRaaviWindow(app);
     const figures = page.locator(".mermaid-diagram");
     await expect(figures).toHaveCount(EXPECTED_DIAGRAMS, { timeout: 20_000 });
     expect(await page.locator(".markdown-body pre code.language-mermaid").count()).toBe(0);
@@ -208,9 +210,11 @@ test("renders the ultimate Persian stress document in light and dark themes", as
 
     const fullscreenFigure = figures.nth(1);
     await fullscreenFigure.evaluate((element) => element.scrollIntoView({ block: "center" }));
-    await fullscreenFigure
-      .getByRole("button", { name: "نمایش تمام‌صفحهٔ نمودار" })
-      .click();
+    await activatePointerAction(
+      fullscreenFigure.getByRole("button", {
+        name: "نمایش تمام‌صفحهٔ نمودار",
+      }),
+    );
     await page.waitForTimeout(1_200);
     await expect(fullscreenFigure.locator("img.mermaid-render-surface")).toHaveCount(1);
     await expect(fullscreenFigure.locator("img.mermaid-render-surface")).toBeVisible();

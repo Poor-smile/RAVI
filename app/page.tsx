@@ -9,14 +9,17 @@ FORM: مسیر هفتم، میز دوبرگی با ساختار bench؛ seed a26
 */
 
 import {
+  AudioFile,
   AlertTriangle,
   ArrowLeft,
   Bold,
   BookOpen,
+  BrainCircuit,
   Braces,
   Check,
   Code2,
   Command,
+  Copy,
   Download,
   Ellipsis,
   FileArchive,
@@ -50,6 +53,7 @@ import {
   Notes,
   PanelLeftOpen,
   PanelRightOpen,
+  Paste,
   PencilLine,
   Plus,
   Quote,
@@ -117,6 +121,20 @@ import { ReadingSelectionMenu } from "./components/reading-selection-menu";
 import { TableSizePicker } from "./components/table-size-picker";
 import { CodeViewToolbar } from "./components/code-view-toolbar";
 import { AiChatPanel } from "./components/ai-chat-panel";
+import {
+  AudioTranscriptionPanel,
+  type AudioTranscriptionSession,
+} from "./components/audio-transcription-panel";
+import { AudioPlayerBlock } from "./components/audio-player-block";
+import { AudioModelDownloadIndicator } from "./components/audio-model-download-indicator";
+import {
+  SoftwareUpdateBanner,
+  type SoftwareUpdateActions,
+} from "./components/software-update-ui";
+import {
+  DEFAULT_SOFTWARE_UPDATE_STATE,
+  type SoftwareUpdateState,
+} from "./software-update/types";
 import { MagicWandIcon } from "./components/magic-wand-trigger";
 import { DocumentTabs, type DocumentTabView } from "./components/document-tabs";
 import { DocumentCommandBar } from "./components/app-chrome";
@@ -142,6 +160,7 @@ import {
   ExternalLinkDialog,
   FileExplorer,
   FileOperationDialog,
+  FirstRunOnboarding,
   FormulaDocumentBlock,
   FormulaStudio,
   ImageInsertDialog,
@@ -183,6 +202,25 @@ import type {
   FormulaApplyResult,
   FormulaStudioSession,
 } from "./components/formula-studio";
+import {
+  audioBlockAtOffset,
+  decodedAudioPath,
+  findAudioBlocks,
+  serializeMarkdownAudio,
+} from "./audio/markdown";
+import {
+  AUDIO_MAX_DURATION_MS,
+  type AudioAssetSelection,
+  type AudioCleanupResult,
+  type AudioContentKind,
+  type AudioLocalEvent,
+  type AudioModelState,
+  type AudioModelTierId,
+  type AudioSourceResolution,
+  type AudioStructuredResult,
+  type AudioTranscriptSegment,
+  type AudioTranscriptionJob,
+} from "./audio/types";
 import {
   normalizeSmartAnnotationResult,
   type SmartAnnotationRawResult,
@@ -243,18 +281,45 @@ import {
   type FileLibraryPreferences,
 } from "./settings/file-library-preferences";
 import {
+  DEFAULT_GENERAL_PREFERENCES,
+  GENERAL_PREFERENCES_STORAGE_KEY,
+  parseGeneralPreferences,
+  type GeneralPreferences,
+} from "./settings/general-preferences";
+import {
   DEFAULT_PRIVACY_PREFERENCES,
   PRIVACY_PREFERENCES_STORAGE_KEY,
   parsePrivacyPreferences,
   type PrivacyPreferences,
 } from "./settings/privacy-preferences";
 import {
+  AI_PREFERENCES_STORAGE_KEY,
+  DEFAULT_AI_PREFERENCES,
+  parseAiPreferences,
+  type AiPreferences,
+} from "./settings/ai-preferences";
+import {
+  BACKUP_PREFERENCES_STORAGE_KEY,
+  DEFAULT_BACKUP_STATUS,
+  parseBackupPreferences,
+  type BackupPreferences,
+  type BackupProviderConnections,
+  type BackupProviderId,
+  type BackupStatus,
+  type CloudBackupSummary,
+  type CloudRestoreResult,
+  type FileResidency,
+} from "./backup/policy";
+import {
   effectiveEditorMode as resolveEditorMode,
   liveEditFeatureEnabled,
   type EditorMode,
   type SingleEditorMode,
 } from "./editor/mode";
-import { safeLiveImageSource } from "./editor/rich-blocks";
+import {
+  resolveMarkdownBlockRange,
+  safeLiveImageSource,
+} from "./editor/rich-blocks";
 import { useCommandSystem } from "./hooks/use-command-system";
 import { useVisualViewportInsets } from "./hooks/use-visual-viewport";
 import { useAppChromeState } from "./hooks/use-app-chrome-state";
@@ -309,10 +374,12 @@ import { SIDEBAR_STORAGE_KEY, type SidebarView } from "./sidebar-state";
 import type {
   AiFrozenContext,
   AiFrozenContextDraft,
+  ChatGPTModelList,
   CodexConnectionState,
   CodexConnectionStatus,
   CodexResult,
 } from "./ai/types";
+import { shouldAutoOpenFirstRun } from "./first-run-state";
 import {
   frozenBlockIsCurrent,
   frozenContextIsCurrent,
@@ -408,6 +475,7 @@ import {
 } from "./raavi";
 
 const STORAGE_KEY = "raavi:document:v1";
+const FIRST_RUN_STORAGE_KEY = "raavi:first-run-onboarding:v1";
 const LOCAL_DOCUMENT_DB_NAME = "raavi-local-documents";
 const LOCAL_DOCUMENT_DB_VERSION = 1;
 const LOCAL_DOCUMENT_STORE = "documents";
@@ -425,6 +493,7 @@ const EDITOR_BLOCK_TYPE_ICONS: Record<SlashMenuBlockType, LucideIcon> = {
   "heading-2": Heading2,
   "heading-3": Heading3,
   paragraph: Notes,
+  divider: Minus,
   task: ListTodo,
   "bullet-list": ListIcon,
   "ordered-list": ListOrdered,
@@ -433,13 +502,21 @@ const EDITOR_BLOCK_TYPE_ICONS: Record<SlashMenuBlockType, LucideIcon> = {
   mermaid: Network,
   image: ImagePlus,
   formula: Braces,
+  audio: AudioFile,
 };
 const EDITOR_SELECTION_COMMANDS: Array<{
-  id: CommandId;
+  id: CommandId | "clipboard.copy" | "clipboard.paste";
   label: string;
   icon: LucideIcon;
-  group: "format" | "link" | "annotation" | "clear";
+  group: "clipboard" | "format" | "link" | "annotation" | "clear";
 }> = [
+  { id: "clipboard.copy", label: "کپی", icon: Copy, group: "clipboard" },
+  {
+    id: "clipboard.paste",
+    label: "جای‌گذاری",
+    icon: Paste,
+    group: "clipboard",
+  },
   { id: "edit.bold", label: "پررنگ", icon: Bold, group: "format" },
   { id: "edit.italic", label: "مورب", icon: Italic, group: "format" },
   {
@@ -470,6 +547,18 @@ const EDITOR_SELECTION_COMMANDS: Array<{
     group: "clear",
   },
 ];
+const EDITOR_SELECTION_PRIMARY_COMMANDS = EDITOR_SELECTION_COMMANDS.filter(
+  ({ id }) =>
+    id === "clipboard.copy" ||
+    id === "clipboard.paste" ||
+    id === "edit.bold" ||
+    id === "edit.italic" ||
+    id === "edit.link" ||
+    id === "annotation.highlight",
+);
+const EDITOR_SELECTION_MORE_COMMANDS = EDITOR_SELECTION_COMMANDS.filter(
+  ({ id }) => !EDITOR_SELECTION_PRIMARY_COMMANDS.some((item) => item.id === id),
+);
 const LIVE_EDIT_FEATURE_ENABLED = liveEditFeatureEnabled(
   typeof process !== "undefined"
     ? process.env.NEXT_PUBLIC_RAAVI_LIVE_EDIT
@@ -553,7 +642,7 @@ function detectDesktopInstallRecommendation(): DesktopInstallRecommendation {
       description:
         "برای اتصال پوشه‌ها و دسترسی سریع‌تر به نوشته‌ها، نسخه Windows را روی همین دستگاه نصب کنید.",
       actionLabel: "دانلود برای Windows",
-      href: `https://ravi.poorsmile.ir/downloads/Raavi-Setup-${packageMetadata.version}-x64.exe`,
+      href: `https://dl2.gptt.ir/raavi/stable/${packageMetadata.version}/Raavi-Setup-${packageMetadata.version}-x64.exe`,
     };
   }
 
@@ -631,6 +720,44 @@ function countDocumentWords(markdown: string) {
     visibleText.match(/[\p{L}\p{N}]+(?:[\u200c\u200d'’_-][\p{L}\p{N}]+)*/gu)
       ?.length ?? 0
   );
+}
+
+function readAudioDuration(source: string) {
+  return new Promise<number>((resolve, reject) => {
+    const audio = document.createElement("audio");
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("زمان بررسی فایل صوتی بیش از حد طول کشید."));
+    }, 15_000);
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      audio.removeAttribute("src");
+      audio.load();
+    };
+    audio.preload = "metadata";
+    audio.addEventListener(
+      "loadedmetadata",
+      () => {
+        const duration = audio.duration * 1000;
+        cleanup();
+        if (!Number.isFinite(duration) || duration <= 0) {
+          reject(new Error("مدت فایل صوتی قابل تشخیص نیست."));
+          return;
+        }
+        resolve(Math.round(duration));
+      },
+      { once: true },
+    );
+    audio.addEventListener(
+      "error",
+      () => {
+        cleanup();
+        reject(new Error("فایل صوتی خراب است یا فرمت آن پشتیبانی نمی‌شود."));
+      },
+      { once: true },
+    );
+    audio.src = source;
+  });
 }
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
@@ -725,6 +852,7 @@ type DesktopOpenedDocument = {
   versions?: RaaviVersion[];
   openInReadingMode?: boolean;
   draftId?: string;
+  residency?: FileResidency;
 };
 
 type DesktopRecentFile = {
@@ -779,6 +907,8 @@ type LocalDocumentSnapshot = {
     text: string;
     selection: SelectionDraft;
   } | null;
+  residency?: FileResidency;
+  vaultReason?: "first-edit" | "manual-move" | "local-change";
 };
 
 type PendingDocumentClose =
@@ -815,6 +945,40 @@ export type RaaviDesktopAPI = {
   saveLocalDocumentSnapshot: (
     snapshot: LocalDocumentSnapshot,
   ) => Promise<{ saved: boolean }>;
+  getBackupStatus?: () => Promise<BackupStatus>;
+  getBackupProviderConnections?: () => Promise<BackupProviderConnections>;
+  updateBackupPreferences?: (
+    preferences: BackupPreferences,
+  ) => Promise<BackupStatus>;
+  selectBackupProvider?: (
+    providerId: BackupProviderId,
+  ) => Promise<BackupStatus>;
+  connectBackupProvider?: (
+    providerId: BackupProviderId,
+  ) => Promise<BackupStatus>;
+  disconnectBackupProvider?: (
+    providerId: BackupProviderId,
+  ) => Promise<BackupStatus>;
+  connectGoogleDrive?: () => Promise<BackupStatus>;
+  disconnectGoogleDrive?: () => Promise<BackupStatus>;
+  flushBackup?: () => Promise<{ synced: number; deferred: boolean }>;
+  listCloudBackups?: () => Promise<CloudBackupSummary[]>;
+  restoreCloudBackups?: (
+    documentIds: string[],
+  ) => Promise<CloudRestoreResult>;
+  revealCloudRestore?: (
+    restoreRoot: string,
+  ) => Promise<{ revealed: boolean }>;
+  promoteToVault?: (
+    snapshot: LocalDocumentSnapshot,
+    reason: "first-edit" | "manual-move",
+  ) => Promise<{ saved: boolean; documentId: string; residency: "vault-local" }>;
+  getVaultResidency?: (
+    snapshot: LocalDocumentSnapshot,
+  ) => Promise<FileResidency>;
+  onBackupStatusChanged?: (
+    callback: (status: BackupStatus) => void,
+  ) => () => void;
   saveReadingPositions: (
     positions: ReadingPositionMap,
   ) => Promise<{ saved: boolean }>;
@@ -850,6 +1014,7 @@ export type RaaviDesktopAPI = {
   saveMarkdown: (
     fileName: string,
     document: DocumentSavePayload,
+    defaultDirectory?: string,
   ) => Promise<{
     saved: boolean;
     filePath?: string;
@@ -872,28 +1037,94 @@ export type RaaviDesktopAPI = {
   ) => Promise<{ saved: boolean; filePath?: string }>;
   revealExport?: (filePath: string) => Promise<{ revealed: boolean }>;
   openExternalUrl?: (url: string) => Promise<{ opened: boolean }>;
+  getSoftwareUpdateStatus?: () => Promise<SoftwareUpdateState>;
+  checkSoftwareUpdate?: () => Promise<SoftwareUpdateState>;
+  downloadSoftwareUpdate?: () => Promise<SoftwareUpdateState>;
+  pauseSoftwareUpdate?: () => Promise<SoftwareUpdateState>;
+  resumeSoftwareUpdate?: () => Promise<SoftwareUpdateState>;
+  cancelSoftwareUpdate?: () => Promise<SoftwareUpdateState>;
+  installSoftwareUpdate?: () => Promise<{ started: boolean }>;
+  openSoftwareUpdateNotes?: () => Promise<{ opened: boolean }>;
+  openSoftwareUpdateDirectDownload?: () => Promise<{ opened: boolean }>;
+  onSoftwareUpdateStatusChanged?: (
+    callback: (status: SoftwareUpdateState) => void,
+  ) => () => void;
+  getAiPreferences?: () => Promise<AiPreferences | null>;
+  saveAiPreferences?: (
+    preferences: AiPreferences,
+  ) => Promise<{ saved: boolean; preferences: AiPreferences }>;
+  clearAiPreferences?: () => Promise<{ cleared: boolean }>;
   getCodexConnectionStatus?: () => Promise<CodexConnectionStatus>;
+  getCodexModels?: () => Promise<ChatGPTModelList>;
+  installCodexCli?: () => Promise<{
+    started: boolean;
+    reason?: "unsupported_platform" | "launch_failed";
+  }>;
   startCodexLogin?: () => Promise<{
     started: boolean;
     state: "auth_waiting" | "cli_missing" | "connection_error";
   }>;
+  resetCodexConnection?: () => Promise<CodexConnectionStatus>;
   runCodexPrompt?: (payload: {
+    model?: string;
     context: string;
     prompt: string;
   }) => Promise<CodexResult>;
   runCodexPersianReview?: (payload: {
+    model?: string;
     document: string;
     economy?: boolean;
   }) => Promise<PersianAiReviewRawResult>;
   runCodexSmartAnnotations?: (payload: {
+    model?: string;
     document: string;
     economy?: boolean;
   }) => Promise<SmartAnnotationRawResult>;
+  chooseAudioAsset?: (documentPath: string) => Promise<AudioAssetSelection | null>;
+  removeAudioAsset?: (
+    documentPath: string,
+    relativePath: string,
+  ) => Promise<{ removed: boolean }>;
+  resolveAudioAsset?: (
+    documentPath: string,
+    relativePath: string,
+  ) => Promise<AudioSourceResolution>;
+  getAudioModelState?: () => Promise<AudioModelState>;
+  installAudioModel?: (tier: AudioModelTierId) => Promise<AudioModelState>;
+  pauseAudioModelInstall?: () => Promise<AudioModelState>;
+  resumeAudioModelInstall?: () => Promise<AudioModelState>;
+  deleteAudioModel?: (tier: AudioModelTierId) => Promise<AudioModelState>;
+  startAudioTranscription?: (payload: {
+    documentPath: string;
+    relativePath: string;
+    fileName: string;
+    durationMs: number;
+    tier: AudioModelTierId;
+  }) => Promise<AudioTranscriptionJob>;
+  pauseAudioTranscription?: (jobId: string) => Promise<AudioTranscriptionJob>;
+  resumeAudioTranscription?: (jobId: string) => Promise<AudioTranscriptionJob>;
+  cancelAudioTranscription?: (jobId: string) => Promise<AudioTranscriptionJob>;
+  listAudioTranscriptionJobs?: (
+    documentPath: string,
+  ) => Promise<AudioTranscriptionJob[]>;
+  saveAudioTranscriptionResult?: (
+    jobId: string,
+    result: AudioStructuredResult,
+  ) => Promise<AudioTranscriptionJob>;
+  runCodexAudioCleanup?: (payload: {
+    model?: string;
+    transcript: string;
+    suggestedKind: AudioContentKind;
+  }) => Promise<AudioCleanupResult>;
+  onAudioLocalEvent?: (
+    callback: (event: AudioLocalEvent) => void,
+  ) => () => void;
   setWindowTheme?: (theme: ThemeMode) => void;
   minimizeWindow?: () => Promise<void>;
   toggleMaximizeWindow?: () => Promise<void>;
   closeWindow?: () => Promise<void>;
   rendererReady: () => void;
+  documentPresented?: () => void;
   onOpenMarkdownFile: (
     callback: (document: DesktopOpenedDocument) => void,
   ) => () => void;
@@ -1812,7 +2043,7 @@ async function inspectPrintablePreview(root: HTMLElement | null) {
   return warnings;
 }
 
-function readImageAssetData(file: File) {
+function readImageAssetData(file: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.addEventListener("error", () =>
@@ -1834,7 +2065,7 @@ function readImageAssetData(file: File) {
   });
 }
 
-function readImageAssetDimensions(file: File) {
+function readImageAssetDimensions(file: Blob) {
   return new Promise<{ width: number; height: number }>((resolve, reject) => {
     const image = new Image();
     const objectUrl = URL.createObjectURL(file);
@@ -1855,6 +2086,70 @@ function readImageAssetDimensions(file: File) {
     });
     image.src = objectUrl;
   });
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  mimeType: "image/webp",
+  quality: number,
+) {
+  return new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, mimeType, quality),
+  );
+}
+
+async function optimizeImageAsset(file: File) {
+  const originalDimensions = await readImageAssetDimensions(file);
+  if (
+    file.type === "image/gif" ||
+    (file.type === "image/webp" && file.size <= 512 * 1024) ||
+    file.size <= 300 * 1024
+  ) {
+    return {
+      blob: file as Blob,
+      mimeType: file.type as RaaviImageAsset["mimeType"],
+      dimensions: originalDimensions,
+      optimized: false,
+    };
+  }
+
+  const longest = Math.max(originalDimensions.width, originalDimensions.height);
+  const scale = Math.min(1, 2_560 / longest);
+  const width = Math.max(1, Math.round(originalDimensions.width * scale));
+  const height = Math.max(1, Math.round(originalDimensions.height * scale));
+  const bitmap = await createImageBitmap(file);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { alpha: true });
+    if (!context) throw new Error("IMAGE_CANVAS_UNAVAILABLE");
+    context.drawImage(bitmap, 0, 0, width, height);
+    const textLike = /(?:screen|screenshot|diagram|chart|نمودار|اسکرین)/iu.test(
+      file.name,
+    );
+    const optimized = await canvasToBlob(
+      canvas,
+      "image/webp",
+      textLike ? 0.9 : 0.82,
+    );
+    if (!optimized || optimized.size >= file.size * 0.95) {
+      return {
+        blob: file as Blob,
+        mimeType: file.type as RaaviImageAsset["mimeType"],
+        dimensions: originalDimensions,
+        optimized: false,
+      };
+    }
+    return {
+      blob: optimized,
+      mimeType: "image/webp" as const,
+      dimensions: { width, height },
+      optimized: true,
+    };
+  } finally {
+    bitmap.close();
+  }
 }
 
 function imageAltFromFileName(fileName: string) {
@@ -1991,6 +2286,8 @@ export default function Home() {
   const [content, setContent] = useState(SAMPLE_MARKDOWN);
   const [fileName, setFileName] = useState(DEFAULT_FILE_NAME);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [fileResidency, setFileResidency] =
+    useState<FileResidency>("vault-local");
   const [saveErrorVisible, setSaveErrorVisible] = useState(false);
   const [activeDocumentPath, setActiveDocumentPath] = useState("");
   const [documentType, setDocumentType] =
@@ -2048,8 +2345,11 @@ export default function Home() {
   );
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const [shortcutSettingsOpen, setShortcutSettingsOpen] = useState(false);
+  const [firstRunOpen, setFirstRunOpen] = useState(false);
+  const [aiSetupPromptOpen, setAiSetupPromptOpen] = useState(false);
   const [settingsInitialCategory, setSettingsInitialCategory] = useState<
     | "general"
+    | "ai"
     | "appearance"
     | "reading"
     | "editing"
@@ -2065,6 +2365,11 @@ export default function Home() {
     useState<AppearancePreferences>(DEFAULT_APPEARANCE_PREFERENCES);
   const [appearancePreferencesHydrated, setAppearancePreferencesHydrated] =
     useState(false);
+  const [generalPreferences, setGeneralPreferences] =
+    useState<GeneralPreferences>(DEFAULT_GENERAL_PREFERENCES);
+  const generalPreferencesRef = useRef<GeneralPreferences>(
+    DEFAULT_GENERAL_PREFERENCES,
+  );
   const [readingPreferences, setReadingPreferences] =
     useState<ReadingPreferences>(DEFAULT_READING_PREFERENCES);
   const [readingPreferencesHydrated, setReadingPreferencesHydrated] =
@@ -2079,10 +2384,16 @@ export default function Home() {
   const fileLibraryPreferencesRef = useRef<FileLibraryPreferences>(
     DEFAULT_FILE_LIBRARY_PREFERENCES,
   );
+  const [backupStatus, setBackupStatus] = useState<BackupStatus>(
+    DEFAULT_BACKUP_STATUS,
+  );
   const [privacyPreferences, setPrivacyPreferences] =
     useState<PrivacyPreferences>(DEFAULT_PRIVACY_PREFERENCES);
   const [privacyPreferencesHydrated, setPrivacyPreferencesHydrated] =
     useState(false);
+  const [aiPreferences, setAiPreferences] =
+    useState<AiPreferences>(DEFAULT_AI_PREFERENCES);
+  const [aiPreferencesHydrated, setAiPreferencesHydrated] = useState(false);
   const [approvedRemoteImages, setApprovedRemoteImages] = useState<Set<string>>(
     () => new Set(),
   );
@@ -2187,10 +2498,18 @@ export default function Home() {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [softwareUpdateState, setSoftwareUpdateState] =
+    useState<SoftwareUpdateState>(() => ({
+      ...DEFAULT_SOFTWARE_UPDATE_STATE,
+      currentVersion: packageMetadata.version,
+    }));
+  const [dismissedSoftwareUpdateBanner, setDismissedSoftwareUpdateBanner] =
+    useState("");
   const [closedTabRecoveryVisible, setClosedTabRecoveryVisible] =
     useState(false);
   const [hydrated, setHydrated] = useState(false);
   const documentTabsHydratedRef = useRef(false);
+  const startupLandingRef = useRef(false);
   const [documentTabs, setDocumentTabs] = useState<
     DocumentTabRecord<LocalDocumentSnapshot>[]
   >([]);
@@ -2213,6 +2532,8 @@ export default function Home() {
     resizeSidebarFromKeyboard,
   ] = useSidebarShellState();
   const [aiContext, setAiContext] = useState<AiFrozenContext | null>(null);
+  const [audioTranscriptionSession, setAudioTranscriptionSession] =
+    useState<AudioTranscriptionSession | null>(null);
   const [codexConnectionState, setCodexConnectionState] =
     useState<CodexConnectionState>("checking");
   const [aiUndoRecord, setAiUndoRecord] = useState<{
@@ -2310,6 +2631,8 @@ export default function Home() {
   const [editorCaretOffset, setEditorCaretOffset] = useState(0);
   const [editorSelectionActionIndex, setEditorSelectionActionIndex] =
     useState(0);
+  const [editorSelectionMoreOpen, setEditorSelectionMoreOpen] = useState(false);
+  const [editorSelectionMoreIndex, setEditorSelectionMoreIndex] = useState(0);
   const [selectionDraft, setSelectionDraft] = useState<SelectionDraft | null>(
     null,
   );
@@ -2349,6 +2672,9 @@ export default function Home() {
   const editorPaneRef = useRef<HTMLElement>(null);
   const editorSelectionMenuRef = useRef<HTMLDivElement>(null);
   const editorSelectionActionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const editorSelectionMoreActionRefs = useRef<Array<HTMLButtonElement | null>>(
+    [],
+  );
   const editorSelectionFocusRequestedRef = useRef(false);
   const editorToolMenuRef = useRef<HTMLDivElement>(null);
   const editorToolMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -2398,6 +2724,8 @@ export default function Home() {
   const commandPaletteReturnFocusRef = useRef<HTMLElement>(null);
   const shortcutHelpReturnFocusRef = useRef<HTMLElement>(null);
   const shortcutSettingsReturnFocusRef = useRef<HTMLElement>(null);
+  const aiSetupDialogRef = useRef<HTMLDivElement>(null);
+  const aiSetupActionRef = useRef<HTMLButtonElement>(null);
   const aboutReturnFocusRef = useRef<HTMLElement>(null);
   const supportReturnFocusRef = useRef<HTMLElement>(null);
   const exportReturnFocusRef = useRef<HTMLElement>(null);
@@ -2723,6 +3051,7 @@ export default function Home() {
   );
   const mermaidBlocks = useMemo(() => findMermaidBlocks(content), [content]);
   const formulaBlocks = useMemo(() => findFormulaBlocks(content), [content]);
+  const audioBlocks = useMemo(() => findAudioBlocks(content), [content]);
   const imageAssetsById = useMemo(
     () => new Map(imageAssets.map((asset) => [asset.id, asset])),
     [imageAssets],
@@ -2844,6 +3173,17 @@ export default function Home() {
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
+      const preferences = parseGeneralPreferences(
+        window.localStorage.getItem(GENERAL_PREFERENCES_STORAGE_KEY),
+      );
+      generalPreferencesRef.current = preferences;
+      setGeneralPreferences(preferences);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
       const preferences = parseReadingPreferences(
         window.localStorage.getItem(READING_PREFERENCES_STORAGE_KEY),
       );
@@ -2906,6 +3246,204 @@ export default function Home() {
   }, [fileLibraryPreferences, fileLibraryPreferencesHydrated]);
 
   useEffect(() => {
+    let active = true;
+    const storedPreferences = parseBackupPreferences(
+      window.localStorage.getItem(BACKUP_PREFERENCES_STORAGE_KEY),
+    );
+    const hydrationFrame = window.requestAnimationFrame(() => {
+      if (!active) return;
+      setBackupStatus((current) => ({
+        ...current,
+        preferences: storedPreferences,
+      }));
+    });
+
+    const desktop = window.raaviDesktop;
+    if (desktop?.getBackupStatus) {
+      void desktop
+        .getBackupStatus()
+        .then((status) => {
+          if (!active) return;
+          setBackupStatus(status);
+          window.localStorage.setItem(
+            BACKUP_PREFERENCES_STORAGE_KEY,
+            JSON.stringify(status.preferences),
+          );
+        })
+        .catch(() => {
+          if (!active) return;
+          setBackupStatus((current) => ({
+            ...current,
+            connection: { state: "error", accountEmail: "" },
+            lastError: "وضعیت پشتیبان‌گیری قابل بازیابی نبود.",
+          }));
+        });
+    }
+    const unsubscribe = desktop?.onBackupStatusChanged?.((status) => {
+      if (!active) return;
+      setBackupStatus(status);
+    });
+    return () => {
+      active = false;
+      window.cancelAnimationFrame(hydrationFrame);
+      unsubscribe?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const desktop = window.raaviDesktop;
+    void desktop?.getSoftwareUpdateStatus?.().then((status) => {
+      if (active && status) setSoftwareUpdateState(status);
+    }).catch(() => {});
+    const unsubscribe = desktop?.onSoftwareUpdateStatusChanged?.((status) => {
+      if (!active) return;
+      setSoftwareUpdateState(status);
+    });
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, []);
+
+  const softwareUpdateActions = useMemo<SoftwareUpdateActions>(
+    () => ({
+      onCheck: () => {
+        void window.raaviDesktop?.checkSoftwareUpdate?.().then((status) => {
+          if (status) setSoftwareUpdateState(status);
+        });
+      },
+      onDownload: () => {
+        void window.raaviDesktop?.downloadSoftwareUpdate?.().then((status) => {
+          if (status) setSoftwareUpdateState(status);
+        });
+      },
+      onPause: () => {
+        void window.raaviDesktop?.pauseSoftwareUpdate?.().then((status) => {
+          if (status) setSoftwareUpdateState(status);
+        });
+      },
+      onResume: () => {
+        void window.raaviDesktop?.resumeSoftwareUpdate?.().then((status) => {
+          if (status) setSoftwareUpdateState(status);
+        });
+      },
+      onCancel: () => {
+        void window.raaviDesktop?.cancelSoftwareUpdate?.().then((status) => {
+          if (status) setSoftwareUpdateState(status);
+        });
+      },
+      onInstall: () => {
+        void window.raaviDesktop?.installSoftwareUpdate?.();
+      },
+      onOpenNotes: () => {
+        void window.raaviDesktop?.openSoftwareUpdateNotes?.();
+      },
+      onDirectDownload: () => {
+        void window.raaviDesktop?.openSoftwareUpdateDirectDownload?.();
+      },
+    }),
+    [],
+  );
+
+  const commitBackupPreferences = useCallback(
+    async (preferences: BackupPreferences) => {
+      setBackupStatus((current) => ({ ...current, preferences }));
+      try {
+        window.localStorage.setItem(
+          BACKUP_PREFERENCES_STORAGE_KEY,
+          JSON.stringify(preferences),
+        );
+      } catch {
+        // The desktop store remains authoritative when browser storage is full.
+      }
+      const status = await window.raaviDesktop?.updateBackupPreferences?.(
+        preferences,
+      );
+      if (status) setBackupStatus(status);
+    },
+    [],
+  );
+
+  const selectBackupProvider = useCallback(
+    async (providerId: BackupProviderId) => {
+      const status = await window.raaviDesktop?.selectBackupProvider?.(
+        providerId,
+      );
+      if (status) {
+        setBackupStatus(status);
+        return status;
+      }
+      setBackupStatus((current) => ({
+        ...current,
+        providerId,
+        connection: { state: "disconnected", accountEmail: "" },
+        quota: null,
+        lastError: "",
+        connectionError: undefined,
+      }));
+      return undefined;
+    },
+    [],
+  );
+
+  const connectBackupProvider = useCallback(async (providerId: BackupProviderId) => {
+    const desktop = window.raaviDesktop;
+    const connect = desktop?.connectBackupProvider
+      ? () => desktop.connectBackupProvider?.(providerId)
+      : providerId === "google-drive" && desktop?.connectGoogleDrive
+        ? () => desktop.connectGoogleDrive?.()
+        : null;
+    if (!connect) {
+      setBackupStatus((current) => ({
+        ...current,
+        providerId,
+        connection: { state: "error", accountEmail: "" },
+        connectionError: {
+          code: "desktop-required",
+          message: "Cloud backup is available in the desktop app.",
+        },
+      }));
+      return undefined;
+    }
+    const status = await connect();
+    if (status) setBackupStatus(status);
+    return status;
+  }, []);
+
+  const disconnectBackupProvider = useCallback(async (providerId: BackupProviderId) => {
+    const desktop = window.raaviDesktop;
+    const status = desktop?.disconnectBackupProvider
+      ? await desktop.disconnectBackupProvider(providerId)
+      : providerId === "google-drive"
+        ? await desktop?.disconnectGoogleDrive?.()
+        : undefined;
+    if (status) setBackupStatus(status);
+  }, []);
+
+  const listCloudBackups = useCallback(async () => {
+    const list = window.raaviDesktop?.listCloudBackups;
+    if (!list) {
+      throw new Error("بازیابی فضای ابری فقط در نسخهٔ دسکتاپ در دسترس است.");
+    }
+    return list();
+  }, []);
+
+  const restoreCloudBackups = useCallback(async (documentIds: string[]) => {
+    const restore = window.raaviDesktop?.restoreCloudBackups;
+    if (!restore) {
+      throw new Error("بازیابی فضای ابری فقط در نسخهٔ دسکتاپ در دسترس است.");
+    }
+    return restore(documentIds);
+  }, []);
+
+  const revealCloudRestore = useCallback(async (restoreRoot: string) => {
+    const reveal = window.raaviDesktop?.revealCloudRestore;
+    if (!reveal) return { revealed: false };
+    return reveal(restoreRoot);
+  }, []);
+
+  useEffect(() => {
     if (!fileLibraryPreferencesHydrated || !libraryFolders.length) return;
     if (
       libraryFolders.some(
@@ -2955,6 +3493,68 @@ export default function Home() {
       // Privacy preferences continue to work in-session.
     }
   }, [privacyPreferences, privacyPreferencesHydrated]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const hydrate = async () => {
+      const localPreferences = parseAiPreferences(
+        window.localStorage.getItem(AI_PREFERENCES_STORAGE_KEY),
+      );
+      let nextPreferences = localPreferences;
+      const desktop = window.raaviDesktop;
+      if (desktop?.getAiPreferences) {
+        try {
+          const storedPreferences = await desktop.getAiPreferences();
+          if (storedPreferences) {
+            nextPreferences = parseAiPreferences(
+              JSON.stringify(storedPreferences),
+            );
+          } else if (desktop.saveAiPreferences) {
+            await desktop.saveAiPreferences(localPreferences);
+          }
+        } catch {
+          // The current-origin local storage remains a safe fallback.
+        }
+      }
+      if (cancelled) return;
+      setAiPreferences(nextPreferences);
+      setAiPreferencesHydrated(true);
+    };
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!aiPreferencesHydrated) return;
+    try {
+      window.localStorage.setItem(
+        AI_PREFERENCES_STORAGE_KEY,
+        JSON.stringify(aiPreferences),
+      );
+    } catch {
+      // AI preferences continue to work in-session.
+    }
+    void window.raaviDesktop?.saveAiPreferences?.(aiPreferences).catch(() => {
+      // The renderer copy remains available when the native store is unavailable.
+    });
+  }, [aiPreferences, aiPreferencesHydrated]);
+
+  const commitAiPreferences = useCallback((preferences: AiPreferences) => {
+    setAiPreferences(preferences);
+    try {
+      window.localStorage.setItem(
+        AI_PREFERENCES_STORAGE_KEY,
+        JSON.stringify(preferences),
+      );
+    } catch {
+      // The in-memory selection still applies for this session.
+    }
+    void window.raaviDesktop?.saveAiPreferences?.(preferences).catch(() => {
+      // The current-origin local storage remains a safe fallback.
+    });
+  }, []);
 
   useEffect(
     () => () => {
@@ -4583,6 +5183,7 @@ export default function Home() {
       versions: versions.slice(-MAX_LOCAL_VERSIONS),
       activeDocumentPath,
       documentType,
+      residency: fileResidency,
       lastSavedSnapshot,
       draftId: documentDraftId,
       viewMode: readingMode ? "reading" : "desk",
@@ -4606,6 +5207,7 @@ export default function Home() {
       documentType,
       documentDraftId,
       fileName,
+      fileResidency,
       imageAssets,
       lastSavedSnapshot,
       readerSize,
@@ -4661,6 +5263,14 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated || !documentTabsHydratedRef.current) return;
+    if (
+      startupLandingRef.current &&
+      !activeDocumentTabId &&
+      documentTabs.length === 0
+    ) {
+      return;
+    }
+    startupLandingRef.current = false;
     const timer = window.setTimeout(() => {
       try {
         window.localStorage.setItem(
@@ -5126,6 +5736,64 @@ export default function Home() {
     noticeTimerRef.current = setTimeout(() => setNotice(""), 2400);
   }, []);
 
+  const vaultPromotionInProgressRef = useRef(false);
+  const promoteCurrentDocumentToVault = useCallback(
+    async (reason: "first-edit" | "manual-move") => {
+      if (fileResidency !== "reading" || vaultPromotionInProgressRef.current) {
+        return;
+      }
+      vaultPromotionInProgressRef.current = true;
+      const promotedSnapshot: LocalDocumentSnapshot = {
+        ...localDocumentSnapshot,
+        residency: "vault-local",
+        vaultReason: reason,
+      };
+      try {
+        const desktop = window.raaviDesktop;
+        if (desktop?.promoteToVault) {
+          await desktop.promoteToVault(promotedSnapshot, reason);
+        } else {
+          await writeLocalDocumentSnapshot(promotedSnapshot);
+        }
+        setFileResidency("vault-local");
+        showNotice(
+          reason === "manual-move"
+            ? "فایل به مخزن منتقل شد؛ از این پس تغییرها فوری ذخیره می‌شوند."
+            : "با اولین تغییر، نسخه‌ای امن در مخزن ساخته شد.",
+        );
+      } catch {
+        setSaveState("error");
+        setSaveErrorVisible(true);
+        showNotice(
+          "انتقال به مخزن کامل نشد؛ نسخهٔ مطالعاتی بدون تغییر باقی ماند.",
+        );
+      } finally {
+        vaultPromotionInProgressRef.current = false;
+      }
+    },
+    [fileResidency, localDocumentSnapshot, showNotice],
+  );
+
+  useEffect(() => {
+    if (
+      !hydrated ||
+      fileResidency !== "reading" ||
+      currentSnapshot === lastSavedSnapshot
+    ) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      void promoteCurrentDocumentToVault("first-edit");
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    currentSnapshot,
+    fileResidency,
+    hydrated,
+    lastSavedSnapshot,
+    promoteCurrentDocumentToVault,
+  ]);
+
   const showClosedTabRecovery = useCallback(() => {
     setClosedTabRecoveryVisible(true);
     if (closedTabRecoveryTimerRef.current) {
@@ -5219,6 +5887,8 @@ export default function Home() {
         (savedPosition
           ? savedPosition.viewMode === "reading"
           : Boolean(document.openInReadingMode));
+      const nextResidency: FileResidency =
+        document.residency ?? (nextReadingMode ? "reading" : "vault-local");
       readingDocumentStateRef.current = {
         documentKey: nextDocumentKey,
         contentSignature: nextContentSignature,
@@ -5262,6 +5932,7 @@ export default function Home() {
         versions: document.versions ?? [],
         activeDocumentPath: nextDocumentPath ?? "",
         documentType: nextDocumentType,
+        residency: nextResidency,
         lastSavedSnapshot: nextSavedSnapshot,
         draftId: nextDraftId,
         viewMode: nextReadingMode ? "reading" : "desk",
@@ -5298,6 +5969,7 @@ export default function Home() {
       setExternalLibraryChange(null);
       setDocumentDraftId(nextDraftId);
       setDocumentType(nextDocumentType);
+      setFileResidency(nextResidency);
       setRevision(document.revision ?? 1);
       setVersions(document.versions ?? []);
       setVersionsRefreshError("");
@@ -5358,16 +6030,31 @@ export default function Home() {
     ],
   );
 
+  const applyOpenedDocumentRef = useRef(applyOpenedDocument);
+  useEffect(() => {
+    applyOpenedDocumentRef.current = applyOpenedDocument;
+  }, [applyOpenedDocument]);
+
   useEffect(() => {
     const desktop = window.raaviDesktop;
     if (!desktop || !hydrated) return;
 
+    const notifyDocumentPresented = () => {
+      // The startup WebContentsView can occlude this renderer and suspend its
+      // animation frames. Use a task timer for the critical startup handshake
+      // so opening a document cannot deadlock behind the overlay.
+      window.setTimeout(() => desktop.documentPresented?.(), 80);
+    };
     const unsubscribe = desktop.onOpenMarkdownFile((document) => {
-      applyOpenedDocument(document, `«${document.name}» باز شد.`);
+      applyOpenedDocumentRef.current(document, `«${document.name}» باز شد.`);
+      notifyDocumentPresented();
     });
-    desktop.rendererReady();
-    return unsubscribe;
-  }, [applyOpenedDocument, hydrated]);
+    const readyTimer = window.setTimeout(() => desktop.rendererReady(), 0);
+    return () => {
+      unsubscribe();
+      window.clearTimeout(readyTimer);
+    };
+  }, [hydrated]);
 
   const applyLocalDocumentSnapshot = useCallback(
     (snapshot: Partial<LocalDocumentSnapshot>) => {
@@ -5490,6 +6177,15 @@ export default function Home() {
       ) {
         setDocumentType(snapshot.documentType);
       }
+      if (
+        snapshot.residency === "reading" ||
+        snapshot.residency === "vault-local" ||
+        snapshot.residency === "backed-up" ||
+        snapshot.residency === "syncing" ||
+        snapshot.residency === "error"
+      ) {
+        setFileResidency(snapshot.residency);
+      }
       setLastSavedSnapshot(
         typeof snapshot.lastSavedSnapshot === "string"
           ? snapshot.lastSavedSnapshot
@@ -5505,8 +6201,16 @@ export default function Home() {
     [cancelReadingRestoreWork, scheduleReadingRestore],
   );
 
+  const applyLocalDocumentSnapshotRef = useRef(applyLocalDocumentSnapshot);
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
+    applyLocalDocumentSnapshotRef.current = applyLocalDocumentSnapshot;
+  }, [applyLocalDocumentSnapshot]);
+
+  useEffect(() => {
+    // A startup overlay may fully occlude the renderer. Chromium is allowed to
+    // pause requestAnimationFrame in that state, so workspace hydration must
+    // not depend on an animation frame.
+    const timer = window.setTimeout(() => {
       void (async () => {
         try {
           if (openedDocumentRef.current) return;
@@ -5520,6 +6224,18 @@ export default function Home() {
               ? (JSON.parse(saved) as LocalDocumentSnapshot)
               : null;
           }
+          const storedGeneralPreferences = window.localStorage.getItem(
+            GENERAL_PREFERENCES_STORAGE_KEY,
+          );
+          const startupView = storedGeneralPreferences
+            ? parseGeneralPreferences(storedGeneralPreferences).startupView
+            : parsed ||
+                window.localStorage.getItem(DOCUMENT_SESSION_STORAGE_KEY) ||
+                window.localStorage.getItem(
+                  LEGACY_DOCUMENT_SESSION_STORAGE_KEY,
+                )
+              ? "workspace"
+              : DEFAULT_GENERAL_PREFERENCES.startupView;
           const restoredSession = fileLibraryPreferencesRef.current
             .restoreDocumentTabs
             ? parseDocumentSession(
@@ -5530,7 +6246,53 @@ export default function Home() {
                 isLocalDocumentSnapshot,
               )
             : null;
-          if (restoredSession) {
+          if (startupView === "recent") {
+            startupLandingRef.current = true;
+            setNewTabWorkspaceOpen(true);
+          } else if (startupView === "blank") {
+            const draftId = createReadingDraftId();
+            const tabId = documentTabId({ path: "", draftId });
+            const blankSnapshot: LocalDocumentSnapshot = {
+              content: "",
+              fileName: "بدون عنوان.md",
+              readerSize: READING_TEXT_SIZE_PX[
+                readingPreferencesRef.current.textSize
+              ],
+              annotations: [],
+              assets: [],
+              revision: 1,
+              versions: [],
+              activeDocumentPath: "",
+              documentType: "markdown",
+              residency: "vault-local",
+              lastSavedSnapshot: documentSnapshot("", [], []),
+              draftId,
+              viewMode: "desk",
+              readingOutlineOpen: false,
+              readingPositions: readingPositionsRef.current,
+              annotationComposer: null,
+            };
+            const blankTab: DocumentTabRecord<LocalDocumentSnapshot> = {
+              id: tabId,
+              title: blankSnapshot.fileName,
+              path: "",
+              draftId,
+              dirty: false,
+              pinned: false,
+              snapshot: blankSnapshot,
+            };
+            setDocumentTabs(
+              orderDocumentTabs([
+                ...(restoredSession?.tabs.filter((tab) => tab.id !== tabId) ??
+                  []),
+                blankTab,
+              ]),
+            );
+            setClosedDocumentTabs(restoredSession?.closedTabs ?? []);
+            setActiveDocumentTabId(tabId);
+            applyLocalDocumentSnapshotRef.current(blankSnapshot);
+            setNewTabWorkspaceOpen(false);
+          } else if (restoredSession) {
             const activeTab =
               restoredSession.tabs.find(
                 (tab) => tab.id === restoredSession.activeTabId,
@@ -5541,12 +6303,12 @@ export default function Home() {
             setClosedDocumentTabs(restoredSession.closedTabs);
             setActiveDocumentTabId(activeTab?.id ?? "");
             if (activeTab) {
-              applyLocalDocumentSnapshot(activeTab.snapshot);
+              applyLocalDocumentSnapshotRef.current(activeTab.snapshot);
             } else {
               setNewTabWorkspaceOpen(true);
             }
           } else if (parsed) {
-            applyLocalDocumentSnapshot(parsed);
+            applyLocalDocumentSnapshotRef.current(parsed);
             const initial =
               !parsed.activeDocumentPath &&
               parsed.draftId === "active" &&
@@ -5584,12 +6346,54 @@ export default function Home() {
           setHydrated(true);
         }
       })();
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [applyLocalDocumentSnapshot]);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;
+    const previewRequested =
+      new URLSearchParams(window.location.search).get("onboarding") === "1";
+    if (!window.raaviDesktop && !previewRequested) return;
+    if (previewRequested) {
+      const timer = window.setTimeout(() => setFirstRunOpen(true), 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    let cancelled = false;
+    void (async () => {
+      const desktop = window.raaviDesktop;
+      if (
+        !desktop?.getCodexConnectionStatus ||
+        !desktop.getBackupProviderConnections
+      ) {
+        if (!cancelled) setFirstRunOpen(true);
+        return;
+      }
+      try {
+        const [chatGPTStatus, providerConnections] = await Promise.all([
+          desktop.getCodexConnectionStatus(),
+          desktop.getBackupProviderConnections(),
+        ]);
+        if (
+          !cancelled &&
+          shouldAutoOpenFirstRun(chatGPTStatus, providerConnections)
+        ) {
+          setFirstRunOpen(true);
+        }
+      } catch {
+        if (!cancelled) setFirstRunOpen(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (startupLandingRef.current && isInitialWorkspace) return;
+    startupLandingRef.current = false;
 
     const timer = setTimeout(() => {
       const desktop = window.raaviDesktop;
@@ -5617,12 +6421,13 @@ export default function Home() {
     }, 450);
 
     return () => clearTimeout(timer);
-  }, [hydrated, localDocumentSnapshot]);
+  }, [hydrated, isInitialWorkspace, localDocumentSnapshot]);
 
   useEffect(() => {
     if (!hydrated) return;
 
     const flushLatestDocument = () => {
+      if (startupLandingRef.current && isInitialWorkspace) return;
       const position = readingPreferencesRef.current.rememberPosition
         ? lastReadingAnchorRef.current ?? captureCurrentReadingPosition()
         : null;
@@ -5639,6 +6444,7 @@ export default function Home() {
       const desktop = window.raaviDesktop;
       if (desktop) {
         void desktop.saveLocalDocumentSnapshot(latestSnapshot).catch(() => {});
+        void desktop.flushBackup?.().catch(() => {});
       } else {
         void writeLocalDocumentSnapshot(latestSnapshot).catch(() => {});
         try {
@@ -5677,7 +6483,12 @@ export default function Home() {
         flushLatestReadingPositionSync,
       );
     };
-  }, [captureCurrentReadingPosition, hydrated, localDocumentSnapshot]);
+  }, [
+    captureCurrentReadingPosition,
+    hydrated,
+    isInitialWorkspace,
+    localDocumentSnapshot,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -5764,6 +6575,18 @@ export default function Home() {
       setSelectionMenuPosition(null);
       window.getSelection()?.removeAllRanges();
     };
+    const dismissSelectionMenuWithEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectionDraft(null);
+      setSelectionHighlightRects([]);
+      setSelectionMenuPosition(null);
+      window.getSelection()?.removeAllRanges();
+      requestAnimationFrame(() =>
+        previewArticleRef.current?.focus({ preventScroll: true }),
+      );
+    };
     const dismissCancelledSelection = () => {
       if (selectionChangeFrame !== null) {
         cancelAnimationFrame(selectionChangeFrame);
@@ -5788,6 +6611,11 @@ export default function Home() {
     };
 
     document.addEventListener("pointerdown", dismissSelectionMenu, true);
+    document.addEventListener(
+      "keydown",
+      dismissSelectionMenuWithEscape,
+      true,
+    );
     document.addEventListener("selectionchange", dismissCancelledSelection);
     window.addEventListener("resize", dismissSelectionMenuOnResize);
     return () => {
@@ -5795,6 +6623,11 @@ export default function Home() {
         cancelAnimationFrame(selectionChangeFrame);
       }
       document.removeEventListener("pointerdown", dismissSelectionMenu, true);
+      document.removeEventListener(
+        "keydown",
+        dismissSelectionMenuWithEscape,
+        true,
+      );
       document.removeEventListener(
         "selectionchange",
         dismissCancelledSelection,
@@ -5830,8 +6663,23 @@ export default function Home() {
     };
     const dismissEditorSelectionMenuWithEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[aria-modal="true"]')
+      ) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
+      if (editorSelectionMoreOpen) {
+        setEditorSelectionMoreOpen(false);
+        requestAnimationFrame(() => {
+          editorSelectionActionRefs.current[
+            EDITOR_SELECTION_PRIMARY_COMMANDS.length + 1
+          ]?.focus({ preventScroll: true });
+        });
+        return;
+      }
       const editor = editorRef.current;
       const tableSelection = editor?.tableCellSelection;
       dismissedEditorSelectionRef.current = tableSelection
@@ -5875,7 +6723,11 @@ export default function Home() {
       );
       window.removeEventListener("resize", dismissEditorSelectionMenuOnResize);
     };
-  }, [editorSelectionActionIndex, editorSelectionMenuPosition]);
+  }, [
+    editorSelectionActionIndex,
+    editorSelectionMenuPosition,
+    editorSelectionMoreOpen,
+  ]);
 
   useEffect(() => {
     if (!editorToolMenuOpen && !editorBlockMenu && !editorHelper) return;
@@ -5896,6 +6748,12 @@ export default function Home() {
       setEditorHelper(null);
     };
     const handleContextualKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[aria-modal="true"]')
+      ) {
+        return;
+      }
       if (
         editorBlockMenu &&
         ["ArrowDown", "ArrowUp", "Home", "End", "Enter"].includes(event.key) &&
@@ -6025,6 +6883,12 @@ export default function Home() {
     };
     const dismissReadingToolsWithEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[aria-modal="true"]')
+      ) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       setReadingToolsOpen(false);
@@ -6194,6 +7058,14 @@ export default function Home() {
   useEffect(() => {
     syncLayer("settings", shortcutSettingsOpen);
   }, [shortcutSettingsOpen, syncLayer]);
+
+  useEffect(() => {
+    syncLayer("onboarding", firstRunOpen);
+  }, [firstRunOpen, syncLayer]);
+
+  useEffect(() => {
+    syncLayer("aiSetup", aiSetupPromptOpen);
+  }, [aiSetupPromptOpen, syncLayer]);
 
   useEffect(() => {
     syncLayer("library", libraryOpen && libraryIsModal);
@@ -6887,6 +7759,21 @@ export default function Home() {
   };
 
   const focusAnnotation = (annotation: RaaviAnnotation) => {
+    if (
+      annotation.audioSource &&
+      Number.isFinite(annotation.audioStartMs) &&
+      Number.isFinite(annotation.audioEndMs)
+    ) {
+      window.dispatchEvent(
+        new CustomEvent("raavi:play-audio-segment", {
+          detail: {
+            source: annotation.audioSource,
+            startMs: annotation.audioStartMs,
+            endMs: annotation.audioEndMs,
+          },
+        }),
+      );
+    }
     cancelReadingRestoreWork();
     readingIntentionalNavigationRef.current = true;
     setActiveAnnotationId(annotation.id);
@@ -7205,7 +8092,16 @@ export default function Home() {
       try {
         const desktop = window.raaviDesktop;
         if (desktop) {
-          const result = await desktop.saveMarkdown(nextName, payload);
+          const defaultDirectory = libraryFolders.find(
+            (folder) =>
+              folder.rootId ===
+              fileLibraryPreferencesRef.current.activeWorkspaceRootId,
+          )?.rootPath;
+          const result = await desktop.saveMarkdown(
+            nextName,
+            payload,
+            defaultDirectory,
+          );
           if (!result.saved) {
             closeAfterSaveRequestedRef.current = false;
             setSaveState(effectiveSaveState === "dirty" ? "dirty" : "saved");
@@ -7259,6 +8155,7 @@ export default function Home() {
       commitSavedVersion,
       content,
       effectiveSaveState,
+      libraryFolders,
       saveFileName,
       saveFileType,
     ],
@@ -7927,20 +8824,28 @@ export default function Home() {
         const scan = await window.raaviDesktop.chooseMarkdownFolder();
         if (!scan) {
           setLibraryState(libraryFiles.length ? "ready" : "idle");
-          return;
+          return null;
         }
         applyDesktopLibrary(scan);
+        const activeWorkspaceRootId = scan.rootPath.toLocaleLowerCase("en-US");
+        const nextPreferences = {
+          ...fileLibraryPreferencesRef.current,
+          activeWorkspaceRootId,
+        };
+        fileLibraryPreferencesRef.current = nextPreferences;
+        setFileLibraryPreferences(nextPreferences);
+        return scan.rootPath;
       } catch {
         setLibraryState(libraryFiles.length ? "ready" : "idle");
         setError("اتصال به پوشه انجام نشد؛ دوباره «انتخاب پوشه» را بزنید.");
+        return null;
       }
-      return;
     }
 
     const pickerWindow = window as DirectoryPickerWindow;
     if (!pickerWindow.showDirectoryPicker) {
       directoryInputRef.current?.click();
-      return;
+      return null;
     }
 
     try {
@@ -7961,21 +8866,31 @@ export default function Home() {
       directoryHandlesRef.current.set(rootId, handle);
       setActiveLibraryPath("");
       const scanned = await scanConnectedDirectory(handle, false, rootId);
+      if (scanned) {
+        const nextPreferences = {
+          ...fileLibraryPreferencesRef.current,
+          activeWorkspaceRootId: rootId,
+        };
+        fileLibraryPreferencesRef.current = nextPreferences;
+        setFileLibraryPreferences(nextPreferences);
+      }
       if (scanned && !persisted) {
         setError(
           "این مرورگر نگه‌داری دسترسی پوشه را نپذیرفت؛ اتصال فقط تا بستن این صفحه فعال می‌ماند.",
         );
       }
+      return scanned ? handle.name : null;
     } catch (pickerError) {
       if (
         pickerError instanceof DOMException &&
         pickerError.name === "AbortError"
       ) {
-        return;
+        return null;
       }
       setError(
         "اتصال به پوشه انجام نشد؛ دوباره «انتخاب پوشه» را بزنید و اجازه‌ی خواندن بدهید.",
       );
+      return null;
     }
   }, [applyDesktopLibrary, libraryFiles.length, scanConnectedDirectory]);
 
@@ -9305,10 +10220,72 @@ export default function Home() {
   };
 
   const focusEditorSelectionAction = (index: number) => {
-    const actionCount = EDITOR_SELECTION_COMMANDS.length + 1;
+    const actionCount = EDITOR_SELECTION_PRIMARY_COMMANDS.length + 2;
     const normalizedIndex = (index + actionCount) % actionCount;
     setEditorSelectionActionIndex(normalizedIndex);
     editorSelectionActionRefs.current[normalizedIndex]?.focus();
+  };
+
+  const copyEditorSelection = async () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const tableSelection = editor.tableCellSelection;
+    const selectedText =
+      tableSelection?.text ??
+      editor.value.slice(editor.selectionStart, editor.selectionEnd);
+    if (!selectedText) return;
+    try {
+      await navigator.clipboard.writeText(selectedText);
+      showNotice("متن انتخاب‌شده کپی شد.");
+    } catch {
+      showNotice("کپی انجام نشد؛ دسترسی کلیپ‌بورد را بررسی کنید.");
+    }
+  };
+
+  const pasteIntoEditorSelection = async () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    try {
+      const clipboardText = await navigator.clipboard.readText();
+      if (!clipboardText) {
+        showNotice("کلیپ‌بورد خالی است.");
+        return;
+      }
+      const tableSelection = editor.tableCellSelection;
+      if (tableSelection) {
+        editor.replaceTableCellRange({
+          from: tableSelection.start,
+          to: tableSelection.end,
+          insert: clipboardText,
+          announcement: "متن کلیپ‌بورد جای‌گذاری شد",
+        });
+      } else {
+        editor.replaceRange({
+          from: editor.selectionStart,
+          to: editor.selectionEnd,
+          insert: clipboardText,
+          announcement: "متن کلیپ‌بورد جای‌گذاری شد",
+        });
+      }
+      setEditorSelectionMenuPosition(null);
+      showNotice("متن جای‌گذاری شد.");
+    } catch {
+      showNotice("جای‌گذاری انجام نشد؛ دسترسی کلیپ‌بورد را بررسی کنید.");
+    }
+  };
+
+  const runEditorSelectionAction = (
+    id: (typeof EDITOR_SELECTION_COMMANDS)[number]["id"],
+  ) => {
+    if (id === "clipboard.copy") {
+      void copyEditorSelection();
+      return;
+    }
+    if (id === "clipboard.paste") {
+      void pasteIntoEditorSelection();
+      return;
+    }
+    executeCommand(id);
   };
 
   const handleEditorSelectionToolbarKeyDown = (
@@ -9327,7 +10304,7 @@ export default function Home() {
         nextIndex = 0;
         break;
       case "End":
-        nextIndex = EDITOR_SELECTION_COMMANDS.length;
+        nextIndex = EDITOR_SELECTION_PRIMARY_COMMANDS.length + 1;
         break;
       default:
         return;
@@ -9335,6 +10312,41 @@ export default function Home() {
     event.preventDefault();
     event.stopPropagation();
     focusEditorSelectionAction(nextIndex);
+  };
+
+  const openEditorSelectionMore = () => {
+    setEditorSelectionMoreOpen(true);
+    setEditorSelectionMoreIndex(0);
+    requestAnimationFrame(() => {
+      editorSelectionMoreActionRefs.current[0]?.focus({ preventScroll: true });
+    });
+  };
+
+  const handleEditorSelectionMoreKeyDown = (
+    event: React.KeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowDown") {
+      nextIndex = editorSelectionMoreIndex + 1;
+    } else if (event.key === "ArrowUp") {
+      nextIndex = editorSelectionMoreIndex - 1;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = EDITOR_SELECTION_MORE_COMMANDS.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const normalizedIndex =
+      (nextIndex + EDITOR_SELECTION_MORE_COMMANDS.length) %
+      EDITOR_SELECTION_MORE_COMMANDS.length;
+    setEditorSelectionMoreIndex(normalizedIndex);
+    editorSelectionMoreActionRefs.current[normalizedIndex]?.focus({
+      preventScroll: true,
+    });
   };
 
   const editorAnnotationSelection = (): SelectionDraft | null => {
@@ -9483,6 +10495,42 @@ export default function Home() {
       selectionFrom: start,
       selectionTo: start + quoted.length,
       announcement: "نقل‌قول اعمال شد",
+    });
+  };
+
+  const insertDivider = (event?: KeyboardEvent) => {
+    const target = event?.target instanceof Node
+      ? event.target
+      : document.activeElement;
+    const editor = writingEditorRef.current?.contains(target)
+      ? writingEditorRef.current
+      : editorRef.current?.contains(target)
+        ? editorRef.current
+        : (editorRef.current ?? writingEditorRef.current);
+    if (!editor) return;
+
+    setEditorSelectionMenuPosition(null);
+    setEditorBlockMenu(null);
+    const source = editor.value;
+    const range = resolveMarkdownBlockRange(source, editor.selectionEnd);
+    const blockTo = source.trim() ? range.to : 0;
+    const lineBreak = source.includes("\r\n") ? "\r\n" : "\n";
+    const blockGap = `${lineBreak}${lineBreak}`;
+    const following = source.slice(blockTo);
+    const prefix =
+      blockTo === 0 || source.slice(0, blockTo).endsWith(blockGap)
+        ? ""
+        : blockGap;
+    const suffix = !following || following.startsWith(blockGap) ? "" : blockGap;
+    const insert = `${prefix}---${suffix}`;
+    const caret = blockTo + prefix.length + 3;
+    editor.replaceRange({
+      from: blockTo,
+      to: blockTo,
+      insert,
+      selectionFrom: caret,
+      selectionTo: caret,
+      announcement: "جداکننده درج شد",
     });
   };
 
@@ -9841,16 +10889,14 @@ export default function Home() {
         .replace(/[\[\]\r\n]/gu, " ")
         .trim();
       const id = `image-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
-      const [data, dimensions] = await Promise.all([
-        readImageAssetData(file),
-        readImageAssetDimensions(file),
-      ]);
+      const optimizedImage = await optimizeImageAsset(file);
+      const data = await readImageAssetData(optimizedImage.blob);
       const asset: RaaviImageAsset = {
         id,
         name: file.name.slice(0, 240),
-        mimeType: file.type as RaaviImageAsset["mimeType"],
+        mimeType: optimizedImage.mimeType,
         data,
-        ...dimensions,
+        ...optimizedImage.dimensions,
       };
       const imageMarkdown = `![${selectedAlt || imageAltFromFileName(file.name)}](${raaviImageUrl(id)})`;
       const prefix =
@@ -9873,7 +10919,9 @@ export default function Home() {
       setError("");
       setImageInsertError("");
       showNotice(
-        `«${file.name}» به سند اضافه شد؛ در پوشهٔ همین سند نگه‌داری می‌شود.`,
+        optimizedImage.optimized
+          ? `«${file.name}» یک‌بار به WebP کم‌حجم تبدیل و به سند اضافه شد.`
+          : `«${file.name}» به سند اضافه شد؛ فایل کم‌حجم دوباره فشرده نشد.`,
       );
       return true;
     } catch {
@@ -10372,6 +11420,23 @@ export default function Home() {
     });
   };
 
+  const replayFirstRunOnboarding = () => {
+    setShortcutSettingsOpen(false);
+    window.requestAnimationFrame(() => setFirstRunOpen(true));
+  };
+
+  const finishFirstRunOnboarding = () => {
+    try {
+      window.localStorage.setItem(
+        FIRST_RUN_STORAGE_KEY,
+        JSON.stringify({ completed: true, version: 1 }),
+      );
+    } catch {
+      // Completion remains active for the current session.
+    }
+    setFirstRunOpen(false);
+  };
+
   const clearRecentFilesFromSettings = async () => {
     const desktop = window.raaviDesktop;
     if (desktop?.clearRecentFiles) {
@@ -10400,12 +11465,20 @@ export default function Home() {
         JSON.stringify(localDocumentSnapshot),
       );
     }
+    try {
+      await desktop?.clearAiPreferences?.();
+    } catch {
+      // Reset the renderer settings even if the native preference file is unavailable.
+    }
     const settingKeys = [
       APPEARANCE_PREFERENCES_STORAGE_KEY,
+      GENERAL_PREFERENCES_STORAGE_KEY,
       LEGACY_THEME_STORAGE_KEY,
       READING_PREFERENCES_STORAGE_KEY,
       FILE_LIBRARY_PREFERENCES_STORAGE_KEY,
+      BACKUP_PREFERENCES_STORAGE_KEY,
       PRIVACY_PREFERENCES_STORAGE_KEY,
+      AI_PREFERENCES_STORAGE_KEY,
       CODE_VIEW_PREFERENCES_STORAGE_KEY,
       COMMAND_USAGE_STORAGE_KEY,
       QUICK_OPEN_USAGE_STORAGE_KEY,
@@ -10413,6 +11486,7 @@ export default function Home() {
       PANE_LAYOUT_STORAGE_KEY,
       SIDEBAR_STORAGE_KEY,
       WORKSPACE_STATE_STORAGE_KEY,
+      FIRST_RUN_STORAGE_KEY,
       "raavi:file-tree:v1",
     ];
     for (const key of settingKeys) window.localStorage.removeItem(key);
@@ -10439,6 +11513,7 @@ export default function Home() {
     returnTarget?: HTMLElement | null,
     initialCategory:
       | "general"
+      | "ai"
       | "appearance"
       | "reading"
       | "editing"
@@ -11006,6 +12081,10 @@ export default function Home() {
       );
     }
   };
+  const openSidebarViewRef = useRef(openSidebarView);
+  useLayoutEffect(() => {
+    openSidebarViewRef.current = openSidebarView;
+  });
 
   const closeSidebarFromUser = () => {
     const returnTarget = libraryReturnFocusRef.current;
@@ -11064,12 +12143,175 @@ export default function Home() {
   };
 
   const openAiContext = (nextContext: AiFrozenContextDraft) => {
+    setAudioTranscriptionSession(null);
     setAiContext({ ...nextContext, sessionId: crypto.randomUUID() });
     setAiUndoRecord(null);
     setEditorSelectionMenuPosition(null);
     openSidebarView("ai", "ai", "ensure");
-    void checkCodexConnection();
+    void checkCodexConnection().then((state) => {
+      if (state !== "connected" && state !== "unavailable") {
+        setAiSetupPromptOpen(true);
+      }
+    });
   };
+
+  const resolveAudioSource = useCallback(
+    async (source: string): Promise<AudioSourceResolution> => {
+      const desktop = window.raaviDesktop;
+      if (!desktop?.resolveAudioAsset || !activeDocumentPath) {
+        return {
+          status: "blocked",
+          message: "پخش این فایل در نسخهٔ دسکتاپ و کنار سند ذخیره‌شده در دسترس است.",
+        };
+      }
+      try {
+        return await desktop.resolveAudioAsset(
+          activeDocumentPath,
+          decodedAudioPath(source),
+        );
+      } catch (cause) {
+        return {
+          status: "blocked",
+          message:
+            cause instanceof Error
+              ? cause.message
+              : "فایل صوتی کنار سند پیدا نشد.",
+        };
+      }
+    },
+    [activeDocumentPath],
+  );
+
+  const openAudioTranscription = useCallback(
+    (source: string, fileLabel?: string) => {
+      if (!activeDocumentPath) {
+        showNotice("برای تبدیل صوت، ابتدا سند را ذخیره کنید.");
+        setSaveModalOpen(true);
+        return;
+      }
+      const block = findAudioBlocks(content).find(
+        (candidate) => candidate.source === source,
+      );
+      if (!block) {
+        showNotice("بلاک صوت در نسخهٔ فعلی سند پیدا نشد.");
+        return;
+      }
+      setAiContext(null);
+      setAudioTranscriptionSession({
+        id: `${activeDocumentPath}:${source}`,
+        documentPath: activeDocumentPath,
+        relativePath: decodedAudioPath(source),
+        source,
+        fileName: fileLabel || block.fileName,
+        durationMs: 0,
+        blockFrom: block.startOffset,
+        blockTo: block.endOffset,
+      });
+      openSidebarViewRef.current("ai", "ai", "ensure");
+    },
+    [activeDocumentPath, content],
+  );
+
+  const activeChatGPTModel = useCallback(
+    () => aiPreferences.model || undefined,
+    [aiPreferences.model],
+  );
+
+  const cleanAudioTranscriptWithCodex = useCallback(
+    async (
+      segments: readonly AudioTranscriptSegment[],
+      kind: AudioContentKind,
+    ) => {
+      const desktop = window.raaviDesktop;
+      if (!desktop) throw new Error("راوی هوشمند در دسترس نیست.");
+      const rawTranscript = segments
+        .map(
+          (segment) =>
+            `[${Math.floor(segment.startMs / 1000)}s–${Math.ceil(segment.endMs / 1000)}s] ${segment.text}`,
+        )
+        .join("\n");
+      const payload = {
+        model: activeChatGPTModel(),
+        transcript: rawTranscript,
+        suggestedKind: kind,
+      };
+      if (!desktop.runCodexAudioCleanup) throw new Error("CODEX_CLI_MISSING");
+      return desktop.runCodexAudioCleanup(payload);
+    },
+    [activeChatGPTModel],
+  );
+
+  const insertAudioTranscript = useCallback(
+    async (
+      result: AudioStructuredResult,
+      segments: readonly AudioTranscriptSegment[],
+    ) => {
+      const session = audioTranscriptionSession;
+      const editor = editorRef.current;
+      if (!session || !editor || activeDocumentPath !== session.documentPath) {
+        showNotice("برای درج نتیجه به سند صوت برگردید.");
+        return false;
+      }
+      const block = findAudioBlocks(editor.value).find(
+        (candidate) => candidate.source === session.source,
+      );
+      if (!block) {
+        showNotice("بلاک صوت تغییر کرده یا حذف شده است؛ درج انجام نشد.");
+        return false;
+      }
+      const before = editor.value;
+      const markdown = result.markdown.trim();
+      const insertion = `\n\n${markdown}\n`;
+      setVersions((current) => {
+        const nextNumber =
+          Math.max(revision, ...current.map((version) => version.number)) + 1;
+        return [
+          ...current,
+          {
+            number: nextNumber,
+            savedAt: new Date().toISOString(),
+            content: before,
+            annotations,
+            kind: "ai" as const,
+          },
+        ].slice(-MAX_LOCAL_VERSIONS);
+      });
+      editor.replaceRange({
+        from: block.endOffset,
+        to: block.endOffset,
+        insert: insertion,
+        selectionFrom: block.endOffset + insertion.length,
+        selectionTo: block.endOffset + insertion.length,
+        announcement: "رونوشت ساختاریافته زیر بلاک صوت درج شد",
+      });
+      const timedComments: RaaviAnnotation[] = segments
+        .filter((segment) => segment.uncertain)
+        .map((segment) => ({
+          id: `audio-uncertain-${crypto.randomUUID()}`,
+          kind: "comment",
+          start: block.startOffset,
+          end: block.endOffset,
+          quote: block.raw,
+          prefix: before.slice(Math.max(0, block.startOffset - 80), block.startOffset),
+          suffix: before.slice(block.endOffset, block.endOffset + 80),
+          body: `نیاز به شنیدن دوباره · ${Math.floor(segment.startMs / 1000).toLocaleString("fa-IR")} ثانیه`,
+          createdAt: new Date().toISOString(),
+          source: "raavi-ai",
+          category: "نیاز به شنیدن دوباره",
+          confidence: segment.confidence,
+          status: "open",
+          audioSource: session.source,
+          audioStartMs: segment.startMs,
+          audioEndMs: segment.endMs,
+        }));
+      if (timedComments.length) {
+        setAnnotations((current) => [...current, ...timedComments]);
+      }
+      showNotice("رونوشت به چند بلاک واقعی زیر صوت افزوده شد");
+      return true;
+    },
+    [activeDocumentPath, annotations, audioTranscriptionSession, revision],
+  );
 
   const openAiForDocument = () => {
     openAiContext({
@@ -11138,23 +12380,27 @@ export default function Home() {
 
   const runAiPrompt = async (prompt: string) => {
     const desktop = window.raaviDesktop;
-    if (!aiContext || !desktop?.runCodexPrompt) {
-      throw new Error("اتصال Codex CLI در دسترس نیست.");
+    if (!aiContext || !desktop) {
+      throw new Error("ChatGPT در دسترس نیست.");
     }
     try {
-      return await desktop.runCodexPrompt({
+      if (desktop.runCodexPrompt) return await desktop.runCodexPrompt({
+        model: activeChatGPTModel(),
         context: aiContext.content,
         prompt,
       });
+      throw new Error("CODEX_CLI_MISSING");
     } catch (requestError) {
       const message = requestError instanceof Error ? requestError.message : "";
-      if (message.includes("CODEX_CLI_MISSING")) {
+      if (message.includes("CLI_MISSING")) {
         setCodexConnectionState("cli_missing");
-        throw new Error("Codex CLI پیدا نشد؛ راهنمای نصب را باز کنید.");
+        setAiSetupPromptOpen(true);
+        throw new Error("ابزار اتصال ChatGPT پیدا نشد؛ تنظیمات را بررسی کنید.");
       }
-      if (message.includes("CODEX_AUTH_REQUIRED")) {
+      if (message.includes("AUTH_REQUIRED")) {
         setCodexConnectionState("auth_required");
-        throw new Error("برای ادامه، با حساب ChatGPT وارد Codex CLI شوید.");
+        setAiSetupPromptOpen(true);
+        throw new Error("ورود با ChatGPT کامل نشده است؛ تنظیمات را باز کنید.");
       }
       throw new Error("پاسخ آماده نشد؛ اتصال را بررسی و دوباره تلاش کنید.");
     }
@@ -11162,15 +12408,17 @@ export default function Home() {
 
   const codexErrorForUser = (requestError: unknown) => {
     const message = requestError instanceof Error ? requestError.message : "";
-    if (message.includes("CODEX_CLI_MISSING")) {
+    if (message.includes("CLI_MISSING")) {
       setCodexConnectionState("cli_missing");
+      setAiSetupPromptOpen(true);
       return new Error("CODEX_CLI_MISSING");
     }
-    if (message.includes("CODEX_AUTH_REQUIRED")) {
+    if (message.includes("AUTH_REQUIRED")) {
       setCodexConnectionState("auth_required");
+      setAiSetupPromptOpen(true);
       return new Error("CODEX_AUTH_REQUIRED");
     }
-    if (message.includes("CODEX_QUOTA_EXHAUSTED")) {
+    if (message.includes("QUOTA_EXHAUSTED")) {
       return new Error("CODEX_QUOTA_EXHAUSTED");
     }
     return new Error("پاسخ آماده نشد؛ اتصال را بررسی و دوباره تلاش کنید.");
@@ -11178,7 +12426,7 @@ export default function Home() {
 
   const runPersianAiReview = async (reviewKey: string, source: string) => {
     const desktop = window.raaviDesktop;
-    if (!desktop?.runCodexPersianReview) {
+    if (!desktop) {
       throw new Error("CODEX_CLI_MISSING");
     }
     persianAiReviewContextsRef.current.set(reviewKey, {
@@ -11187,11 +12435,14 @@ export default function Home() {
       versionSaved: false,
     });
     try {
-      const raw = await desktop.runCodexPersianReview({
+      const payload = {
+        model: activeChatGPTModel(),
         document: source,
         economy:
           window.localStorage.getItem("raavi:ai-economy-mode:v1") === "true",
-      });
+      };
+      if (!desktop.runCodexPersianReview) throw new Error("CODEX_CLI_MISSING");
+      const raw = await desktop.runCodexPersianReview(payload);
       return normalizePersianAiReviewResult(raw, source);
     } catch (requestError) {
       throw codexErrorForUser(requestError);
@@ -11202,9 +12453,10 @@ export default function Home() {
     suggestion: PersianAiSuggestion,
   ) => {
     const desktop = window.raaviDesktop;
-    if (!desktop?.runCodexPrompt) throw new Error("CODEX_CLI_MISSING");
+    if (!desktop) throw new Error("CODEX_CLI_MISSING");
     try {
-      const result = await desktop.runCodexPrompt({
+      const payload = {
+        model: activeChatGPTModel(),
         context: suggestion.current,
         prompt: [
           `این پیشنهاد فارسی را با توجه به این دلیل دوباره بنویس: ${suggestion.reason}`,
@@ -11212,7 +12464,9 @@ export default function Home() {
           "قطعه‌کد، نشانی، مسیر فایل، نام متغیر، نام محصول و اصطلاح انگلیسی را دقیقاً دست‌نخورده نگه دار.",
           "replacement باید فقط جایگزین کامل همین عبارت باشد.",
         ].join("\n"),
-      });
+      };
+      if (!desktop.runCodexPrompt) throw new Error("CODEX_CLI_MISSING");
+      const result = await desktop.runCodexPrompt(payload);
       const replacement = result.replacement?.trim();
       if (
         !replacement ||
@@ -11323,17 +12577,20 @@ export default function Home() {
 
   const runSmartAnnotationReview = async (reviewKey: string, source: string) => {
     const desktop = window.raaviDesktop;
-    if (!desktop?.runCodexSmartAnnotations) throw new Error("CODEX_CLI_MISSING");
+    if (!desktop) throw new Error("CODEX_CLI_MISSING");
     smartAnnotationContextsRef.current.set(reviewKey, {
       sourceSnapshot: source,
       expectedContent: source,
       versionSaved: false,
     });
     try {
-      const raw = await desktop.runCodexSmartAnnotations({
+      const payload = {
+        model: activeChatGPTModel(),
         document: source,
         economy: window.localStorage.getItem("raavi:ai-economy-mode:v1") === "true",
-      });
+      };
+      if (!desktop.runCodexSmartAnnotations) throw new Error("CODEX_CLI_MISSING");
+      const raw = await desktop.runCodexSmartAnnotations(payload);
       return normalizeSmartAnnotationResult(raw, source);
     } catch (requestError) {
       throw codexErrorForUser(requestError);
@@ -11409,16 +12666,19 @@ export default function Home() {
 
   const rewriteSmartAnnotation = async (annotation: RaaviAnnotation) => {
     const desktop = window.raaviDesktop;
-    if (!desktop?.runCodexPrompt) throw new Error("CODEX_CLI_MISSING");
+    if (!desktop) throw new Error("CODEX_CLI_MISSING");
     try {
-      const result = await desktop.runCodexPrompt({
+      const payload = {
+        model: activeChatGPTModel(),
         context: annotation.quote,
         prompt: [
           `با توجه به این مسئله، پیشنهاد دقیق‌تری بنویس: ${annotation.body}`,
           "فقط جایگزین کامل عبارت را برگردان.",
           "معنا، Markdown، کد، نشانی، مسیر فایل، شناسه و اصطلاح فنی را حفظ کن.",
         ].join("\n"),
-      });
+      };
+      if (!desktop.runCodexPrompt) throw new Error("CODEX_CLI_MISSING");
+      const result = await desktop.runCodexPrompt(payload);
       const replacement = result.replacement?.trim();
       if (!replacement || replacement === annotation.quote) {
         throw new Error("بازنویسی قابل‌اعتمادی آماده نشد.");
@@ -11483,12 +12743,16 @@ export default function Home() {
   };
 
   const startCodexLoginFlow = async () => {
-    const result = await window.raaviDesktop?.startCodexLogin?.();
+    const desktop = window.raaviDesktop;
+    const result = await desktop?.startCodexLogin?.();
     if (!result) {
-      setCodexConnectionState("unavailable");
+      setAiSetupPromptOpen(true);
+      setCodexConnectionState(desktop ? "cli_missing" : "unavailable");
       return;
     }
-    setCodexConnectionState(result.state);
+    setCodexConnectionState(
+      result.state === "auth_waiting" ? "auth_waiting" : "connection_error",
+    );
   };
 
   const aiEditor = (context: AiFrozenContext) =>
@@ -11947,6 +13211,10 @@ export default function Home() {
       requestAnimationFrame(() => {
         if (editorRef.current) editorRef.current.scrollTop = preservedScrollTop;
         editorRef.current?.focus();
+        // Focusing CodeMirror can reveal an off-screen caret and overwrite the
+        // position we intentionally preserved for the mode switch. Restore the
+        // viewport after focus so changing Source/Live never produces a jump.
+        if (editorRef.current) editorRef.current.scrollTop = preservedScrollTop;
       });
     });
     window.setTimeout(() => {
@@ -12010,6 +13278,7 @@ export default function Home() {
     "edit.link": () => openEditorHelper("link"),
     "edit.image": () => openEditorHelper("image"),
     "edit.quote": insertQuote,
+    "edit.divider": (event) => insertDivider(event),
     "edit.reviewPersian": () =>
       openSidebarView("annotations", "persian", "ensure"),
     "diagram.mermaid": () => openMermaidStudio(),
@@ -12179,6 +13448,7 @@ export default function Home() {
       case "edit.link":
       case "edit.image":
       case "edit.quote":
+      case "edit.divider":
       case "edit.reviewPersian":
       case "edit.undo":
       case "edit.redo":
@@ -12344,6 +13614,7 @@ export default function Home() {
       case "ordered-list":
       case "code-block":
       case "quote":
+      case "divider":
       case "table":
       case "mermaid":
       case "image":
@@ -12518,6 +13789,65 @@ export default function Home() {
     });
   };
 
+  const openEditorBlockAudio = async () => {
+    const desktop = window.raaviDesktop;
+    if (!desktop?.chooseAudioAsset) {
+      showNotice("افزودن فایل صوتی در نسخهٔ دسکتاپ در دسترس است.");
+      return;
+    }
+    if (!activeDocumentPath) {
+      showNotice("برای نگه‌داری صوت کنار Markdown، ابتدا سند را ذخیره کنید.");
+      setSaveModalOpen(true);
+      return;
+    }
+    const prepared = prepareEditorBlockInsertion();
+    if (!prepared) return;
+    setEditorBlockMenu(null);
+    try {
+      const selected = await desktop.chooseAudioAsset(activeDocumentPath);
+      if (!selected) return;
+      let durationMs = selected.durationMs;
+      try {
+        durationMs = durationMs || (await readAudioDuration(selected.sourceUrl));
+      } catch (cause) {
+        await desktop.removeAudioAsset?.(
+          activeDocumentPath,
+          selected.relativePath,
+        );
+        throw cause;
+      }
+      if (durationMs > AUDIO_MAX_DURATION_MS) {
+        await desktop.removeAudioAsset?.(
+          activeDocumentPath,
+          selected.relativePath,
+        );
+        showNotice("در نسخهٔ اول، فایل صوتی باید حداکثر ۶۰ دقیقه باشد.");
+        return;
+      }
+      const markdown = serializeMarkdownAudio(
+        selected.fileName,
+        selected.relativePath,
+      );
+      const editor = prepared.editor;
+      const offset = Math.min(prepared.offset, editor.value.length);
+      const prefix = offset > 0 && !editor.value.endsWith("\n") ? "\n\n" : "";
+      const insert = `${prefix}${markdown}\n`;
+      editor.replaceRange({
+        from: offset,
+        to: offset,
+        insert,
+        selectionFrom: offset + insert.length,
+        selectionTo: offset + insert.length,
+        announcement: "بلاک صوت به سند افزوده شد",
+      });
+      showNotice("صوت در پوشهٔ دارایی‌های سند کپی و به Markdown متصل شد");
+    } catch (cause) {
+      showNotice(
+        cause instanceof Error ? cause.message : "افزودن فایل صوتی ممکن نبود.",
+      );
+    }
+  };
+
   const chooseEditorBlockMenuItem = (item: SlashMenuItem) => {
     switch (item.type) {
       case "table":
@@ -12529,6 +13859,9 @@ export default function Home() {
         return;
       case "formula":
         openEditorBlockFormula();
+        return;
+      case "audio":
+        void openEditorBlockAudio();
         return;
       default:
         convertEditorBlock(item.type);
@@ -12733,6 +14066,18 @@ export default function Home() {
   const handleAppKeyDownCapture = (
     event: ReactKeyboardEvent<HTMLDivElement>,
   ) => {
+    if (event.key === "Escape" && selectionDraft && !composerKind) {
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectionDraft(null);
+      setSelectionHighlightRects([]);
+      setSelectionMenuPosition(null);
+      window.getSelection()?.removeAllRanges();
+      requestAnimationFrame(() =>
+        previewArticleRef.current?.focus({ preventScroll: true }),
+      );
+      return;
+    }
     if (
       event.code !== "F10" ||
       !event.altKey ||
@@ -12809,6 +14154,21 @@ export default function Home() {
         return <pre {...sourceOffsetAttribute(node)}>{children}</pre>;
       },
       p: ({ children, node }) => {
+        const audio = audioBlockAtOffset(
+          audioBlocks,
+          node?.position?.start.offset,
+        );
+        if (audio) {
+          return (
+            <AudioPlayerBlock
+              descriptor={audio}
+              resolveSource={resolveAudioSource}
+              onTranscribe={() =>
+                openAudioTranscription(audio.source, audio.fileName)
+              }
+            />
+          );
+        }
         const formula = formulaBlockAtOffset(
           formulaBlocks,
           node?.position?.start.offset,
@@ -13015,6 +14375,7 @@ export default function Home() {
       },
     }),
     [
+      audioBlocks,
       blockTextDirection,
       imageAssetsById,
       approvedRemoteImages,
@@ -13023,10 +14384,12 @@ export default function Home() {
       handleDiagramFullscreenChange,
       mermaidBlocks,
       openFormulaStudio,
+      openAudioTranscription,
       openMermaidStudio,
       openExternalUrl,
       privacyPreferences,
       readingMode,
+      resolveAudioSource,
       themeMode,
       pdfExportActive,
     ],
@@ -13588,48 +14951,55 @@ export default function Home() {
           </button>
         </div>
 
-        <div
-          className={`window-controls ${
-            commandEnvironment.surface === "web" ? "is-preview-only" : ""
-          }`}
-          dir="ltr"
-          aria-label="کنترل‌های پنجره"
-          aria-hidden={commandEnvironment.surface === "web" || undefined}
-        >
-          <button
-            type="button"
-            tabIndex={commandEnvironment.surface === "web" ? -1 : 0}
-            onClick={() => void window.raaviDesktop?.minimizeWindow?.()}
-            aria-label="کوچک‌کردن پنجره"
-            title="کوچک‌کردن"
+        {commandEnvironment.surface === "electron" && (
+          <div
+            className="window-controls"
+            dir="ltr"
+            aria-label="کنترل‌های پنجره"
           >
-            <Minus size={17} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            tabIndex={commandEnvironment.surface === "web" ? -1 : 0}
-            onClick={() => void window.raaviDesktop?.toggleMaximizeWindow?.()}
-            aria-label="بزرگ یا بازیابی‌کردن پنجره"
-            title="بزرگ یا بازیابی‌کردن"
-          >
-            <WindowMaximize size={16} aria-hidden="true" />
-          </button>
-          <button
-            className="window-control-close"
-            type="button"
-            tabIndex={commandEnvironment.surface === "web" ? -1 : 0}
-            onClick={() => void window.raaviDesktop?.closeWindow?.()}
-            aria-label="بستن پنجره"
-            title="بستن"
-          >
-            <X size={17} aria-hidden="true" />
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => void window.raaviDesktop?.minimizeWindow?.()}
+              aria-label="کوچک‌کردن پنجره"
+              title="کوچک‌کردن"
+            >
+              <Minus size={17} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => void window.raaviDesktop?.toggleMaximizeWindow?.()}
+              aria-label="بزرگ یا بازیابی‌کردن پنجره"
+              title="بزرگ یا بازیابی‌کردن"
+            >
+              <WindowMaximize size={16} aria-hidden="true" />
+            </button>
+            <button
+              className="window-control-close"
+              type="button"
+              onClick={() => void window.raaviDesktop?.closeWindow?.()}
+              aria-label="بستن پنجره"
+              title="بستن"
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
+          </div>
+        )}
 
         {readingMode && (
-          <span className="reading-local-note">
+          <span
+            className="reading-local-note"
+            data-residency={fileResidency}
+          >
             <span aria-hidden="true">●</span>
-            فقط روی این دستگاه
+            {fileResidency === "reading"
+              ? "فقط مطالعه · خارج از مخزن"
+              : fileResidency === "backed-up"
+                ? "پشتیبان‌گیری‌شده"
+                : fileResidency === "syncing"
+                  ? "در حال همگام‌سازی"
+                  : fileResidency === "error"
+                    ? "ذخیرهٔ محلی · خطای همگام‌سازی"
+                    : "مخزن · ذخیرهٔ محلی"}
           </span>
         )}
 
@@ -13645,6 +15015,20 @@ export default function Home() {
               </strong>
             </div>
             <div className="reading-header-actions">
+              {fileResidency === "reading" && (
+                <button
+                  className="reading-move-to-vault"
+                  type="button"
+                  onClick={() =>
+                    void promoteCurrentDocumentToVault("manual-move")
+                  }
+                  aria-label="انتقال فایل به مخزن"
+                  title="انتقال به مخزن"
+                >
+                  <FileArchive size={18} aria-hidden="true" />
+                  <span>انتقال به مخزن</span>
+                </button>
+              )}
               <button
                 className="reading-return-to-desk"
                 type="button"
@@ -14855,6 +16239,10 @@ export default function Home() {
                     onOpenFormulaStudio={openEditorFormulaBlock}
                     onOpenAiForBlock={(block) => openAiForBlock(block, "main")}
                     resolveLiveImage={resolveEditorLiveImage}
+                    resolveLiveAudio={resolveAudioSource}
+                    onOpenAudioTranscription={(audio) =>
+                      openAudioTranscription(audio.source, audio.fileName)
+                    }
                     onChange={handleMarkdownEditorChange}
                     onScroll={() => {
                       setEditorSelectionMenuPosition(null);
@@ -15205,11 +16593,12 @@ export default function Home() {
                 }}
                 onKeyDown={handleEditorSelectionToolbarKeyDown}
               >
-                {EDITOR_SELECTION_COMMANDS.map((item, index) => {
+                {EDITOR_SELECTION_PRIMARY_COMMANDS.map((item, index) => {
                   const Icon = item.icon;
                   const showSeparator =
                     index > 0 &&
-                    EDITOR_SELECTION_COMMANDS[index - 1]?.group !== item.group;
+                    EDITOR_SELECTION_PRIMARY_COMMANDS[index - 1]?.group !==
+                      item.group;
                   return [
                     showSeparator ? (
                       <span
@@ -15231,14 +16620,26 @@ export default function Home() {
                       type="button"
                       tabIndex={index === editorSelectionActionIndex ? 0 : -1}
                       data-command-id={item.id}
-                      onClick={() => executeCommand(item.id)}
+                      onClick={() => runEditorSelectionAction(item.id)}
                       onFocus={() => setEditorSelectionActionIndex(index)}
                       aria-label={item.label}
-                      aria-keyshortcuts={commandAriaKeyShortcuts(
-                        item.id,
-                        commandEnvironment,
-                      )}
-                      title={commandTitle(item.id, commandEnvironment)}
+                      aria-keyshortcuts={
+                        item.id === "clipboard.copy"
+                          ? "Control+C Meta+C"
+                          : item.id === "clipboard.paste"
+                            ? "Control+V Meta+V"
+                            : commandAriaKeyShortcuts(
+                                item.id,
+                                commandEnvironment,
+                              )
+                      }
+                      title={
+                        item.id === "clipboard.copy"
+                          ? "کپی (Ctrl+C)"
+                          : item.id === "clipboard.paste"
+                            ? "جای‌گذاری (Ctrl+V)"
+                            : commandTitle(item.id, commandEnvironment)
+                      }
                     >
                       <Icon size={17} aria-hidden="true" />
                       <span className="visually-hidden">{item.label}</span>
@@ -15253,21 +16654,21 @@ export default function Home() {
                 <button
                   ref={(node) => {
                     editorSelectionActionRefs.current[
-                      EDITOR_SELECTION_COMMANDS.length
+                      EDITOR_SELECTION_PRIMARY_COMMANDS.length
                     ] = node;
                   }}
                   className="magic-wand-trigger editor-mini-action editor-selection-ai-trigger"
                   type="button"
                   tabIndex={
                     editorSelectionActionIndex ===
-                    EDITOR_SELECTION_COMMANDS.length
+                    EDITOR_SELECTION_PRIMARY_COMMANDS.length
                       ? 0
                       : -1
                   }
                   onClick={openAiForSelection}
                   onFocus={() =>
                     setEditorSelectionActionIndex(
-                      EDITOR_SELECTION_COMMANDS.length,
+                      EDITOR_SELECTION_PRIMARY_COMMANDS.length,
                     )
                   }
                   aria-label="گفت‌وگو دربارهٔ متن انتخاب‌شده"
@@ -15275,6 +16676,71 @@ export default function Home() {
                 >
                   <MagicWandIcon size={17} />
                 </button>
+                <button
+                  ref={(node) => {
+                    editorSelectionActionRefs.current[
+                      EDITOR_SELECTION_PRIMARY_COMMANDS.length + 1
+                    ] = node;
+                  }}
+                  className="editor-mini-action editor-selection-more-trigger"
+                  type="button"
+                  tabIndex={
+                    editorSelectionActionIndex ===
+                    EDITOR_SELECTION_PRIMARY_COMMANDS.length + 1
+                      ? 0
+                      : -1
+                  }
+                  aria-label="ابزارهای بیشتر"
+                  aria-haspopup="menu"
+                  aria-expanded={editorSelectionMoreOpen}
+                  onClick={() =>
+                    editorSelectionMoreOpen
+                      ? setEditorSelectionMoreOpen(false)
+                      : openEditorSelectionMore()
+                  }
+                  onFocus={() =>
+                    setEditorSelectionActionIndex(
+                      EDITOR_SELECTION_PRIMARY_COMMANDS.length + 1,
+                    )
+                  }
+                  title="ابزارهای بیشتر"
+                >
+                  <Ellipsis size={18} aria-hidden="true" />
+                </button>
+                {editorSelectionMoreOpen && (
+                  <div
+                    className="editor-selection-more-menu"
+                    role="menu"
+                    aria-label="ابزارهای بیشتر متن انتخاب‌شده"
+                    onKeyDown={handleEditorSelectionMoreKeyDown}
+                  >
+                    {EDITOR_SELECTION_MORE_COMMANDS.map((item, index) => {
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          key={item.id}
+                          ref={(node) => {
+                            editorSelectionMoreActionRefs.current[index] = node;
+                            if (item.id === "annotation.comment") {
+                              commentButtonRef.current = node;
+                            }
+                          }}
+                          type="button"
+                          role="menuitem"
+                          tabIndex={index === editorSelectionMoreIndex ? 0 : -1}
+                          onClick={() => {
+                            setEditorSelectionMoreOpen(false);
+                            runEditorSelectionAction(item.id);
+                          }}
+                          onFocus={() => setEditorSelectionMoreIndex(index)}
+                        >
+                          <Icon size={17} aria-hidden="true" />
+                          <span>{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
             <div className="visually-hidden">
@@ -15501,6 +16967,10 @@ export default function Home() {
                       openAiForBlock(block, "writing")
                     }
                     resolveLiveImage={resolveEditorLiveImage}
+                    resolveLiveAudio={resolveAudioSource}
+                    onOpenAudioTranscription={(audio) =>
+                      openAudioTranscription(audio.source, audio.fileName)
+                    }
                     onChange={handleMarkdownEditorChange}
                     onScroll={() => {
                       setEditorSelectionMenuPosition(null);
@@ -15532,22 +17002,26 @@ export default function Home() {
                       } as React.CSSProperties
                     }
                   >
-                    {selectionDraft &&
-                      selectionHighlightRects.map((rect, index) => (
-                        <span
-                          aria-hidden="true"
-                          className="selection-range-feedback"
-                          key={`${rect.left}-${rect.top}-${index}`}
-                          style={
-                            {
-                              left: rect.left,
-                              top: rect.top,
-                              width: rect.width,
-                              height: rect.height,
-                            } as React.CSSProperties
-                          }
-                        />
-                      ))}
+                    <div
+                      aria-hidden="true"
+                      className="selection-range-feedback-slot"
+                    >
+                      {selectionDraft &&
+                        selectionHighlightRects.map((rect, index) => (
+                          <span
+                            className="selection-range-feedback"
+                            key={`${rect.left}-${rect.top}-${index}`}
+                            style={
+                              {
+                                left: rect.left,
+                                top: rect.top,
+                                width: rect.width,
+                                height: rect.height,
+                              } as React.CSSProperties
+                            }
+                          />
+                        ))}
+                    </div>
                     <div
                       className="visually-hidden"
                       role="status"
@@ -15558,9 +17032,10 @@ export default function Home() {
                         ? `${selectionDraft.quote.length.toLocaleString("fa-IR")} نویسه انتخاب شد؛ ابزارهای هایلایت و نظر در دسترس‌اند.`
                         : ""}
                     </div>
-                    {selectionDraft &&
-                      selectionMenuPosition &&
-                      !composerKind && (
+                    <div className="reading-selection-menu-slot">
+                      {selectionDraft &&
+                        selectionMenuPosition &&
+                        !composerKind && (
                         <ReadingSelectionMenu
                           ref={selectionMenuRef}
                           className={`selection-mini-menu is-${selectionMenuPosition.placement}`}
@@ -15594,8 +17069,9 @@ export default function Home() {
                             "annotation.comment",
                             commandEnvironment,
                           )}
-                        />
-                      )}
+                          />
+                        )}
+                    </div>
                     {content.trim() ? (
                       <>
                         <article
@@ -15904,6 +17380,16 @@ export default function Home() {
             }`}
           >
             <Suspense fallback={<DeferredPanelFallback />}>
+              {sidebarView === "ai" && audioTranscriptionSession && (
+                <AudioTranscriptionPanel
+                  key={audioTranscriptionSession.id}
+                  session={audioTranscriptionSession}
+                  connectionState={codexConnectionState}
+                  onCleanWithCodex={cleanAudioTranscriptWithCodex}
+                  onInsert={insertAudioTranscript}
+                  onComplete={openAiForDocument}
+                />
+              )}
               {sidebarView === "ai" && aiContext && (
                 <AiChatPanel
                   key={aiContext.sessionId}
@@ -15914,12 +17400,7 @@ export default function Home() {
                   }}
                   onStartLogin={startCodexLoginFlow}
                   onOpenInstallGuide={() => {
-                    const url = "https://developers.openai.com/codex/cli/";
-                    if (window.raaviDesktop?.openExternalUrl) {
-                      void window.raaviDesktop.openExternalUrl(url);
-                    } else {
-                      window.open(url, "_blank", "noopener,noreferrer");
-                    }
+                    openShortcutSettings(undefined, "ai");
                   }}
                   onSend={runAiPrompt}
                   onCopy={async (value) => {
@@ -15949,12 +17430,7 @@ export default function Home() {
                     onCheckConnection={checkCodexConnection}
                     onStartLogin={startCodexLoginFlow}
                     onOpenInstallGuide={() => {
-                      const url = "https://developers.openai.com/codex/cli/";
-                      if (window.raaviDesktop?.openExternalUrl) {
-                        void window.raaviDesktop.openExternalUrl(url);
-                      } else {
-                        window.open(url, "_blank", "noopener,noreferrer");
-                      }
+                      openShortcutSettings(undefined, "ai");
                     }}
                     onReview={runPersianAiReview}
                     onRewrite={rewritePersianAiSuggestion}
@@ -16032,12 +17508,7 @@ export default function Home() {
                     onCheckConnection={checkCodexConnection}
                     onStartLogin={startCodexLoginFlow}
                     onOpenInstallGuide={() => {
-                      const url = "https://developers.openai.com/codex/cli/";
-                      if (window.raaviDesktop?.openExternalUrl) {
-                        void window.raaviDesktop.openExternalUrl(url);
-                      } else {
-                        window.open(url, "_blank", "noopener,noreferrer");
-                      }
+                      openShortcutSettings(undefined, "ai");
                     }}
                     onReview={runSmartAnnotationReview}
                     onAddSmartAnnotations={(items) =>
@@ -17000,6 +18471,70 @@ export default function Home() {
         </Suspense>
       )}
 
+      {firstRunOpen && (
+        <Suspense
+          fallback={
+            <div className="first-run-backdrop" role="status" aria-live="polite">
+              <div className="first-run-dialog deferred-dialog-loading">
+                <RefreshCw className="is-spinning" size={24} aria-hidden="true" />
+                <strong>در حال آماده‌سازی خوش‌آمدگویی…</strong>
+              </div>
+            </div>
+          }
+        >
+          <FirstRunOnboarding
+            open
+            isTopLayer={topLayer === "onboarding"}
+            backupStatus={backupStatus}
+            initialVaultPath={
+              activeWorkspaceFolder?.rootPath || activeWorkspaceFolder?.rootName
+            }
+            onChooseVault={connectLibrary}
+            onConnectBackupProvider={connectBackupProvider}
+            onSelectBackupProvider={selectBackupProvider}
+            onFinish={finishFirstRunOnboarding}
+          />
+        </Suspense>
+      )}
+
+      {aiSetupPromptOpen && (
+        <AccessibleModal
+          open
+          isTopLayer={topLayer === "aiSetup"}
+          onClose={() => setAiSetupPromptOpen(false)}
+          dialogRef={aiSetupDialogRef}
+          initialFocusRef={aiSetupActionRef}
+          backdropClassName="external-link-dialog-backdrop"
+          dialogClassName="external-link-dialog"
+          labelledBy="ai-setup-dialog-title"
+          describedBy="ai-setup-dialog-description"
+        >
+          <div className="external-link-dialog-body">
+            <BrainCircuit size={26} aria-hidden="true" />
+            <div>
+              <strong id="ai-setup-dialog-title">برای استفاده از راوی هوشمند، به ChatGPT وصل شوید</strong>
+              <p id="ai-setup-dialog-description">
+                در تنظیمات وارد حساب ChatGPT شوید؛ سپس مدل‌های در دسترس حساب شما نمایش داده می‌شوند و می‌توانید یکی را انتخاب کنید.
+              </p>
+            </div>
+          </div>
+          <div className="external-link-dialog-actions">
+            <button type="button" onClick={() => setAiSetupPromptOpen(false)}>فعلاً نه</button>
+            <button
+              ref={aiSetupActionRef}
+              className="is-primary"
+              type="button"
+              onClick={() => {
+                setAiSetupPromptOpen(false);
+                openShortcutSettings(undefined, "ai");
+              }}
+            >
+              تنظیم اتصال ChatGPT
+            </button>
+          </div>
+        </AccessibleModal>
+      )}
+
       {shortcutSettingsOpen && (
         <Suspense
           fallback={
@@ -17020,10 +18555,31 @@ export default function Home() {
             onCodeViewPreferencesChange={setCodeViewPreferences}
             appearancePreferences={appearancePreferences}
             onAppearancePreferencesChange={commitAppearancePreferences}
+            generalPreferences={generalPreferences}
+            onGeneralPreferencesChange={(preferences) => {
+              generalPreferencesRef.current = preferences;
+              setGeneralPreferences(preferences);
+              try {
+                window.localStorage.setItem(
+                  GENERAL_PREFERENCES_STORAGE_KEY,
+                  JSON.stringify(preferences),
+                );
+              } catch {
+                // The in-memory preference remains active for this session.
+              }
+            }}
             readingPreferences={readingPreferences}
             onReadingPreferencesChange={commitReadingPreferences}
             fileLibraryPreferences={fileLibraryPreferences}
             onFileLibraryPreferencesChange={setFileLibraryPreferences}
+            backupStatus={backupStatus}
+            onBackupPreferencesChange={commitBackupPreferences}
+            onBackupProviderChange={selectBackupProvider}
+            onConnectBackupProvider={connectBackupProvider}
+            onDisconnectBackupProvider={disconnectBackupProvider}
+            onListCloudBackups={listCloudBackups}
+            onRestoreCloudBackups={restoreCloudBackups}
+            onRevealCloudRestore={revealCloudRestore}
             privacyPreferences={privacyPreferences}
             onPrivacyPreferencesChange={(nextPreferences) => {
               if (nextPreferences.externalImagePolicy === "block") {
@@ -17031,6 +18587,9 @@ export default function Home() {
               }
               setPrivacyPreferences(nextPreferences);
             }}
+            aiPreferences={aiPreferences}
+            onAiPreferencesChange={commitAiPreferences}
+            onOpenExternal={(url) => void openExternalUrl(url)}
             libraryFolders={libraryFolders.map((folder) => ({
               rootId: folder.rootId,
               rootName: folder.rootName,
@@ -17041,11 +18600,19 @@ export default function Home() {
               ).length,
             }))}
             libraryFileCount={libraryFiles.length}
-            onConnectLibrary={connectLibrary}
+            onConnectLibrary={async () => {
+              await connectLibrary();
+            }}
             onRefreshLibrary={refreshLibrary}
+            onChooseDefaultSaveFolder={async () => {
+              await connectLibrary();
+            }}
             onDisconnectLibrary={disconnectLibraryFolder}
             onClearRecentFiles={clearRecentFilesFromSettings}
             onResetSettings={resetAllSettings}
+            onReplayOnboarding={replayFirstRunOnboarding}
+            softwareUpdateState={softwareUpdateState}
+            softwareUpdateActions={softwareUpdateActions}
             initialCategory={settingsInitialCategory}
             onClose={closeShortcutSettings}
             returnFocusRef={shortcutSettingsReturnFocusRef}
@@ -17094,6 +18661,26 @@ export default function Home() {
         </div>
       )}
 
+      {[
+        "available",
+        "downloading",
+        "paused",
+        "ready",
+        "error",
+      ].includes(softwareUpdateState.phase) &&
+        dismissedSoftwareUpdateBanner !==
+          `${softwareUpdateState.phase}:${softwareUpdateState.version}` && (
+          <SoftwareUpdateBanner
+            state={softwareUpdateState}
+            actions={softwareUpdateActions}
+            onClose={() =>
+              setDismissedSoftwareUpdateBanner(
+                `${softwareUpdateState.phase}:${softwareUpdateState.version}`,
+              )
+            }
+          />
+        )}
+
       {(notice ||
         libraryUndo ||
         (closedTabRecoveryVisible && closedDocumentTabs[0])) && (
@@ -17129,6 +18716,8 @@ export default function Home() {
           )}
         </div>
       )}
+
+      <AudioModelDownloadIndicator />
 
       {currentAnnotationUndos.length > 0 && (
         <div

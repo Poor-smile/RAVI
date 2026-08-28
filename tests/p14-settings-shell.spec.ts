@@ -12,10 +12,10 @@ async function openSettings(page: Page) {
   return returnTarget;
 }
 
-test("P14 matches the desktop Settings shell and supports keyboard category navigation", async ({
+test("Settings stays compact at scaled Full HD and supports keyboard category navigation", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 1024 });
+  await page.setViewportSize({ width: 1536, height: 864 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(() => {
     window.localStorage.clear();
@@ -31,42 +31,52 @@ test("P14 matches the desktop Settings shell and supports keyboard category navi
     name: "دسته‌های تنظیمات",
   });
   const categoryButtons = navigation.getByRole("button");
-  await expect(categoryButtons).toHaveCount(7);
+  await expect(categoryButtons).toHaveCount(8);
   await expect(categoryButtons).toHaveText([
     "عمومی",
     "ظاهر",
+    "هوش مصنوعی و گفتار",
     "مطالعه",
     "ویرایش",
-    "فایل‌ها و دفتر",
+    "فایل‌ها و کتابخانه",
     "حریم خصوصی و داده‌ها",
     "میان‌برها",
   ]);
 
   const geometry = await page.evaluate(() => {
-    const rect = (selector: string) => {
-      const bounds = document
-        .querySelector<HTMLElement>(selector)!
-        .getBoundingClientRect();
-      return {
-        x: Math.round(bounds.x),
-        y: Math.round(bounds.y),
-        width: Math.round(bounds.width),
-        height: Math.round(bounds.height),
-      };
-    };
+    const header = document.querySelector<HTMLElement>(
+      ".shortcut-settings-header",
+    )!;
+    const layout = document.querySelector<HTMLElement>(
+      ".shortcut-settings-layout",
+    )!;
+    const navigation = document.querySelector<HTMLElement>(
+      ".shortcut-settings-nav",
+    )!;
+    const content = document.querySelector<HTMLElement>(
+      ".shortcut-settings-content",
+    )!;
+    const lastSection = document.querySelector<HTMLElement>(
+      ".general-settings-section:last-child",
+    )!;
     return {
-      header: rect(".shortcut-settings-header"),
-      layout: rect(".shortcut-settings-layout"),
-      navigation: rect(".shortcut-settings-nav"),
-      content: rect(".shortcut-settings-content"),
-      heading: rect(".shortcut-settings-heading"),
+      headerHeight: Math.round(header.getBoundingClientRect().height),
+      layoutHeight: Math.round(layout.getBoundingClientRect().height),
+      navigationWidth: Math.round(navigation.getBoundingClientRect().width),
       navTargets: Array.from(
         document.querySelectorAll<HTMLElement>(
           ".shortcut-settings-nav li > button",
         ),
         (button) => Math.round(button.getBoundingClientRect().height),
       ),
-      firstNavRow: rect(".shortcut-settings-nav li:first-child > button"),
+      contentHorizontalOverflow: content.scrollWidth - content.clientWidth,
+      contentVerticalOverflow: content.scrollHeight - content.clientHeight,
+      pageHorizontalOverflow:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+      generalFitsViewport:
+        lastSection.getBoundingClientRect().bottom <=
+        content.getBoundingClientRect().bottom,
       iconIsPhysicallyRightOfLabel: (() => {
         const button = document.querySelector<HTMLElement>(
           ".shortcut-settings-nav li:first-child > button",
@@ -77,16 +87,16 @@ test("P14 matches the desktop Settings shell and supports keyboard category navi
       })(),
     };
   });
-  expect(geometry).toEqual({
-    header: { x: 0, y: 0, width: 1440, height: 72 },
-    layout: { x: 0, y: 72, width: 1440, height: 952 },
-    navigation: { x: 1120, y: 112, width: 280, height: 872 },
-    content: { x: 40, y: 112, width: 1048, height: 872 },
-    heading: { x: 40, y: 112, width: 1040, height: 82 },
-    navTargets: [44, 44, 44, 44, 44, 44, 44],
-    firstNavRow: { x: 1134, y: 174, width: 252, height: 44 },
-    iconIsPhysicallyRightOfLabel: true,
-  });
+  expect(geometry.headerHeight).toBe(56);
+  expect(geometry.layoutHeight).toBe(808);
+  expect(geometry.navigationWidth).toBeGreaterThanOrEqual(212);
+  expect(geometry.navigationWidth).toBeLessThanOrEqual(236);
+  expect(geometry.navTargets).toEqual(Array(8).fill(40));
+  expect(geometry.contentHorizontalOverflow).toBeLessThanOrEqual(0);
+  expect(geometry.contentVerticalOverflow).toBeLessThanOrEqual(0);
+  expect(geometry.pageHorizontalOverflow).toBeLessThanOrEqual(0);
+  expect(geometry.generalFitsViewport).toBe(true);
+  expect(geometry.iconIsPhysicallyRightOfLabel).toBe(true);
 
   await page.screenshot({
     path: ".artifacts/p14-settings-desktop.png",
@@ -106,7 +116,7 @@ test("P14 matches the desktop Settings shell and supports keyboard category navi
   await expect(shortcuts).toBeFocused();
   await expect(shortcuts).toHaveAttribute("aria-current", "page");
   await expect(
-    page.getByRole("heading", { name: "میان‌برهای ویرایش" }),
+    page.getByRole("heading", { name: "میان‌برهای صفحه‌کلید" }),
   ).toBeVisible();
 
   await page.keyboard.press("Escape");

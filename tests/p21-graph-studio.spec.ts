@@ -79,8 +79,8 @@ test("P21 matches Graph Studio type selection, builder and advanced-code frames"
   expect(initialGeometry.studio).toEqual({ x: 0, y: 0, width: 1366, height: 768 });
   expect(initialGeometry.header.height).toBe(72);
   expect(initialGeometry.workspace.y).toBe(73);
-  expect(initialGeometry.editor.width).toBeGreaterThanOrEqual(518);
-  expect(initialGeometry.editor.width).toBeLessThanOrEqual(520);
+  expect(initialGeometry.editor.width).toBeGreaterThanOrEqual(598);
+  expect(initialGeometry.editor.width).toBeLessThanOrEqual(602);
   expect(initialGeometry.divider.width).toBe(8);
   expect(initialGeometry.paneHeader.height).toBe(52);
   expect(initialGeometry.card.width).toBeGreaterThanOrEqual(420);
@@ -96,6 +96,27 @@ test("P21 matches Graph Studio type selection, builder and advanced-code frames"
   await expect(studio.getByRole("button", { name: /^گسترش در عرض/u })).toHaveAttribute("aria-pressed", "true");
   await studio.getByRole("button", { name: /^گسترش در طول/u }).click();
   await expect(studio.getByRole("button", { name: /^گسترش در طول/u })).toHaveAttribute("aria-pressed", "true");
+
+  const easyModeGeometry = await studio.evaluate((node) => {
+    const row = node.querySelector<HTMLElement>(".mermaid-form-row")!;
+    const inputs = Array.from(row.querySelectorAll<HTMLInputElement>("input"));
+    const actions = row.querySelector<HTMLElement>(".mermaid-form-row-actions")!;
+    const rowBounds = row.getBoundingClientRect();
+    const actionBounds = actions.getBoundingClientRect();
+    return {
+      rowWidth: Math.round(rowBounds.width),
+      inputWidths: inputs.map((input) => Math.round(input.getBoundingClientRect().width)),
+      actionsBelowInputs: actionBounds.top > Math.max(...inputs.map((input) => input.getBoundingClientRect().bottom)),
+      actionHeight: Math.round(actionBounds.height),
+      visibleActions: actions.querySelectorAll("button:not([hidden])").length,
+    };
+  });
+  expect(easyModeGeometry.rowWidth).toBeGreaterThanOrEqual(520);
+  expect(Math.min(...easyModeGeometry.inputWidths)).toBeGreaterThanOrEqual(160);
+  expect(easyModeGeometry.actionsBelowInputs).toBe(true);
+  expect(easyModeGeometry.actionHeight).toBeGreaterThanOrEqual(44);
+  expect(easyModeGeometry.visibleActions).toBe(4);
+  await page.screenshot({ path: ".artifacts/p21-graph-easy-redesign.png" });
 
   await studio.getByRole("button", { name: "پیش‌نمایش تمام‌صفحه", exact: true }).click();
   await expect(studio).toHaveClass(/preview-is-fullscreen/);
@@ -169,17 +190,20 @@ test("P21 uses the 820×980 compact Windows composition without overlay panes", 
       divider: rect(".mermaid-studio-divider"),
       preview: rect(".mermaid-studio-preview"),
       mode: rect(".mermaid-mode-switch"),
+      actions: rect(".mermaid-studio-header-actions"),
     };
   });
-  expect(geometry.header).toEqual({ x: 1, y: 1, width: 818, height: 112 });
+  expect(geometry.header).toEqual({ x: 1, y: 1, width: 818, height: 164 });
   expect(geometry.editor.x).toBe(1);
-  expect(geometry.editor.y).toBe(113);
+  expect(geometry.editor.y).toBe(165);
   expect(geometry.editor.width).toBe(818);
-  expect(geometry.editor.height).toBe(450);
+  expect(geometry.editor.height).toBe(560);
   expect(geometry.divider.height).toBe(8);
-  expect(geometry.preview.y).toBe(571);
+  expect(geometry.preview.y).toBe(733);
   expect(geometry.preview.width).toBe(818);
-  expect(geometry.mode.y).toBe(71);
+  expect(geometry.mode.y).toBeGreaterThanOrEqual(61);
+  expect(geometry.mode.y).toBeLessThanOrEqual(69);
+  expect(geometry.mode.y + geometry.mode.height).toBeLessThanOrEqual(geometry.actions.y);
   await page.screenshot({ path: ".artifacts/p21-graph-compact.png" });
 });
 

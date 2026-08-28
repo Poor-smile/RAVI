@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="How Raavi accesses, stores, uses, and deletes Google Drive data."
+    />
+    <meta name="theme-color" content="#171b18" />
+    <link rel="canonical" href="https://ravi.poorsmile.ir/privacy/" />
+    <link rel="stylesheet" href="./privacy.css?v=1.0.0" />
+    <title>Privacy policy | Raavi</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#policy-content">Skip to the policy</a>
+
+    <header class="site-header">
+      <a class="brand" href="../" aria-label="Raavi home">
+        <span class="brand-mark" aria-hidden="true">ر</span>
+        <span class="brand-copy">
+          <strong>RAAVI</strong>
+          <small>Privacy policy</small>
+        </span>
+      </a>
+      <nav class="header-nav" aria-label="Primary navigation">
+        <a href="../">Back to Raavi</a>
+        <a href="https://raviweb.poorsmile.ir/">Open web app</a>
+      </nav>
+    </header>
+
+    <main>
+      <header class="policy-hero">
+        <div class="hero-copy">
+          <p class="policy-label">Google Drive integration</p>
+          <h1>Privacy policy</h1>
+          <p class="lede">
+            This policy explains what Google data Raavi can access, why it is
+            used, where it is stored, and how you can remove it.
+          </p>
+        </div>
+        <div class="policy-meta">
+          <span>Effective date</span>
+          <strong>August 25, 2026</strong>
+          <span>Applies to</span>
+          <strong>Raavi for desktop</strong>
+        </div>
+      </header>
+
+      <section class="at-a-glance" aria-labelledby="glance-title">
+        <div class="glance-heading">
+          <p class="section-label">The short version</p>
+          <h2 id="glance-title">Your Drive stays under your control.</h2>
+        </div>
+        <dl class="glance-list">
+          <div>
+            <dt>Access</dt>
+            <dd>
+              Raavi uses limited, per-file Drive access for backups you enable.
+              It does not ask for access to every file in your Drive.
+            </dd>
+          </div>
+          <div>
+            <dt>Storage</dt>
+            <dd>
+              Backups travel directly from the desktop app to your Google Drive.
+              OAuth credentials are encrypted on your device.
+            </dd>
+          </div>
+          <div>
+            <dt>Deletion</dt>
+            <dd>
+              Disconnecting stops Raavi from using the account. To remove existing
+              backups, delete the <code>Raavi</code> folder in Drive and empty Trash.
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <div class="policy-layout">
+        <aside class="policy-index" aria-label="On this page">
+          <p>On this page</p>
+          <nav>
+            <a href="#scope">Scope</a>
+            <a href="#access">Data Raavi accesses</a>
+            <a href="#use">How the data is used</a>
+            <a href="#storage">Where data is stored</a>
+            <a href="#retention">Retention</a>
+            <a href="#deletion">Delete your data</a>
+            <a href="#sharing">Sharing and Limited Use</a>
+            <a href="#security">Security</a>
+            <a href="#changes">Policy changes</a>
+            <a href="#contact">Contact</a>
+          </nav>
+        </aside>
+
+        <article class="policy-content" id="policy-content">
+          <section id="scope">
+            <h2>Scope</h2>
+            <p>
+              This policy covers the optional Google Drive backup feature in the
+              Raavi desktop app. You can use Raavi without connecting a Google
+              account. Local documents and backups that never enter Google Drive
+              are outside the Google Drive part of this policy.
+            </p>
+            <p>
+              Raavi is developed by Hossien Pouresmaeil. In this policy, "Raavi,"
+              "we," and "us" refer to the Raavi application and its developer.
+            </p>
+          </section>
+
+          <section id="access">
+            <h2>Data Raavi accesses</h2>
+            <p>
+              When you choose <strong>Connect with Google</strong>, Raavi requests
+              the following OAuth scopes:
+            </p>
+            <ul>
+              <li>
+                <code>openid</code> and <code>email</code>, used to identify the
+                connected Google account and show its email address in Raavi.
+              </li>
+              <li>
+                <code>drive.file</code>, used to create and manage Raavi backup
+                files and folders, plus files you explicitly open or share with
+                Raavi.
+              </li>
+            </ul>
+            <p>
+              Raavi also reads your Google Drive display name and storage quota,
+              including total usage and Trash usage. This lets the app show which
+              account is connected and pause media uploads when available space is
+              too low.
+            </p>
+            <p>
+              Raavi does not receive your Google password and does not request
+              unrestricted access to every file in your Google Drive.
+            </p>
+          </section>
+
+          <section id="use">
+            <h2>How the data is used</h2>
+            <p>
+              Google account data is used only to connect your account, display
+              connection and storage status, upload the backup categories you
+              select, and keep those backups up to date.
+            </p>
+            <p>When backup is enabled, Raavi creates this folder structure:</p>
+            <pre aria-label="Google Drive folder structure"><code>Raavi/
+├── Repository/ Markdown documents
+├── Assets/     Selected images, audio, and attachments
+└── Metadata/   Backup metadata and version information</code></pre>
+            <p>Depending on your settings, a backup can contain:</p>
+            <ul>
+              <li>Markdown document text and structure.</li>
+              <li>Annotations, titles, tags, and document references.</li>
+              <li>Optimized images and their file details.</li>
+              <li>Audio and other attachments, only when you enable them.</li>
+              <li>
+                Backup time, file name, selected backup categories, and retained
+                version information.
+              </li>
+            </ul>
+            <p>
+              Raavi uses a content hash to avoid uploading duplicate assets. It
+              does not use Google user data for advertising or to train generalized
+              artificial intelligence or machine learning models.
+            </p>
+          </section>
+
+          <section id="storage">
+            <h2>Where data is stored</h2>
+            <p>
+              Backup files are sent over HTTPS from the Raavi desktop app directly
+              to Google Drive and are stored in your Google account. Raavi's
+              developer does not operate an intermediary server that receives or
+              stores a separate copy of these backups.
+            </p>
+            <p>
+              OAuth access and refresh tokens are encrypted before Raavi stores
+              them in the app data folder on your device. If secure operating
+              system storage is unavailable, Raavi does not save the connection.
+            </p>
+            <p>
+              Raavi also keeps local backup state on your device. This can include
+              the connected account email, a recent quota snapshot, sync status,
+              and references used to match local documents to Drive backups.
+            </p>
+          </section>
+
+          <section id="retention">
+            <h2>Retention</h2>
+            <p>
+              Files in Google Drive remain there until you delete them. Disconnecting
+              Raavi or revoking its access does not delete backups already stored in
+              your Drive.
+            </p>
+            <p>
+              When version history is enabled, Raavi keeps recent text history for
+              up to 30 days or 50 versions. The current version and protected
+              revisions are kept. When version history is disabled, Raavi removes
+              extra non-current, non-protected revisions during backup.
+            </p>
+            <p>
+              Google may retain deleted files in Trash until you empty it or Google
+              removes them under its own retention rules.
+            </p>
+          </section>
+
+          <section id="deletion">
+            <h2>How to disconnect and delete your data</h2>
+            <ol class="deletion-steps">
+              <li>
+                <strong>Stop Raavi from using the connected account.</strong>
+                In Raavi, open <span lang="fa" dir="rtl">تنظیمات</span>, choose
+                <span lang="fa" dir="rtl">فایل‌ها و کتابخانه</span>, then select
+                <span lang="fa" dir="rtl">قطع اتصال</span>. This removes the
+                encrypted OAuth credentials stored by Raavi on that device. It does
+                not delete existing Drive backups.
+              </li>
+              <li>
+                <strong>Delete the backed-up files.</strong>
+                Open Google Drive, delete the top-level <code>Raavi</code> folder,
+                then empty Google Drive Trash if you want the files removed
+                permanently.
+              </li>
+              <li>
+                <strong>Revoke future account access.</strong>
+                Open your Google Account's third-party connections, select Raavi,
+                and remove access. Revoking access stops future Google API access,
+                but it does not delete files already saved in Drive.
+              </li>
+            </ol>
+            <div class="policy-actions" aria-label="Data management links">
+              <a href="https://drive.google.com/" target="_blank" rel="noreferrer">
+                Open Google Drive<span class="visually-hidden"> in a new tab</span>
+              </a>
+              <a
+                href="https://myaccount.google.com/connections"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Manage Google connections<span class="visually-hidden"> in a new tab</span>
+              </a>
+            </div>
+          </section>
+
+          <section id="sharing">
+            <h2>Sharing and Google API Limited Use</h2>
+            <p>
+              Raavi does not sell Google user data. It does not share Google user
+              data with advertisers or other third parties. Google receives and
+              processes data as needed to provide Google Drive, subject to the
+              <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">
+                Google Privacy Policy<span class="visually-hidden"> in a new tab</span>
+              </a>.
+            </p>
+            <p>
+              We may disclose information when required by law, or when necessary
+              to investigate abuse, fraud, or a security issue. No other transfer or
+              disclosure is permitted unless we first obtain your explicit consent.
+            </p>
+            <p class="limited-use">
+              The use of information received from Google Workspace APIs will
+              adhere to the
+              <a
+                href="https://developers.google.com/terms/api-services-user-data-policy"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Google API Services User Data Policy<span class="visually-hidden"> in a new tab</span>
+              </a>, including the Limited Use requirements.
+            </p>
+          </section>
+
+          <section id="security">
+            <h2>Security</h2>
+            <p>
+              Raavi uses Google's OAuth 2.0 authorization flow with PKCE and a
+              short-lived local callback. API requests are sent over HTTPS. OAuth
+              tokens are encrypted on your device using operating system protected
+              storage. Access is limited to the scopes described above.
+            </p>
+            <p>
+              No system can guarantee absolute security. Keep your device and
+              Google account protected, and disconnect Raavi if you no longer use
+              Drive backup.
+            </p>
+          </section>
+
+          <section id="changes">
+            <h2>Changes to this policy</h2>
+            <p>
+              We may update this policy when Raavi's Google Drive integration or
+              legal obligations change. The effective date at the top of this page
+              will be updated when a revised policy is published.
+            </p>
+          </section>
+
+          <section id="contact">
+            <h2>Contact</h2>
+            <p>
+              Questions about this policy or a Google Drive data request can be sent
+              to
+              <a href="mailto:hossiengem@gmail.com">hossiengem@gmail.com</a>.
+            </p>
+          </section>
+        </article>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-brand">
+        <span class="brand-mark" aria-hidden="true">ر</span>
+        <span>
+          <strong>RAAVI</strong>
+          <small>Built for Persian text</small>
+        </span>
+      </div>
+      <div class="footer-links">
+        <a href="../">Raavi home</a>
+        <a href="../terms/">Terms of Use</a>
+        <a href="#policy-content">Back to top</a>
+        <a href="mailto:hossiengem@gmail.com">Contact</a>
+      </div>
+    </footer>
+  </body>
+</html>

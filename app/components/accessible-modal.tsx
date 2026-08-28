@@ -14,6 +14,8 @@ import {
 
 export type ModalLayerId =
   | "about"
+  | "aiSetup"
+  | "onboarding"
   | "closeDocument"
   | "commandPalette"
   | "export"
@@ -216,6 +218,19 @@ export function AccessibleModal({
     if (isTopLayer && event.target === event.currentTarget) onClose();
   };
 
+  const handleDialogKeyDown: KeyboardEventHandler<HTMLDivElement> = (event) => {
+    onKeyDown?.(event);
+    // A key event handled by this dialog originated inside it. Closing here must
+    // not wait for the asynchronously synchronised modal stack; otherwise a fast
+    // Escape immediately after opening can be lost. Nested dialogs stop the event
+    // before it reaches their parent, while backdrop dismissal still requires the
+    // explicit top-layer guard above.
+    if (event.defaultPrevented || event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+  };
+
   return (
     <div
       className={backdropClassName}
@@ -231,7 +246,7 @@ export function AccessibleModal({
         aria-labelledby={labelledBy}
         aria-describedby={describedBy}
         tabIndex={-1}
-        onKeyDown={onKeyDown}
+        onKeyDown={handleDialogKeyDown}
       >
         {children}
       </div>

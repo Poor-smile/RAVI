@@ -1,0 +1,612 @@
+.ai-speech-settings {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  padding-block-end: 8px;
+}
+
+.ai-settings-intro,
+.speech-model-settings > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.ai-settings-intro > div,
+.speech-model-settings > header > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ai-settings-intro strong,
+.speech-model-settings h3 {
+  margin: 0;
+  color: var(--ink-950);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ai-settings-intro p,
+.speech-model-settings header p {
+  max-width: 68ch;
+  margin: 2px 0 0;
+  color: var(--ink-700);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.ai-settings-intro button,
+.ai-engine-actions button,
+.speech-tier-action button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--paper-50);
+  color: var(--ink-950);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ai-settings-intro button {
+  flex: 0 0 auto;
+  padding-inline: 12px;
+}
+
+.ai-settings-intro button:disabled,
+.ai-engine-actions button:disabled,
+.speech-tier-action button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.chatgpt-connection,
+.speech-tier-list {
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--paper-50);
+}
+
+.chatgpt-connection {
+  display: grid;
+  gap: 10px;
+  min-height: 72px;
+  padding: 12px 14px;
+}
+
+.chatgpt-connection-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.chatgpt-connection.is-connected {
+  background: color-mix(in srgb, var(--success) 5%, var(--paper-50));
+}
+
+.chatgpt-connection.is-cli_missing {
+  border-color: color-mix(in srgb, var(--proof-blue) 40%, var(--rule));
+  background: color-mix(in srgb, var(--proof-blue) 5%, var(--paper-50));
+}
+
+.ai-engine-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ai-engine-mark {
+  position: relative;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  color: var(--ink-950);
+}
+
+.chatgpt-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+.ai-engine-identity > div {
+  display: grid;
+  min-width: 0;
+}
+
+.ai-engine-identity strong {
+  color: var(--ink-950);
+  font-size: 14px;
+}
+
+.ai-engine-identity span,
+.speech-tier-copy small {
+  overflow: hidden;
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: 1.7;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-engine-state {
+  position: absolute;
+  inset-inline-end: -1px;
+  inset-block-end: -1px;
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  border: 2px solid var(--paper-50);
+  border-radius: 50%;
+  color: var(--paper-50);
+  background: var(--paper-300);
+}
+
+.ai-engine-state.is-connected {
+  background: var(--success);
+}
+
+.ai-engine-state.is-cli_missing {
+  background: var(--proof-blue);
+}
+
+.ai-engine-state.is-auth_required,
+.ai-engine-state.is-auth_waiting,
+.ai-engine-state.is-checking {
+  background: var(--saving);
+}
+
+.ai-engine-state.is-connection_error {
+  background: var(--error);
+}
+
+.ai-engine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.ai-engine-actions button,
+.speech-tier-action button {
+  padding-inline: 11px;
+  font-size: 12px;
+}
+
+.ai-engine-actions button.is-primary,
+.speech-tier-row.is-active .speech-tier-action button:first-child {
+  border-color: var(--proof-blue);
+  background: var(--proof-blue);
+  color: #fff;
+}
+
+.ai-engine-actions button.is-danger {
+  color: var(--error);
+}
+
+.ai-engine-actions button.is-danger:hover:not(:disabled) {
+  background: var(--error-soft);
+}
+
+.ai-connection-prerequisites {
+  display: flex;
+  gap: 8px;
+  padding-block-start: 2px;
+}
+
+.ai-connection-prerequisites > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--paper-100) 58%, transparent);
+  color: var(--ink-700);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ai-connection-prerequisites > span > i {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  place-items: center;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: var(--paper-50);
+  color: var(--ink-700);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.ai-connection-prerequisites > span.is-current {
+  border-color: color-mix(in srgb, var(--proof-blue) 48%, var(--rule));
+  background: color-mix(in srgb, var(--proof-blue) 7%, var(--paper-50));
+  color: var(--proof-blue);
+}
+
+.ai-connection-prerequisites > span.is-current > i {
+  border-color: var(--proof-blue);
+  background: var(--proof-blue);
+  color: #fff;
+}
+
+.ai-connection-prerequisites > span.is-complete {
+  border-color: color-mix(in srgb, var(--success) 42%, var(--rule));
+  background: color-mix(in srgb, var(--success) 7%, var(--paper-50));
+  color: var(--success);
+}
+
+.ai-connection-prerequisites > span.is-complete > i {
+  border-color: var(--success);
+  background: var(--success);
+  color: #fff;
+}
+
+.ai-cli-install-detail {
+  display: grid;
+  gap: 7px;
+}
+
+.ai-cli-install-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--ink-950) 75%, var(--rule));
+  border-radius: 8px;
+  background: var(--ink-950);
+}
+
+.ai-cli-install-box code {
+  min-width: 0;
+  overflow: hidden;
+  padding: 6px 4px;
+  color: var(--paper-50);
+  font-family: Consolas, "Cascadia Code", monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}
+
+.ai-cli-install-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.ai-cli-install-controls button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ai-cli-guide {
+  width: 38px;
+  flex: 0 0 38px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--paper-50) 30%, transparent);
+  background: color-mix(in srgb, var(--paper-50) 8%, transparent);
+  color: var(--paper-50);
+}
+
+.ai-cli-guide:hover {
+  border-color: color-mix(in srgb, var(--paper-50) 50%, transparent);
+  background: color-mix(in srgb, var(--paper-50) 14%, transparent);
+}
+
+.ai-cli-copy {
+  width: 38px;
+  flex: 0 0 38px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--paper-50) 26%, transparent);
+  background: transparent;
+  color: var(--paper-50);
+}
+
+.ai-cli-copy:hover {
+  border-color: color-mix(in srgb, var(--paper-50) 48%, transparent);
+  background: color-mix(in srgb, var(--paper-50) 10%, transparent);
+}
+
+.ai-cli-install-trigger {
+  width: 38px;
+  flex: 0 0 38px;
+  padding: 0;
+  border: 1px solid var(--proof-blue);
+  background: var(--proof-blue);
+  color: #fff;
+}
+
+.ai-cli-install-trigger:hover {
+  background: var(--proof-blue-dark);
+}
+
+.ai-cli-install-detail small {
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.chatgpt-model-picker {
+  display: grid;
+  grid-template-columns: minmax(120px, .35fr) minmax(220px, .65fr);
+  align-items: center;
+  gap: 6px 14px;
+  padding-block-start: 13px;
+  border-top: 1px solid var(--rule);
+}
+
+.chatgpt-model-picker > span {
+  color: var(--ink-950);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chatgpt-model-picker select {
+  width: 100%;
+  min-height: 40px;
+  padding-inline: 10px 32px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  outline: 0;
+  background: var(--input-bg);
+  color: var(--ink-950);
+  font: inherit;
+  font-size: 12px;
+}
+
+.chatgpt-model-picker select:disabled {
+  cursor: not-allowed;
+  opacity: .65;
+}
+
+.chatgpt-model-picker select:focus-visible {
+  outline: 2px solid var(--proof-blue);
+  outline-offset: 2px;
+}
+
+.chatgpt-model-picker small {
+  grid-column: 2;
+  color: var(--ink-700);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.chatgpt-model-error {
+  margin: 0;
+  color: var(--error);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.ai-settings-intro button:focus-visible,
+.ai-engine-actions button:focus-visible,
+.ai-cli-install-box button:focus-visible,
+.speech-tier-action button:focus-visible {
+  outline: 2px solid var(--proof-blue);
+  outline-offset: 2px;
+}
+
+.ai-settings-notice,
+.ai-settings-error,
+.ai-default-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: var(--paper-100);
+  color: var(--ink-700);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.ai-settings-error {
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.ai-default-summary.is-ready {
+  background: color-mix(in srgb, var(--success) 10%, var(--paper-50));
+  color: var(--success);
+}
+
+.ai-settings-empty {
+  margin: 0;
+  padding: 20px;
+  color: var(--ink-700);
+  text-align: center;
+}
+
+.speech-model-settings {
+  display: grid;
+  gap: 10px;
+  padding-block-start: 4px;
+}
+
+.speech-model-settings > header > span {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--proof-blue) 12%, var(--paper-50));
+  color: var(--proof-blue);
+  font-size: 11px;
+}
+
+.speech-tier-list {
+  display: grid;
+}
+
+.speech-tier-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 72px;
+  padding: 10px 14px;
+}
+
+.speech-tier-row + .speech-tier-row {
+  border-top: 1px solid var(--rule);
+}
+
+.speech-tier-row.is-recommended {
+  background: color-mix(in srgb, var(--proof-blue) 5%, var(--paper-50));
+}
+
+.speech-tier-copy {
+  min-width: 0;
+}
+
+.speech-tier-copy > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.speech-tier-copy strong {
+  color: var(--ink-950);
+  font-size: 14px;
+}
+
+.speech-tier-copy > div span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--proof-blue) 12%, var(--paper-50));
+  color: var(--proof-blue);
+  font-size: 10px;
+}
+
+.speech-tier-copy p {
+  margin: 2px 0;
+  color: var(--ink-950);
+  font-size: 12px;
+}
+
+.speech-tier-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex: 0 0 auto;
+}
+
+.speech-tier-action button.is-icon {
+  width: 38px;
+  padding: 0;
+  color: var(--error);
+}
+
+.speech-tier-progress {
+  display: grid;
+  gap: 3px;
+  width: 110px;
+  color: var(--ink-700);
+  font-size: 10px;
+}
+
+.speech-tier-progress progress {
+  width: 100%;
+  height: 5px;
+  accent-color: var(--proof-blue);
+}
+
+@media (max-width: 760px) {
+  .ai-settings-intro,
+  .chatgpt-connection-top,
+  .speech-model-settings > header,
+  .speech-tier-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ai-settings-intro button {
+    width: 100%;
+  }
+
+  .ai-settings-intro button,
+  .ai-engine-actions button,
+  .speech-tier-action button {
+    min-height: 44px;
+  }
+
+  .ai-engine-actions,
+  .speech-tier-action {
+    justify-content: stretch;
+  }
+
+  .chatgpt-model-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-connection-prerequisites,
+  .ai-cli-install-detail {
+    flex-direction: column;
+  }
+
+  .ai-cli-install-box {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-cli-install-controls {
+    justify-content: flex-end;
+  }
+
+  .ai-cli-install-controls button {
+    min-height: 44px;
+  }
+
+  .ai-cli-install-trigger {
+    width: 44px;
+    flex-basis: 44px;
+  }
+
+  .ai-cli-copy {
+    width: 44px;
+    flex-basis: 44px;
+  }
+
+  .ai-cli-guide {
+    width: 44px;
+    flex-basis: 44px;
+  }
+
+  .ai-connection-prerequisites > span {
+    width: 100%;
+  }
+
+  .chatgpt-model-picker small {
+    grid-column: 1;
+  }
+
+  .ai-engine-actions button,
+  .speech-tier-action button:not(.is-icon) {
+    flex: 1;
+  }
+}

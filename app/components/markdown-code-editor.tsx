@@ -70,6 +70,8 @@ import {
   viewportDirectionExtension,
 } from "../editor/live-preview";
 import type { LiveImageResolution } from "../editor/rich-block-widgets";
+import type { LiveAudioResolution } from "../editor/rich-block-widgets";
+import type { AudioDescriptor } from "../audio/types";
 import {
   resolveAdjacentMarkdownBlockRange,
   resolveMarkdownBlockRange,
@@ -119,6 +121,19 @@ import { contextualShortcutsFor } from "../editor/contextual-shortcuts";
 import { GripVertical, Notes } from "../icons/material-symbols";
 import { MATERIAL_SYMBOL_PATHS } from "../icons/material-symbol-paths";
 import { MagicWandTrigger } from "./magic-wand-trigger";
+
+const KEYBOARD_READING_BAND_RATIO = 0.32;
+
+function keyboardReadingBandMargin(view: EditorView) {
+  return Math.round(view.scrollDOM.clientHeight * KEYBOARD_READING_BAND_RATIO);
+}
+
+function syncKeyboardReadingBandSpace(view: EditorView) {
+  view.contentDOM.style.setProperty(
+    "--editor-keyboard-safe-margin",
+    `${keyboardReadingBandMargin(view)}px`,
+  );
+}
 
 export type TableCellTextSelection = {
   key: string;
@@ -189,6 +204,7 @@ export type EditorFormattingContext = {
     | "ordered-list"
     | "task"
     | "quote"
+    | "divider"
     | "code-block"
     | "callout"
     | "table"
@@ -223,6 +239,11 @@ type MarkdownCodeEditorProps = {
     to: number,
     opener?: HTMLElement,
   ) => void;
+  onOpenAudioTranscription?: (
+    descriptor: AudioDescriptor,
+    from: number,
+    to: number,
+  ) => void;
   onOpenAiForBlock?: (block: {
     from: number;
     to: number;
@@ -234,6 +255,9 @@ type MarkdownCodeEditorProps = {
     clientY: number;
   }) => void;
   resolveLiveImage?: (source: string) => LiveImageResolution;
+  resolveLiveAudio?: (
+    source: string,
+  ) => LiveAudioResolution | Promise<LiveAudioResolution>;
   transformPastedText?: (value: string) => string;
   value: string;
 };
@@ -1163,6 +1187,7 @@ export function editorFormattingContext(state: EditorState): EditorFormattingCon
     const openingLine = state.doc.lineAt(fencedFrom ?? line.from).text;
     block = /^\s*`{3,}\s*mermaid\b/iu.test(openingLine) ? "mermaid" : "code-block";
   } else if (structuralBlock?.kind === "formula") block = "formula";
+  else if (structuralBlock?.kind === "divider") block = "divider";
   else if (names.has("Table") || looksLikeTable) block = "table";
   else if (names.has("Image")) block = "image";
   else if (/^\s*>\s*\[!(?:NOTE|TIP|IMPORTANT|WARNING)\]/iu.test(source)) block = "callout";
@@ -1813,10 +1838,12 @@ export const MarkdownCodeEditor = forwardRef<
     onLivePreviewFailure,
     onOpenMermaidStudio,
     onOpenFormulaStudio,
+    onOpenAudioTranscription,
     onOpenAiForBlock,
     onScroll,
     onSelectionChange,
     resolveLiveImage,
+    resolveLiveAudio,
     transformPastedText,
     value,
   },
@@ -1857,8 +1884,10 @@ export const MarkdownCodeEditor = forwardRef<
   const onLivePreviewFailureRef = useRef(onLivePreviewFailure);
   const onOpenMermaidStudioRef = useRef(onOpenMermaidStudio);
   const onOpenFormulaStudioRef = useRef(onOpenFormulaStudio);
+  const onOpenAudioTranscriptionRef = useRef(onOpenAudioTranscription);
   const onOpenAiForBlockRef = useRef(onOpenAiForBlock);
   const resolveLiveImageRef = useRef(resolveLiveImage);
+  const resolveLiveAudioRef = useRef(resolveLiveAudio);
   const tableCellSelectionRef = useRef<
     (TableCellTextSelection & { element: HTMLTextAreaElement }) | null
   >(null);
@@ -2076,8 +2105,10 @@ export const MarkdownCodeEditor = forwardRef<
   onLivePreviewFailureRef.current = onLivePreviewFailure;
   onOpenMermaidStudioRef.current = onOpenMermaidStudio;
   onOpenFormulaStudioRef.current = onOpenFormulaStudio;
+  onOpenAudioTranscriptionRef.current = onOpenAudioTranscription;
   onOpenAiForBlockRef.current = onOpenAiForBlock;
   resolveLiveImageRef.current = resolveLiveImage;
+  resolveLiveAudioRef.current = resolveLiveAudio;
 
   const blockMenuGutter = useRef(
     gutter({
@@ -2107,6 +2138,13 @@ export const MarkdownCodeEditor = forwardRef<
             status: "blocked",
             message: "منبع تصویر برای نمایش در ویرایشگر در دسترس نیست.",
           },
+        resolveAudio: (source) =>
+          resolveLiveAudioRef.current?.(source) ?? {
+            status: "blocked",
+            message: "فایل صوتی برای پخش در دسترس نیست.",
+          },
+        openAudioTranscription: (descriptor, from, to) =>
+          onOpenAudioTranscriptionRef.current?.(descriptor, from, to),
       },
     }),
   );
@@ -2114,6 +2152,36 @@ export const MarkdownCodeEditor = forwardRef<
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+
+    let keyboardNavigationPending = false;
+    let keyboardRevealFrame: number | null = null;
+    const scheduleKeyboardReadingBandReveal = (view: EditorView) => {
+      if (keyboardRevealFrame !== null) {
+        cancelAnimationFrame(keyboardRevealFrame);
+      }
+      keyboardRevealFrame = requestAnimationFrame(() => {
+        keyboardRevealFrame = null;
+        if (!view.dom.isConnected || !view.hasFocus) return;
+        view.requestMeasure({
+          read(measuredView) {
+            const selection = measuredView.state.selection.main;
+            const caret = measuredView.coordsAtPos(selection.head, 1);
+            if (!caret) return 0;
+            const viewport = measuredView.scrollDOM.getBoundingClientRect();
+            const margin = keyboardReadingBandMargin(measuredView);
+            const safeTop = viewport.top + margin;
+            const safeBottom = viewport.bottom - margin;
+            if (caret.top < safeTop) return caret.top - safeTop;
+            if (caret.bottom > safeBottom) return caret.bottom - safeBottom;
+            return 0;
+          },
+          write(delta, measuredView) {
+            if (Math.abs(delta) < 1) return;
+            measuredView.scrollDOM.scrollTop += delta;
+          },
+        });
+      });
+    };
 
     const runStructuralShortcut = (
       view: EditorView,
@@ -2137,10 +2205,7 @@ export const MarkdownCodeEditor = forwardRef<
           keymap.of([
             {
               key: "Mod-a",
-              run: (view) =>
-                currentModeRef.current === "source"
-                  ? false
-                  : selectActiveBlockContents(view),
+              run: (view) => selectActiveBlockContents(view),
             },
             {
               key: "Escape",
@@ -2163,7 +2228,6 @@ export const MarkdownCodeEditor = forwardRef<
             {
               key: "Shift-Enter",
               run: (view) =>
-                currentModeRef.current === "source" ||
                 view.composing || imeCompositionActiveRef.current
                   ? false
                   : editActiveListItem(view, "soft-break"),
@@ -2171,7 +2235,6 @@ export const MarkdownCodeEditor = forwardRef<
             {
               key: "Enter",
               run: (view) => {
-                if (currentModeRef.current === "source") return false;
                 if (view.composing || imeCompositionActiveRef.current) {
                   return false;
                 }
@@ -2185,9 +2248,7 @@ export const MarkdownCodeEditor = forwardRef<
                 if (view.composing || imeCompositionActiveRef.current) {
                   return true;
                 }
-                return currentModeRef.current === "source"
-                  ? indentMore(view)
-                  : editActiveListItem(view, "nest");
+                return editActiveListItem(view, "nest") || indentMore(view);
               },
             },
             {
@@ -2196,9 +2257,7 @@ export const MarkdownCodeEditor = forwardRef<
                 if (view.composing || imeCompositionActiveRef.current) {
                   return true;
                 }
-                return currentModeRef.current === "source"
-                  ? indentLess(view)
-                  : editActiveListItem(view, "outdent");
+                return editActiveListItem(view, "outdent") || indentLess(view);
               },
             },
             {
@@ -2207,9 +2266,7 @@ export const MarkdownCodeEditor = forwardRef<
                 if (view.composing || imeCompositionActiveRef.current) {
                   return true;
                 }
-                return currentModeRef.current === "source"
-                  ? false
-                  : editActiveListItem(view, "move-up");
+                return editActiveListItem(view, "move-up");
               },
             },
             {
@@ -2218,9 +2275,7 @@ export const MarkdownCodeEditor = forwardRef<
                 if (view.composing || imeCompositionActiveRef.current) {
                   return true;
                 }
-                return currentModeRef.current === "source"
-                  ? false
-                  : editActiveListItem(view, "move-down");
+                return editActiveListItem(view, "move-down");
               },
             },
             {
@@ -2243,21 +2298,23 @@ export const MarkdownCodeEditor = forwardRef<
             },
             {
               key: "Backspace",
-              run: (view) =>
-                currentModeRef.current === "source" ||
-                view.composing || imeCompositionActiveRef.current
-                  ? false
-                  : editActiveListItem(view, "delete-empty") ||
-                    preserveIndependentBlockBoundary(view, "backward"),
+              run: (view) => {
+                if (view.composing || imeCompositionActiveRef.current) {
+                  return false;
+                }
+                return editActiveListItem(view, "delete-empty") ||
+                  preserveIndependentBlockBoundary(view, "backward");
+              },
             },
             {
               key: "Delete",
-              run: (view) =>
-                currentModeRef.current === "source" ||
-                view.composing || imeCompositionActiveRef.current
-                  ? false
-                  : editActiveListItem(view, "delete-empty") ||
-                    preserveIndependentBlockBoundary(view, "forward"),
+              run: (view) => {
+                if (view.composing || imeCompositionActiveRef.current) {
+                  return false;
+                }
+                return editActiveListItem(view, "delete-empty") ||
+                  preserveIndependentBlockBoundary(view, "forward");
+              },
             },
           ]),
         ),
@@ -2287,7 +2344,10 @@ export const MarkdownCodeEditor = forwardRef<
         ),
         EditorView.perLineTextDirection.of(true),
         EditorView.lineWrapping,
-        EditorView.scrollMargins.of(() => ({ top: 28, bottom: 56 })),
+        EditorView.scrollMargins.of((view) => {
+          const safeMargin = keyboardReadingBandMargin(view);
+          return { top: safeMargin, bottom: safeMargin };
+        }),
         EditorView.contentAttributes.of({
           "aria-label": initialModeRef.current === "source"
             ? "کد Markdown"
@@ -2300,7 +2360,7 @@ export const MarkdownCodeEditor = forwardRef<
           spellcheck: "true",
           "aria-keyshortcuts":
             initialModeRef.current === "source"
-              ? "Tab Shift+Tab Control+Enter Meta+Enter Control+A Meta+A Control+F Meta+F"
+              ? "Tab Shift+Tab Control+Enter Meta+Enter Control+D Meta+D Control+A Meta+A Control+F Meta+F"
               : "Escape Tab Shift+Tab Shift+Enter Alt+ArrowUp Alt+ArrowDown Control+Enter Meta+Enter Control+D Meta+D Control+A Meta+A",
         }),
         EditorView.updateListener.of((update) => {
@@ -2314,6 +2374,9 @@ export const MarkdownCodeEditor = forwardRef<
               delete hostRef.current.dataset.tableBlockActive;
             }
             onSelectionChangeRef.current();
+            if (keyboardNavigationPending) {
+              scheduleKeyboardReadingBandReveal(update.view);
+            }
           }
           const blockSelectionChanged = update.transactions.some(
             transactionChangesStructuralBlockSelection,
@@ -2462,12 +2525,23 @@ export const MarkdownCodeEditor = forwardRef<
           },
           keydown: (event, view) => {
             if (
+              !event.altKey &&
+              !event.isComposing &&
+              (["ArrowUp", "ArrowDown", "PageUp", "PageDown"].includes(event.key) ||
+                ((event.ctrlKey || event.metaKey) &&
+                  ["Home", "End"].includes(event.key)))
+            ) {
+              keyboardNavigationPending = true;
+              queueMicrotask(() => {
+                keyboardNavigationPending = false;
+              });
+            }
+            if (
               (event.ctrlKey || event.metaKey) &&
               !event.altKey &&
               !event.shiftKey &&
               event.key.toLowerCase() === "d"
             ) {
-              if (currentModeRef.current === "source") return false;
               event.preventDefault();
               event.stopPropagation();
               if (
@@ -2586,8 +2660,14 @@ export const MarkdownCodeEditor = forwardRef<
     viewRef.current = view;
     view.dom.dataset.editorMode = initialModeRef.current;
     view.dom.dataset.lineDirection = initialLineDirectionRef.current;
+    syncKeyboardReadingBandSpace(view);
     onContextChangeRef.current?.(editorFormattingContext(view.state));
     syncWritingBlockGutter(view);
+
+    const readingBandResizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(() => syncKeyboardReadingBandSpace(view));
+    readingBandResizeObserver?.observe(view.scrollDOM);
 
     const handleScroll = () => {
       onScrollRef.current();
@@ -2635,6 +2715,10 @@ export const MarkdownCodeEditor = forwardRef<
     host.addEventListener("pointerdown", handleEditorPointerDown, true);
 
     return () => {
+      if (keyboardRevealFrame !== null) {
+        cancelAnimationFrame(keyboardRevealFrame);
+      }
+      readingBandResizeObserver?.disconnect();
       view.scrollDOM.removeEventListener("scroll", handleScroll);
       host.removeEventListener("select", handleTableCellSelect, true);
       host.removeEventListener("keyup", handleTableCellKeyUp, true);
@@ -2704,7 +2788,7 @@ export const MarkdownCodeEditor = forwardRef<
     view.contentDOM.setAttribute(
       "aria-keyshortcuts",
       mode === "source"
-        ? "Tab Shift+Tab Control+Enter Meta+Enter Control+A Meta+A Control+F Meta+F"
+        ? "Tab Shift+Tab Control+Enter Meta+Enter Control+D Meta+D Control+A Meta+A Control+F Meta+F"
         : "Escape Tab Shift+Tab Shift+Enter Alt+ArrowUp Alt+ArrowDown Control+Enter Meta+Enter Control+D Meta+D Control+A Meta+A",
     );
     if (mode === "source") delete view.dom.dataset.livePreviewFallback;

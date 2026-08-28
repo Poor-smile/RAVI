@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { waitForRaaviWindow } from "./helpers/electron-main-window";
 
 async function interactiveTypeIssues(page: Page, minimum: number) {
   return page.evaluate((floor) => {
@@ -127,7 +128,7 @@ test.describe("RAVI identity baseline", () => {
     });
 
     try {
-      const window = await app.firstWindow();
+      const window = await waitForRaaviWindow(app);
       await window.setViewportSize({ width: 1440, height: 900 });
       await window.emulateMedia({ reducedMotion: "reduce" });
       await window

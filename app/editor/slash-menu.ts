@@ -50,6 +50,22 @@ export const SLASH_MENU_ITEMS: readonly SlashMenuItem[] = [
     group: "text",
   },
   {
+    type: "divider",
+    alias: "/divider",
+    title: "جداکننده",
+    description: "خط افقی میان بخش‌های سند",
+    keywords: [
+      "divider",
+      "separator",
+      "horizontal rule",
+      "hr",
+      "جداکننده",
+      "خط افقی",
+      "تفکیک",
+    ],
+    group: "text",
+  },
+  {
     type: "task",
     alias: "/todo",
     title: "چک‌لیست",
@@ -103,6 +119,14 @@ export const SLASH_MENU_ITEMS: readonly SlashMenuItem[] = [
     title: "تصویر",
     description: "تصویر محلی یا اینترنتی",
     keywords: ["image", "picture", "photo", "تصویر", "عکس"],
+    group: "media",
+  },
+  {
+    type: "audio",
+    alias: "/audio",
+    title: "صوت",
+    description: "فایل صوتی محلی و قابل‌حمل",
+    keywords: ["audio", "voice", "sound", "صوت", "صدا", "فایل صوتی"],
     group: "media",
   },
   {

@@ -12,9 +12,13 @@ async function openWritingDocument(page: import("@playwright/test").Page) {
     "data-hydrated",
     "true",
   );
-  await openWritingWorkspace(page);
+  await openWritingWorkspace(page, { content: "" });
   const editor = page.locator("#markdown-editor .cm-content");
+  await page.getByRole("button", { name: "متن خام", exact: true }).click();
   await editor.fill("بلوک اول\n\nبلوک دوم\n\nبلوک سوم");
+  await page
+    .getByRole("button", { name: "ویرایش روان", exact: true })
+    .click();
   return editor;
 }
 

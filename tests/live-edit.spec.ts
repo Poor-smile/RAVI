@@ -53,7 +53,7 @@ test.describe("ویرایش روان روی یک منبع Markdown", () => {
     await page.keyboard.insertText(" فارسی");
     await expect(editor).toContainText("متن پایه فارسی");
     await page.keyboard.press("Control+z");
-    await expect(editor).toHaveText("متن پایه");
+    await expect(editor.locator(".cm-line")).toHaveText(["متن پایه"]);
     await page.keyboard.press("Control+Shift+z");
     await expect(editor).toContainText("متن پایه فارسی");
   });

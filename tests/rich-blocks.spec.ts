@@ -154,7 +154,7 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
     await expect(editor).toContainText("|  |  |  |  |");
   });
 
-  test("shows the nine-action mini menu for a text selection inside a table cell", async ({
+  test("shows the compact mini menu for a text selection inside a table cell", async ({
     page,
   }) => {
     await openFixture(page);
@@ -173,7 +173,7 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
       editor.dispatchEvent(new Event("select", { bubbles: true }));
     });
     await expect(toolbar).toBeVisible();
-    await expect(toolbar.getByRole("button")).toHaveCount(10);
+    await expect(toolbar.getByRole("button")).toHaveCount(8);
     const blockGutter = page.locator("#markdown-editor .writing-block-gutter");
     await expect(blockGutter).toBeVisible();
     await expect(blockGutter).toHaveAttribute("data-block-selected", "true");
@@ -198,7 +198,7 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
 
     await cell.press("Alt+F10");
     await expect(
-      toolbar.getByRole("button", { name: "پررنگ", exact: true }),
+      toolbar.getByRole("button", { name: "کپی", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(toolbar).toBeHidden();

@@ -40,11 +40,20 @@ test("P18 Privacy & Data matches Figma, persists and clears only local recents",
       surface: size(node.querySelector(".privacy-settings")!),
       choices: Array.from(node.querySelectorAll(".privacy-image-choice"), size),
       row: size(node.querySelector(".privacy-link-section .settings-preference-row")!),
+      horizontalOverflow:
+        node.querySelector<HTMLElement>(".shortcut-settings-content")!
+          .scrollWidth -
+        node.querySelector<HTMLElement>(".shortcut-settings-content")!
+          .clientWidth,
     };
   });
-  expect(geometry.surface.width).toBe(1040);
-  expect(geometry.choices).toEqual(Array(3).fill({ width: 252, height: 96 }));
-  expect(geometry.row).toEqual({ width: 992, height: 88 });
+  expect(geometry.surface.width).toBeGreaterThan(900);
+  expect(new Set(geometry.choices.map((choice) => choice.width)).size).toBe(1);
+  expect(geometry.choices.map((choice) => choice.height)).toEqual(
+    Array(3).fill(68),
+  );
+  expect(geometry.row.height).toBe(64);
+  expect(geometry.horizontalOverflow).toBeLessThanOrEqual(0);
 
   await imagePolicy.getByRole("radio", { name: /همیشه مسدود/ }).click();
   await dialog.getByRole("switch", { name: "هشدار پیش از باز کردن لینک بیرونی" }).click();

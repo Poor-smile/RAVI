@@ -52,7 +52,8 @@ test("open → search → edit → preview → read → save/export survives int
       "true",
     );
     await page
-      .locator('input[type="file"][accept*=".ravi"]:not([multiple])')
+      .locator('input[type="file"][accept*=".md"]:not([multiple])')
+      .first()
       .setInputFiles(path.join(shelf, "سند اصلی.md"));
     await expect(page.locator(".document-identity")).toContainText("سند اصلی.md");
     await expect(page.getByRole("region", { name: "پیش‌نمایش Markdown" })).toBeVisible();

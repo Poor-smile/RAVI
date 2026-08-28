@@ -7,8 +7,50 @@ const MAX_CONTEXT_LENGTH = 480_000;
 const MAX_PROMPT_LENGTH = 24_000;
 const MAX_OUTPUT_LENGTH = 1_200_000;
 const EXECUTION_TIMEOUT_MS = 180_000;
+export const CODEX_CLI_INSTALL_COMMAND =
+  "npm install -g @openai/codex@latest";
 
-const RESPONSE_SCHEMA = {
+export function startCodexCliInstall() {
+  if (process.platform !== "win32") {
+    return { started: false, reason: "unsupported_platform" };
+  }
+
+  const script = [
+    "$Host.UI.RawUI.WindowTitle = 'Raavi - Install ChatGPT CLI'",
+    "Write-Host 'Installing the official OpenAI Codex CLI for Raavi...' -ForegroundColor Cyan",
+    "if (Get-Command npm -ErrorAction SilentlyContinue) {",
+    `  ${CODEX_CLI_INSTALL_COMMAND}`,
+    "  if ($LASTEXITCODE -eq 0) {",
+    "    Write-Host ''",
+    "    Write-Host 'Installation completed. Return to Raavi; detection is automatic.' -ForegroundColor Green",
+    "  } else {",
+    "    Write-Host ''",
+    "    Write-Host 'Installation failed. Review the error above, then try again.' -ForegroundColor Red",
+    "  }",
+    "} else {",
+    "  Write-Host 'npm was not found. Install Node.js, then run this action again.' -ForegroundColor Yellow",
+    "}",
+  ].join("; ");
+
+  try {
+    const child = spawn(
+      "powershell.exe",
+      ["-NoLogo", "-NoProfile", "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", script],
+      {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: false,
+      },
+    );
+    child.once("error", () => {});
+    child.unref();
+    return { started: true };
+  } catch {
+    return { started: false, reason: "launch_failed" };
+  }
+}
+
+export const RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
@@ -18,7 +60,21 @@ const RESPONSE_SCHEMA = {
   required: ["answer", "replacement"],
 };
 
-const PERSIAN_REVIEW_RESPONSE_SCHEMA = {
+export const AUDIO_CLEANUP_RESPONSE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    kind: {
+      type: "string",
+      enum: ["meeting", "interview", "lecture", "phone-call", "voice-note", "conversation", "general"],
+    },
+    title: { type: "string" },
+    markdown: { type: "string" },
+  },
+  required: ["kind", "title", "markdown"],
+};
+
+export const PERSIAN_REVIEW_RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
@@ -49,7 +105,7 @@ const PERSIAN_REVIEW_RESPONSE_SCHEMA = {
   required: ["summary", "suggestions"],
 };
 
-const SMART_ANNOTATIONS_RESPONSE_SCHEMA = {
+export const SMART_ANNOTATIONS_RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
@@ -231,6 +287,120 @@ export async function getCodexConnectionStatus() {
   }
 }
 
+function requestCodexModelList(command) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, ["app-server"], {
+      windowsHide: true,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let stdoutBuffer = "";
+    let stderr = "";
+    let outputLength = 0;
+    let settled = false;
+    let timer;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill();
+      callback(value);
+    };
+    const inspectLine = (line) => {
+      if (!line.trim()) return;
+      let message;
+      try {
+        message = JSON.parse(line);
+      } catch {
+        return;
+      }
+      if (message.id !== 2) return;
+      if (message.error) {
+        finish(reject, new Error("CODEX_MODEL_LIST_FAILED"));
+        return;
+      }
+      finish(resolve, message.result);
+    };
+    child.stdout?.on("data", (chunk) => {
+      outputLength += chunk.length;
+      if (outputLength > MAX_OUTPUT_LENGTH) {
+        finish(reject, new Error("CODEX_MODEL_LIST_FAILED"));
+        return;
+      }
+      stdoutBuffer += chunk.toString("utf8");
+      const lines = stdoutBuffer.split(/\r?\n/u);
+      stdoutBuffer = lines.pop() ?? "";
+      for (const line of lines) inspectLine(line);
+    });
+    child.stderr?.on("data", (chunk) => {
+      outputLength += chunk.length;
+      stderr = `${stderr}${chunk.toString("utf8")}`.slice(-2_000);
+      if (outputLength > MAX_OUTPUT_LENGTH) {
+        finish(reject, new Error("CODEX_MODEL_LIST_FAILED"));
+      }
+    });
+    child.once("error", () => finish(reject, new Error("CODEX_MODEL_LIST_FAILED")));
+    child.once("close", () => {
+      if (!settled) {
+        inspectLine(stdoutBuffer);
+        if (!settled) finish(reject, new Error(stderr.trim() || "CODEX_MODEL_LIST_FAILED"));
+      }
+    });
+    timer = setTimeout(
+      () => finish(reject, new Error("CODEX_MODEL_LIST_FAILED")),
+      30_000,
+    );
+    const messages = [
+      {
+        method: "initialize",
+        id: 1,
+        params: {
+          clientInfo: {
+            name: "raavi",
+            title: "Raavi",
+            version: "2.1.4",
+          },
+        },
+      },
+      { method: "initialized", params: {} },
+      {
+        method: "model/list",
+        id: 2,
+        params: { limit: 100, includeHidden: false },
+      },
+    ];
+    child.stdin?.write(`${messages.map((message) => JSON.stringify(message)).join("\n")}\n`, "utf8");
+  });
+}
+
+function safeCatalogText(value, fallback = "") {
+  if (typeof value !== "string") return fallback;
+  return value.trim().slice(0, 240).replace(/[\u0000-\u001f\u007f]/gu, "");
+}
+
+export async function getCodexModels() {
+  const command = await resolveCodexCommand();
+  if (!command) throw new Error("CODEX_CLI_MISSING");
+  const status = await getCodexConnectionStatus();
+  if (status.state !== "connected") throw new Error("CODEX_AUTH_REQUIRED");
+  const response = await requestCodexModelList(command);
+  const models = Array.isArray(response?.data)
+    ? response.data
+        .filter((model) => model && model.hidden !== true)
+        .map((model) => ({
+          id: safeCatalogText(model.model ?? model.id).slice(0, 120),
+          displayName: safeCatalogText(model.displayName, model.model ?? model.id),
+          description: safeCatalogText(model.description),
+          isDefault: model.isDefault === true,
+        }))
+        .filter((model) => model.id)
+        .slice(0, 100)
+    : [];
+  return {
+    models,
+    defaultModel: models.find((model) => model.isDefault)?.id ?? null,
+  };
+}
+
 export function buildCodexPrompt({ context, prompt }) {
   const safeContext = String(context ?? "").slice(0, MAX_CONTEXT_LENGTH);
   const safePrompt = String(prompt ?? "").trim().slice(0, MAX_PROMPT_LENGTH);
@@ -250,6 +420,27 @@ export function buildCodexPrompt({ context, prompt }) {
     "<user_request>",
     safePrompt,
     "</user_request>",
+  ].join("\n");
+}
+
+export function buildAudioCleanupPrompt({ transcript, suggestedKind = "general" }) {
+  const safeTranscript = String(transcript ?? "").slice(0, MAX_CONTEXT_LENGTH);
+  return [
+    "You are Raavi Smart, turning a noisy local Persian speech transcript into faithful, readable Markdown.",
+    "Return only the JSON object required by the output schema.",
+    `The local heuristic suggested this content kind: ${suggestedKind}. Correct it when the transcript clearly indicates another kind.`,
+    "The input contains timestamps and may mix Persian, Arabic, Urdu-looking recognition errors, duplicate fragments, and sound markers.",
+    "Reconstruct Persian spelling, half-spaces, punctuation, sentence boundaries, and obvious speech-recognition mistakes conservatively.",
+    "Keep the meaning, order, claims, names, numbers, dates, and quoted wording faithful. Never invent missing facts or silently complete an uncertain proper name.",
+    "Remove routine timestamps and recognition scaffolding from the main prose. Preserve only genuinely uncertain passages as a short Markdown section named «نیاز به شنیدن دوباره», with the relevant timestamp and the closest faithful wording.",
+    "Do not expose a raw transcript section. Do not mention Codex, Whisper, tools, or implementation details.",
+    "Use Persian Markdown appropriate to the detected content: headings and coherent paragraphs for talks; summary, decisions, and actions for meetings; questions and answers for interviews.",
+    "The title must be concise Persian text. markdown must be the complete final document beginning with a level-two heading using that title.",
+    "Audio stays local; only this transcript is being reviewed.",
+    "",
+    "<timed_local_transcript>",
+    safeTranscript,
+    "</timed_local_transcript>",
   ].join("\n");
 }
 
@@ -296,7 +487,16 @@ export function buildSmartAnnotationsPrompt({ document, economy = false }) {
   ].join("\n");
 }
 
-async function runStructuredCodex(prompt, schema) {
+function safeModelArgument(value) {
+  const model = String(value ?? "").trim();
+  if (!model) return [];
+  if (model.length > 120 || /[\u0000-\u001f\u007f]/u.test(model)) {
+    throw new Error("Invalid AI model identifier.");
+  }
+  return ["--model", model];
+}
+
+export async function runStructuredCodex(prompt, schema, options = {}) {
   const command = await resolveCodexCommand();
   if (!command) throw new Error("CODEX_CLI_MISSING");
   const status = await getCodexConnectionStatus();
@@ -310,6 +510,7 @@ async function runStructuredCodex(prompt, schema) {
     const result = await spawnResult(
       command,
       [
+        ...safeModelArgument(options.model),
         "--ask-for-approval",
         "never",
         "exec",
@@ -350,6 +551,7 @@ export async function runCodexPrompt(payload) {
   const parsed = await runStructuredCodex(
     buildCodexPrompt(payload),
     RESPONSE_SCHEMA,
+    { model: payload?.model },
   );
   if (typeof parsed?.answer !== "string") {
     throw new Error("Codex CLI returned an invalid response.");
@@ -361,10 +563,35 @@ export async function runCodexPrompt(payload) {
   };
 }
 
+export async function runCodexAudioCleanup(payload) {
+  const parsed = await runStructuredCodex(
+    buildAudioCleanupPrompt(payload),
+    AUDIO_CLEANUP_RESPONSE_SCHEMA,
+    { model: payload?.model },
+  );
+  const validKinds = new Set([
+    "meeting", "interview", "lecture", "phone-call", "voice-note", "conversation", "general",
+  ]);
+  if (
+    !validKinds.has(parsed?.kind) ||
+    typeof parsed?.title !== "string" ||
+    typeof parsed?.markdown !== "string" ||
+    !parsed.markdown.trim()
+  ) {
+    throw new Error("Codex CLI returned an invalid audio cleanup response.");
+  }
+  return {
+    kind: parsed.kind,
+    title: parsed.title.trim(),
+    markdown: parsed.markdown.trim(),
+  };
+}
+
 export async function runCodexPersianReview(payload) {
   const parsed = await runStructuredCodex(
     buildPersianReviewPrompt(payload),
     PERSIAN_REVIEW_RESPONSE_SCHEMA,
+    { model: payload?.model },
   );
   if (!Array.isArray(parsed?.suggestions) || typeof parsed?.summary !== "string") {
     throw new Error("Codex CLI returned an invalid Persian review response.");
@@ -379,6 +606,7 @@ export async function runCodexSmartAnnotations(payload) {
   const parsed = await runStructuredCodex(
     buildSmartAnnotationsPrompt(payload),
     SMART_ANNOTATIONS_RESPONSE_SCHEMA,
+    { model: payload?.model },
   );
   if (!Array.isArray(parsed?.findings) || typeof parsed?.summary !== "string") {
     throw new Error("Codex CLI returned an invalid smart annotation response.");
@@ -399,5 +627,26 @@ export async function startCodexLogin() {
     return { started: true, state: "auth_waiting" };
   } catch {
     return { started: false, state: "connection_error" };
+  }
+}
+
+export async function resetCodexConnection() {
+  const command = await resolveCodexCommand();
+  if (!command) return { state: "cli_missing" };
+  try {
+    const result = await spawnResult(command, ["logout"], { timeoutMs: 60_000 });
+    const detail = `${result.stdout}\n${result.stderr}`;
+    if (
+      result.code !== 0 &&
+      !/not authenticated|not logged in|already logged out|no authentication/iu.test(detail)
+    ) {
+      throw new Error("CODEX_LOGOUT_FAILED");
+    }
+    return { state: "auth_required" };
+  } catch (error) {
+    if (error instanceof Error && error.message === "CODEX_LOGOUT_FAILED") {
+      throw error;
+    }
+    throw new Error("CODEX_LOGOUT_FAILED");
   }
 }

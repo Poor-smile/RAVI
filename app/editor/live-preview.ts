@@ -32,11 +32,13 @@ import {
   CodeBlockWidget,
   FootnoteWidget,
   ImageBlockWidget,
+  AudioBlockWidget,
   FormulaBlockWidget,
   MermaidBlockWidget,
   type RichWidgetOptions,
   TableBlockWidget,
 } from "./rich-block-widgets";
+import { parseMarkdownAudio } from "../audio/markdown";
 import {
   footnoteReferences,
   parseCallout,
@@ -71,6 +73,22 @@ const activeEditingBlockRangeField = StateField.define<ScanRange | null>({
         next = effect.value;
         explicitlySet = true;
       }
+    }
+    if (!explicitlySet && transaction.docChanged && value) {
+      let replacesWholeDocument = false;
+      transaction.changes.iterChanges((fromA, toA) => {
+        if (
+          fromA === 0 &&
+          toA === transaction.startState.doc.length
+        ) {
+          replacesWholeDocument = true;
+        }
+      });
+      // A wholesale replacement (paste/import/test automation) belongs to a
+      // new document shape. Keeping the previous block range here exposes
+      // only a stale fragment in Live Edit and makes block-scoped shortcuts
+      // operate on the wrong content.
+      if (replacesWholeDocument) next = null;
     }
     if (
       !explicitlySet &&
@@ -329,6 +347,19 @@ function addLineDecoration(
   decorations.push(Decoration.line({ class: className }).range(line.from));
 }
 
+export function pluginSafeDecorationRanges(
+  state: EditorState,
+  decorations: Range<Decoration>[],
+) {
+  return decorations.filter((range) => {
+    const decoration = range.value as Decoration & { isReplace?: boolean };
+    if (!decoration.isReplace || range.from === range.to) return true;
+    // ViewPlugin decorations may not replace a line break. Multiline block
+    // widgets are provided through the StateField-backed rich-block extension.
+    return state.doc.lineAt(range.from).to >= range.to;
+  });
+}
+
 export function buildLivePreviewDecorations(view: EditorView) {
   const ranges = livePreviewScanRanges(view);
   const decorations: Range<Decoration>[] = [];
@@ -460,18 +491,9 @@ export function buildLivePreviewDecorations(view: EditorView) {
           }
           return false;
         } else if (node.name === "CommentBlock") {
-          if (!selectionTouchesLine(view.state, node, view.hasFocus)) {
-            decorations.push(
-              Decoration.replace({
-                widget: new RevealSourceWidget(
-                  node.from,
-                  node.to,
-                  "یادداشت پنهان",
-                  "cm-live-comment-placeholder",
-                ),
-              }).range(node.from, node.to),
-            );
-          }
+          // Multiline comments are rendered by the StateField-backed rich
+          // block extension. Replacing them from this ViewPlugin crashes
+          // CodeMirror because their range includes line breaks.
           return false;
         } else if (node.name === "ListItem") {
           const line = view.state.doc.lineAt(node.from);
@@ -675,7 +697,10 @@ export function buildLivePreviewDecorations(view: EditorView) {
   }
 
   return {
-    decorations: Decoration.set(decorations, true),
+    decorations: Decoration.set(
+      pluginSafeDecorationRanges(view.state, decorations),
+      true,
+    ),
     rangeCount: ranges.length,
     scannedCharacters: ranges.reduce(
       (total, range) => total + range.to - range.from,
@@ -758,6 +783,22 @@ function buildRichBlockDecorations(
           }
           return false;
         }
+        if (node.name === "CommentBlock") {
+          if (!selectionTouchesRange(view.state, node, view.hasFocus)) {
+            decorations.push(
+              Decoration.replace({
+                block: true,
+                widget: new RevealSourceWidget(
+                  node.from,
+                  node.to,
+                  "یادداشت پنهان",
+                  "cm-live-comment-placeholder",
+                ),
+              }).range(node.from, node.to),
+            );
+          }
+          return false;
+        }
         if (node.name === "Table") {
           if (!selectionTouchesRange(view.state, node, view.hasFocus)) {
             const source = view.state.sliceDoc(node.from, node.to);
@@ -792,6 +833,31 @@ function buildRichBlockDecorations(
                   ),
                 }).range(node.from, node.to),
               );
+            }
+          }
+          return false;
+        }
+        if (node.name === "Link") {
+          if (!selectionTouchesRange(view.state, node, view.hasFocus)) {
+            const linkSource = view.state.sliceDoc(node.from, node.to);
+            const audio = parseMarkdownAudio(linkSource);
+            if (audio) {
+              const line = view.state.doc.lineAt(node.from);
+              if (line.text.trim() === linkSource) {
+                decorations.push(
+                  Decoration.replace({
+                    block: true,
+                    widget: new AudioBlockWidget(
+                      node.from,
+                      node.to,
+                      linkSource,
+                      audio,
+                      options.resolveAudio,
+                      options.openAudioTranscription,
+                    ),
+                  }).range(node.from, node.to),
+                );
+              }
             }
           }
           return false;

@@ -24,6 +24,8 @@ import {
 import { mermaidRenderKey } from "../app/mermaid/renderer";
 import { MERMAID_SAMPLES } from "../app/mermaid/samples";
 import packageMetadata from "../package.json" with { type: "json" };
+import { waitForRaaviWindow } from "./helpers/electron-main-window";
+import { activatePointerAction } from "./helpers/pointer-action";
 
 const windowsWeb: CommandEnvironment = {
   platform: "windows",
@@ -473,7 +475,7 @@ test.describe("Electron Mermaid parity", () => {
     });
 
     try {
-      const window = await app.firstWindow();
+      const window = await waitForRaaviWindow(app);
       await startElectronWritingDraft(window);
       const editor = window.locator("#markdown-editor:visible");
       const editorContent = editor.locator(".cm-content");
@@ -631,7 +633,7 @@ test.describe("Electron Mermaid parity", () => {
           exact: true,
         }),
       ).toHaveCount(0);
-      await fullscreenButton.click();
+      await activatePointerAction(fullscreenButton);
       const detailedDiagram = window.locator(
         ".mermaid-diagram:fullscreen, .mermaid-diagram.is-detail-open",
       );
@@ -782,7 +784,7 @@ test.describe("Electron keyboard integration", () => {
     });
 
     try {
-      const window = await app.firstWindow();
+      const window = await waitForRaaviWindow(app);
       await expect(window.locator(".app-shell")).toHaveAttribute(
         "data-hydrated",
         "true",
@@ -884,7 +886,7 @@ test.describe("Electron keyboard integration", () => {
     });
 
     try {
-      const window = await app.firstWindow();
+      const window = await waitForRaaviWindow(app);
       await startElectronWritingDraft(window);
       const editor = window.locator("#markdown-editor:visible");
       const editorContent = editor.locator(".cm-content");
@@ -1760,11 +1762,16 @@ test.describe("Electron keyboard integration", () => {
       await expect(commandPaletteDialog).toBeHidden();
 
       await editorContent.focus();
-      await window.keyboard.press("Control+Shift+KeyS");
+      await dispatchShortcut({
+        code: "KeyS",
+        key: "S",
+        ctrlKey: true,
+        shiftKey: true,
+      });
       const saveName = window.locator('[data-editable-kind="saveName"]').first();
       await expect(saveName).toBeFocused();
 
-      await dispatchShortcut({ code: "Escape", key: "Escape" });
+      await saveName.press("Escape");
       await expect(window.locator(".save-modal")).toBeHidden();
       await expect(editorContent).toBeFocused();
 
@@ -1820,6 +1827,7 @@ test.describe("Electron keyboard integration", () => {
       await window
         .getByRole("button", { name: "متن خام", exact: true })
         .click();
+      await expect(editor).toBeVisible();
       const mixedDocument = [
         "# Mixed document",
         "",
@@ -1827,6 +1835,9 @@ test.describe("Electron keyboard integration", () => {
         "",
         "این پاراگراف فارسی است و فقط چند English word در آن دیده می‌شود.",
       ].join("\n");
+      // Ctrl/Cmd+A intentionally selects the active semantic block in Raavi.
+      // Use the editor fill contract when this scenario needs a whole-document
+      // replacement before validating reading direction and drag selection.
       await editorContent.fill(mixedDocument);
       await expect
         .poll(async () =>
@@ -1929,7 +1940,7 @@ test.describe("Electron keyboard integration", () => {
     });
 
     try {
-      const window = await app.firstWindow();
+      const window = await waitForRaaviWindow(app);
       await startElectronWritingDraft(window);
       await window
         .getByRole("button", { name: "متن خام", exact: true })
@@ -1949,27 +1960,49 @@ test.describe("Electron keyboard integration", () => {
         .getByRole("button", { name: "خواندن", exact: true })
         .click();
 
-      const selectionTarget = markdownBody.getByText(
-        "این متن برای بررسی ماندگاری محدودهٔ انتخاب‌شده است.",
-        { exact: true },
-      );
-      await expect(selectionTarget).toHaveText(
-        "این متن برای بررسی ماندگاری محدودهٔ انتخاب‌شده است.",
-      );
-      await expect
-        .poll(async () => {
-          await selectionTarget.selectText();
-          return window.evaluate(() => globalThis.getSelection()?.toString());
-        })
-        .toBe("این متن برای بررسی ماندگاری محدودهٔ انتخاب‌شده است.");
-      const selectionTargetBox = await selectionTarget.boundingBox();
-      expect(selectionTargetBox).not.toBeNull();
+      const selectionText =
+        "این متن برای بررسی ماندگاری محدودهٔ انتخاب‌شده است.";
+      const selectionTarget = () =>
+        markdownBody.getByText(selectionText, { exact: true });
+      await expect(selectionTarget()).toHaveText(selectionText);
       const selectionMenu = window.getByRole("toolbar", {
         name: "ابزار متن انتخاب‌شده",
       });
+      const dragTargetBox = await selectionTarget().boundingBox();
+      expect(dragTargetBox).not.toBeNull();
+      await window.mouse.move(
+        dragTargetBox!.x + dragTargetBox!.width - 6,
+        dragTargetBox!.y + dragTargetBox!.height / 2,
+      );
+      await window.mouse.down();
+      await window.mouse.move(
+        dragTargetBox!.x + 6,
+        dragTargetBox!.y + dragTargetBox!.height / 2,
+        { steps: 12 },
+      );
+      await window.mouse.up();
+      await expect
+        .poll(() =>
+          window.evaluate(() => globalThis.getSelection()?.toString().trim()),
+        )
+        .not.toBe("");
+      await expect(selectionMenu).toBeVisible();
+      await window.keyboard.press("Escape");
+      await expect(selectionMenu).toHaveCount(0);
+
+      await expect(async () => {
+        await selectionTarget().selectText();
+        await expect
+          .poll(() =>
+            window.evaluate(() => globalThis.getSelection()?.toString()),
+          )
+          .toBe(selectionText);
+      }).toPass();
+      const selectionTargetBox = await selectionTarget().boundingBox();
+      expect(selectionTargetBox).not.toBeNull();
       await expect
         .poll(async () => {
-          const currentTarget = selectionTarget;
+          const currentTarget = selectionTarget();
           const currentBox = await currentTarget.boundingBox();
           if (!currentBox) return false;
           await currentTarget.selectText();
@@ -2015,7 +2048,7 @@ test.describe("Electron keyboard integration", () => {
     });
 
     try {
-      const window = await app.firstWindow();
+      const window = await waitForRaaviWindow(app);
       await startElectronWritingDraft(window);
       await window
         .getByRole("button", { name: "متن خام", exact: true })
@@ -2050,19 +2083,21 @@ test.describe("Electron keyboard integration", () => {
         .click();
       await expect(window.locator(".app-shell")).toHaveClass(/is-reading/);
 
-      const figure = window.locator(".mermaid-diagram");
-      await figure.scrollIntoViewIfNeeded();
-      await expect(figure.locator(".mermaid-render-surface")).toBeVisible();
+      const figure = () => window.locator(".mermaid-diagram").first();
+      await expect(async () => {
+        await figure().scrollIntoViewIfNeeded();
+        await expect(figure().locator(".mermaid-render-surface")).toBeVisible();
+      }).toPass();
       const selectionTarget = window
         .locator(".markdown-body")
         .getByText("این متن باید بدون بازسازی نمودار انتخاب شود.", {
           exact: true,
         });
       await selectionTarget.scrollIntoViewIfNeeded();
-      await figure.evaluate((element) =>
+      await figure().evaluate((element) =>
         element.setAttribute("data-test-mount-marker", "stable"),
       );
-      const figureBefore = await figure.boundingBox();
+      const figureBefore = await figure().boundingBox();
       expect(figureBefore).not.toBeNull();
 
       await selectionTarget.selectText();
@@ -2076,8 +2111,8 @@ test.describe("Electron keyboard integration", () => {
       await expect(
         window.getByRole("toolbar", { name: "ابزار متن انتخاب‌شده" }),
       ).toBeVisible();
-      await expect(figure).toHaveAttribute("data-test-mount-marker", "stable");
-      const figureAfter = await figure.boundingBox();
+      await expect(figure()).toHaveAttribute("data-test-mount-marker", "stable");
+      const figureAfter = await figure().boundingBox();
       expect(figureAfter).not.toBeNull();
       expect(Math.abs(figureAfter!.y - figureBefore!.y)).toBeLessThan(1);
       expect(Math.abs(figureAfter!.height - figureBefore!.height)).toBeLessThan(

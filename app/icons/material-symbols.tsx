@@ -114,6 +114,7 @@ function makeMaterialSymbol(
 }
 
 export const MATERIAL_SYMBOL_NAMES = {
+  AudioFile: "audio_file",
   AlertCircle: "error",
   AlertTriangle: "warning",
   ArrowLeft: "arrow_back",
@@ -133,7 +134,9 @@ export const MATERIAL_SYMBOL_NAMES = {
   Command: "keyboard_command_key",
   Computer: "computer",
   Copy: "content_copy",
+  Paste: "content_paste",
   Download: "download",
+  ExpandContent: "expand_content",
   Ellipsis: "more_horiz",
   ExternalLink: "open_in_new",
   Eye: "visibility",
@@ -162,6 +165,7 @@ export const MATERIAL_SYMBOL_NAMES = {
   Info: "info",
   Italic: "format_italic",
   Keyboard: "keyboard",
+  KeyboardReturn: "keyboard_return",
   Library: "local_library",
   Link2: "link",
   List: "format_list_bulleted",
@@ -186,15 +190,18 @@ export const MATERIAL_SYMBOL_NAMES = {
   PanelLeftOpen: "left_panel_open",
   PanelRightClose: "right_panel_close",
   PanelRightOpen: "right_panel_open",
+  Pause: "pause",
   Palette: "palette",
   Pencil: "edit",
   PencilLine: "edit_note",
   Pin: "keep",
   Plus: "add",
+  PlayArrow: "play_arrow",
   Printer: "print",
   Quote: "format_quote",
   Redo2: "redo",
   RefreshCw: "refresh",
+  RestartAlt: "restart_alt",
   RotateCcw: "replay",
   Save: "save",
   Scan: "document_scanner",
@@ -205,6 +212,9 @@ export const MATERIAL_SYMBOL_NAMES = {
   Shield: "shield",
   ShieldCheck: "verified_user",
   Sparkles: "stars_2",
+  SpeechToText: "speech_to_text",
+  Stop: "stop",
+  SystemUpdateAlt: "system_update_alt",
   Spellcheck: "spellcheck",
   Sun: "light_mode",
   Table2: "table",
@@ -228,6 +238,7 @@ export const MATERIAL_SYMBOL_NAMES = {
 export const AlertCircle = makeMaterialSymbol(
   MATERIAL_SYMBOL_NAMES.AlertCircle,
 );
+export const AudioFile = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.AudioFile);
 export const AlertTriangle = makeMaterialSymbol(
   MATERIAL_SYMBOL_NAMES.AlertTriangle,
 );
@@ -256,7 +267,11 @@ export const Code2 = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Code2);
 export const Command = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Command);
 export const Computer = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Computer);
 export const Copy = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Copy);
+export const Paste = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Paste);
 export const Download = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Download);
+export const ExpandContent = makeMaterialSymbol(
+  MATERIAL_SYMBOL_NAMES.ExpandContent,
+);
 export const Ellipsis = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Ellipsis);
 export const ExternalLink = makeMaterialSymbol(
   MATERIAL_SYMBOL_NAMES.ExternalLink,
@@ -295,6 +310,9 @@ export const ImagePlus = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.ImagePlus);
 export const Info = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Info);
 export const Italic = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Italic);
 export const Keyboard = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Keyboard);
+export const KeyboardReturn = makeMaterialSymbol(
+  MATERIAL_SYMBOL_NAMES.KeyboardReturn,
+);
 export const Library = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Library);
 export const Link2 = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Link2);
 export const List = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.List);
@@ -337,15 +355,18 @@ export const PanelRightClose = makeMaterialSymbol(
 export const PanelRightOpen = makeMaterialSymbol(
   MATERIAL_SYMBOL_NAMES.PanelRightOpen,
 );
+export const Pause = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Pause);
 export const Palette = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Palette);
 export const Pencil = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Pencil);
 export const PencilLine = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.PencilLine);
 export const Pin = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Pin);
 export const Plus = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Plus);
+export const PlayArrow = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.PlayArrow);
 export const Printer = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Printer);
 export const Quote = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Quote);
 export const Redo2 = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Redo2);
 export const RefreshCw = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.RefreshCw);
+export const RestartAlt = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.RestartAlt);
 export const RotateCcw = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.RotateCcw);
 export const Save = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Save);
 export const Scan = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Scan);
@@ -358,6 +379,13 @@ export const ShieldCheck = makeMaterialSymbol(
   MATERIAL_SYMBOL_NAMES.ShieldCheck,
 );
 export const Sparkles = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Sparkles);
+export const SpeechToText = makeMaterialSymbol(
+  MATERIAL_SYMBOL_NAMES.SpeechToText,
+);
+export const Stop = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Stop);
+export const SystemUpdateAlt = makeMaterialSymbol(
+  MATERIAL_SYMBOL_NAMES.SystemUpdateAlt,
+);
 export const Spellcheck = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Spellcheck);
 export const Sun = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Sun);
 export const Table2 = makeMaterialSymbol(MATERIAL_SYMBOL_NAMES.Table2);

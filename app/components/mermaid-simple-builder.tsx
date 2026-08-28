@@ -12,7 +12,7 @@ import {
   Trash2,
   Undo2,
 } from "@/app/icons/material-symbols";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { MermaidDiagramCatalog, MermaidDiagramPreview } from "./mermaid-diagram-catalog";
 import {
   createSimpleDiagramDraft,

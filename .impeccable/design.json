@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-29T17:17:23.0404491+03:30",
+  "generatedAt": "2026-08-22T18:47:09.1961812+03:30",
   "title": "Design System: راوی",
   "extensions": {
     "colorMeta": {
@@ -31,14 +31,26 @@
       "success": {
         "role": "tertiary",
         "displayName": "سبز ذخیره",
-        "canonical": "#299452",
-        "tonalRamp": ["#062b14", "#0b4d24", "#126e34", "#299452", "#57b979", "#8fd5a7", "#c5ead1", "#eefaf2"]
+        "canonical": "#176f3b",
+        "tonalRamp": ["#061f11", "#0b3520", "#10512d", "#176f3b", "#45935f", "#7fba8f", "#bfdec7", "#eef8f1"]
       },
       "saving": {
         "role": "tertiary",
         "displayName": "کهربایی نگه‌داری",
         "canonical": "#b77b08",
         "tonalRamp": ["#342000", "#593900", "#815500", "#b77b08", "#d9a53c", "#eacb7b", "#f6e5b5", "#fff8e5"]
+      },
+      "dark-paper-50": {
+        "role": "neutral",
+        "displayName": "کاغذ زغالی روشن",
+        "canonical": "#181e1a",
+        "tonalRamp": ["#0a0e0b", "#111613", "#181e1a", "#29322c", "#4b574e", "#78837a", "#b0b8b1", "#edf0ed"]
+      },
+      "dark-proof-blue": {
+        "role": "primary",
+        "displayName": "آبی نمونه‌خوان شب",
+        "canonical": "#86a8ff",
+        "tonalRamp": ["#0b1735", "#162b5d", "#284687", "#4669b7", "#86a8ff", "#a7bfff", "#c8d7ff", "#edf2ff"]
       }
     },
     "typographyMeta": {
@@ -100,7 +112,7 @@
       "refersTo": "button-quiet",
       "description": "عمل ثانویه روی نوار مرکب.",
       "html": "<button class=\"ds-button-quiet\">حالت مطالعه</button>",
-      "css": ".ds-button-quiet { height: 42px; padding: 0 15px; border: 1px solid #4a524a; border-radius: 6px; background: transparent; color: #d2d7d2; font-family: IRANSansX, Tahoma, sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; transition: background-color 160ms ease, color 160ms ease; } .ds-button-quiet:hover { background: #fcfdf9; border-color: #fcfdf9; color: #171b18; } .ds-button-quiet:focus-visible { outline: 3px solid #9fb5ff; outline-offset: 2px; }"
+      "css": ".ds-button-quiet { height: 42px; padding: 0 15px; border: 0; border-radius: 6px; background: transparent; color: #d2d7d2; font-family: IRANSansX, Tahoma, sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; transition: background-color 160ms ease, color 160ms ease; } .ds-button-quiet:hover { background: #fcfdf9; color: #171b18; } .ds-button-quiet:focus-visible { outline: 3px solid #9fb5ff; outline-offset: 2px; }"
     },
     {
       "name": "Tool Button",
@@ -115,27 +127,41 @@
       "kind": "nav",
       "description": "جابه‌جایی میان ویرایش و پیش‌نمایش در عرض کم.",
       "html": "<div class=\"ds-view-tabs\" dir=\"rtl\"><button aria-selected=\"true\">پیش‌نمایش</button><button aria-selected=\"false\">ویرایش</button></div>",
-      "css": ".ds-view-tabs { display: flex; width: fit-content; padding: 2px; border: 1px solid #cbd0c6; border-radius: 5px; background: #e1e4dc; } .ds-view-tabs button { min-width: 74px; height: 29px; border: 0; border-radius: 3px; background: transparent; color: #50584f; font-family: IRANSansX, Tahoma, sans-serif; font-size: 10px; font-weight: 700; cursor: pointer; } .ds-view-tabs button[aria-selected=\"true\"] { background: #2557e5; color: #fff; } .ds-view-tabs button:focus-visible { outline: 3px solid #9fb5ff; outline-offset: 2px; }"
+      "css": ".ds-view-tabs { display: flex; width: fit-content; padding: 2px; border: 1px solid #cbd0c6; border-radius: 5px; background: #e8ebe2; } .ds-view-tabs button { min-width: 74px; height: 36px; border: 0; border-radius: 3px; background: transparent; color: #50584f; font-family: IRANSansX, Tahoma, sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; } .ds-view-tabs button[aria-selected=\"true\"] { background: #2557e5; color: #fff; } .ds-view-tabs button:focus-visible { outline: 3px solid #9fb5ff; outline-offset: 2px; }"
     },
     {
       "name": "Work Pane",
       "kind": "card",
       "refersTo": "pane",
-      "description": "سطح اصلی ویرایش یا پیش‌نمایش با لبه‌ی صحافی.",
+      "description": "سطح اصلی ویرایش یا پیش‌نمایش، تخت و بدون مرز خنثی.",
       "html": "<section class=\"ds-work-pane\" dir=\"rtl\"><header>برگ ۲ · پیش‌نمایش</header><p>متن نوشته روی کاغذ قرار می‌گیرد.</p></section>",
-      "css": ".ds-work-pane { width: 320px; min-height: 190px; border: 1px solid #cbd0c6; border-radius: 0; background: #fcfdf9; color: #171b18; font-family: IRANSansX, Tahoma, sans-serif; } .ds-work-pane header { padding: 12px 14px; border-bottom: 1px solid #cbd0c6; background: rgba(252,253,249,.95); font-size: 12px; font-weight: 700; } .ds-work-pane p { margin: 0; padding: 24px; font-size: 16px; line-height: 2; }"
+      "css": ".ds-work-pane { width: 320px; min-height: 190px; border: 0; border-radius: 14px; overflow: hidden; background: #fcfdf9; color: #171b18; font-family: IRANSansX, Tahoma, sans-serif; } .ds-work-pane header { padding: 12px 14px; background: #f5f6f0; font-size: 12px; font-weight: 700; } .ds-work-pane p { margin: 0; padding: 24px; font-size: 16px; line-height: 2; }"
     },
     {
       "name": "Error Banner",
       "kind": "custom",
       "description": "خطای قابل بازیابی با زبان روشن.",
       "html": "<div class=\"ds-error-banner\" role=\"alert\">این فایل Markdown نیست؛ یک فایل md انتخاب کنید.</div>",
-      "css": ".ds-error-banner { min-height: 42px; display: flex; align-items: center; padding: 8px 16px; border-bottom: 1px solid #efbbb5; background: #fff0ed; color: #7c251f; font-family: IRANSansX, Tahoma, sans-serif; font-size: 12px; }"
+      "css": ".ds-error-banner { min-height: 68px; display: flex; align-items: center; padding: 8px 16px; border: 0; border-radius: 14px; background: #fff0ed; color: #7c251f; font-family: IRANSansX, Tahoma, sans-serif; font-size: 12px; } .ds-error-banner:focus-within { outline: 3px solid #9fb5ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "App Chrome Command Bar",
+      "kind": "nav",
+      "description": "نوار فرمان ۵۶ پیکسلی با هویت سند، mode و وضعیت ذخیره.",
+      "html": "<nav class=\"ds-app-chrome\" dir=\"rtl\" aria-label=\"فرمان‌های سند\"><button aria-pressed=\"true\">نوشتن</button><button>خواندن</button><span>ذخیره شده</span></nav>",
+      "css": ".ds-app-chrome { min-height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 14px; border: 0; background: #fcfdf9; color: #171b18; font-family: IRANSansX, Tahoma, sans-serif; } .ds-app-chrome button { min-height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: #50584f; font: 700 12px/1.5 IRANSansX, Tahoma, sans-serif; } .ds-app-chrome button[aria-pressed=\"true\"] { background: #e9efff; color: #1742bd; } .ds-app-chrome button:focus-visible { outline: 3px solid #9fb5ff; outline-offset: 2px; } .ds-app-chrome span { margin-inline-start: auto; color: #687168; font-size: 12px; }"
+    },
+    {
+      "name": "Sidebar Rail",
+      "kind": "nav",
+      "description": "ریل ثابت هفت‌مقصدی با pane جمع‌شونده در سمت راست فیزیکی.",
+      "html": "<nav class=\"ds-sidebar-rail\" dir=\"rtl\" aria-label=\"نماهای نوار کناری\"><button aria-current=\"page\" aria-label=\"کتابخانه\">K</button><button aria-label=\"تاریخچه\">H</button><button aria-label=\"نسخه‌ها\">V</button></nav>",
+      "css": ".ds-sidebar-rail { width: 56px; min-height: 230px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; border: 0; background: #f5f6f0; } .ds-sidebar-rail button { width: 40px; height: 40px; border: 0; border-radius: 6px; background: transparent; color: #50584f; font: 700 12px/1 IRANSansX, Tahoma, sans-serif; } .ds-sidebar-rail button[aria-current=\"page\"] { background: #e9efff; color: #1742bd; } .ds-sidebar-rail button:focus-visible { outline: 3px solid #9fb5ff; outline-offset: 2px; }"
     }
   ],
   "narrative": {
     "northStar": "برگه‌ی زنده‌ی نمونه‌خوانی",
-    "overview": "راوی از فضای کار یک نمونه‌خوان حرفه‌ای می‌آید: کاغذ روشن، مرکب دقیق، حاشیه‌های کاربردی و نشانه‌هایی که تنها وقتی لازم‌اند خودشان را نشان می‌دهند. نوشته همیشه بیشترین سطح و بالاترین کنتراست را دارد؛ رابط مثل ابزار چاپ و صحافی کنار آن می‌نشیند، نه روی آن.",
+    "overview": "راوی از فضای کار یک نمونه‌خوان حرفه‌ای می‌آید: کاغذ روشن، مرکب دقیق، حاشیه‌های کاربردی و نشانه‌هایی که تنها وقتی لازم‌اند خودشان را نشان می‌دهند. نوشته همیشه بیشترین سطح و بالاترین کنتراست را دارد؛ رابط مثل ابزار چاپ و صحافی کنار آن می‌نشیند، نه روی آن.\n\nهویت در تمام سطوح با قاب‌بندی دقیق، خط‌های ثبت، شماره‌ی برگ و وضعیت‌های شبیه مهر یا یادداشت نمونه‌خوان باقی می‌ماند. تزئین چاپی فقط وقتی مجاز است که جهت، وضعیت یا مرز یک کار را روشن کند.",
     "keyCharacteristics": [
       "روشن، دقیق و مناسب مطالعه‌ی طولانی",
       "ترکیب کاغذ سرد، مرکب زغالی و آبی نمونه‌خوان",
@@ -150,7 +176,7 @@
       },
       {
         "name": "The Native Direction Rule",
-        "body": "پاراگراف فارسی RTL است؛ کد، نشانی و متن فنی جهت طبیعی خود را حفظ می‌کنند.",
+        "body": "فایل بدون حروف فارسی/عربی و دارای متن لاتین، یکپارچه LTR است. در سند ترکیبی، جهت هر بلوک از نسبت حروف خواندنی آن تعیین می‌شود: بیش از ۷۰٪ لاتین LTR و باقی RTL. خط زیر عنوان، نقل‌قول، فهرست و جدول باید از ویژگی‌های منطقی CSS پیروی کنند تا تزئینات نیز همراه متن جابه‌جا شوند.",
         "section": "typography"
       },
       {

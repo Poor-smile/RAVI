@@ -30,6 +30,7 @@ test("desktop starts rail-only with eight destinations and preserves the documen
 
   const shell = page.locator(".sidebar-shell");
   const railButtons = page.locator(".sidebar-rail > button");
+  await expect(page.locator(".window-controls")).toHaveCount(0);
   await expect(shell).toHaveClass(/is-collapsed/);
   await expect(railButtons).toHaveCount(8);
   await expect(page.locator(".sidebar-rail > button.is-magic")).toHaveCount(1);
@@ -40,7 +41,7 @@ test("desktop starts rail-only with eight destinations and preserves the documen
   ).toEqual([true, false, false, true, true, true, true, true]);
   await expect(
     page.getByRole("heading", {
-      name: "یک پوشه را به‌عنوان دفتر مرکزی انتخاب کنید",
+      name: "یک پوشه را به‌عنوان مخزن انتخاب کنید",
     }),
   ).toBeVisible();
   await expect(page.locator(".note-template-card")).toHaveCount(0);

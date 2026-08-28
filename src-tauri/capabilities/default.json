@@ -8,6 +8,10 @@
     "core:webview:allow-create-webview-window",
     "core:window:allow-close",
     "core:window:allow-destroy",
-    "opener:allow-open-url"
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-start-dragging",
+    "opener:allow-open-url",
+    "opener:allow-reveal-item-in-dir"
   ]
 }

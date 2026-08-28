@@ -238,7 +238,14 @@ test("W03 assembles the viewport-sized 760px writing document, live blocks, gutt
   ).toBeVisible();
   await page.keyboard.press("Escape");
 
-  await editor.fill("بلوک اول\n\nبلوک دوم");
+  await page.getByRole("button", { name: "متن خام", exact: true }).click();
+  await editor.focus();
+  await page.keyboard.press("Control+Home");
+  await page.keyboard.press("Control+Shift+End");
+  await page.keyboard.insertText("بلوک اول\n\nبلوک دوم");
+  await page
+    .getByRole("button", { name: "ویرایش روان", exact: true })
+    .click();
   await editor.focus();
   await page.keyboard.press("Control+End");
   const dragHandle = page.locator(".writing-block-drag-handle");
@@ -248,7 +255,11 @@ test("W03 assembles the viewport-sized 760px writing document, live blocks, gutt
     "بلوک دوم",
   );
 
-  await editor.fill([
+  await page.getByRole("button", { name: "متن خام", exact: true }).click();
+  await editor.focus();
+  await page.keyboard.press("Control+Home");
+  await page.keyboard.press("Control+Shift+End");
+  await page.keyboard.insertText([
     "بلوک اول",
     "",
     "```js",
@@ -258,6 +269,9 @@ test("W03 assembles the viewport-sized 760px writing document, live blocks, gutt
     "",
     "بلوک آخر",
   ].join("\n"));
+  await page
+    .getByRole("button", { name: "ویرایش روان", exact: true })
+    .click();
   await page
     .locator(".cm-rich-code")
     .getByRole("button", { name: "ویرایش متن Markdown" })

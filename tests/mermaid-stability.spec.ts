@@ -4,6 +4,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { waitForRaaviWindow } from "./helpers/electron-main-window";
+import { activatePointerAction } from "./helpers/pointer-action";
 
 function diagramDocument(count: number) {
   return Array.from({ length: count }, (_, index) => {
@@ -39,7 +41,7 @@ async function launchDocument(
     ],
     timeout: 20_000,
   });
-  return { app, page: await app.firstWindow() };
+  return { app, page: await waitForRaaviWindow(app) };
 }
 
 test.describe("Mermaid stability", () => {
@@ -167,18 +169,37 @@ test.describe("Mermaid stability", () => {
       const workspace = page.locator(".workspace");
       const readingTop = await workspace.evaluate((element) => element.scrollTop);
       expect(readingTop).toBeGreaterThan(100);
+      const themeBeforePreview = await page.locator("html").getAttribute("data-theme");
+      expect(themeBeforePreview).toMatch(/^(light|dark)$/u);
+      await expect
+        .poll(() =>
+          target
+            .locator(".mermaid-diagram-canvas")
+            .evaluate((element) => element.getBoundingClientRect().height),
+        )
+        .toBeGreaterThanOrEqual(300);
 
-      await openFullscreen.click();
+      await activatePointerAction(openFullscreen);
       const detailedDiagram = page.locator(
         ".mermaid-diagram:fullscreen, .mermaid-diagram.is-detail-open",
       );
       await expect(detailedDiagram).toBeVisible();
-      await detailedDiagram
-        .getByRole("button", {
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-theme",
+        themeBeforePreview!,
+      );
+      await expect(
+        detailedDiagram.locator(".mermaid-render-surface"),
+      ).toHaveAttribute(
+        "data-mermaid-render-key",
+        new RegExp(`^${themeBeforePreview}:`, "u"),
+      );
+      await activatePointerAction(
+        detailedDiagram.getByRole("button", {
           name: "بازگشت به سند",
           exact: true,
-        })
-        .click();
+        }),
+      );
       await expect(detailedDiagram).toBeHidden();
 
       await expect
@@ -190,7 +211,7 @@ test.describe("Mermaid stability", () => {
       );
       const escapeReadingTop = await workspace.evaluate((element) => element.scrollTop);
       expect(escapeReadingTop).toBeGreaterThan(100);
-      await openFullscreen.click();
+      await activatePointerAction(openFullscreen);
       await expect(detailedDiagram).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(detailedDiagram).toBeHidden();

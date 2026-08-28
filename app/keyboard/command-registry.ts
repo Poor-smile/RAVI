@@ -83,6 +83,7 @@ export type CommandId =
   | "edit.link"
   | "edit.image"
   | "edit.quote"
+  | "edit.divider"
   | "diagram.mermaid"
   | "view.theme"
   | "view.reading"
@@ -479,6 +480,15 @@ const BASE_COMMAND_REGISTRY: CommandBaseDefinition[] = [
     contextLabel: "فقط در ویرایشگر",
   },
   {
+    id: "edit.divider",
+    title: "درج جداکننده",
+    group: "edit",
+    bindings: [{ code: "KeyH", alt: true, shift: true }],
+    allowInEditable: ["editor"],
+    showInHelp: true,
+    contextLabel: "فقط در ویرایشگر",
+  },
+  {
     id: "diagram.mermaid",
     title: "ساخت نمودار Mermaid",
     group: "edit",
@@ -737,6 +747,7 @@ const COMMAND_METADATA = {
   "edit.link": { description: "روی انتخاب یک پیوند Markdown می‌سازد.", keywords: ["link", "url", "پیوند"], icon: "link" },
   "edit.image": { description: "تصویر محلی یا اینترنتی را به سند می‌افزاید.", keywords: ["image", "photo", "تصویر"], icon: "image" },
   "edit.quote": { description: "خط یا انتخاب را به نقل‌قول تبدیل می‌کند.", keywords: ["quote", "blockquote", "نقل قول"], icon: "quote" },
+  "edit.divider": { description: "یک خط افقی Markdown میان بخش‌های سند درج می‌کند.", keywords: ["divider", "separator", "horizontal rule", "hr", "جداکننده", "خط افقی"], icon: "text-size" },
   "diagram.mermaid": { description: "استودیوی نمودار Mermaid را باز می‌کند.", keywords: ["mermaid", "diagram", "نمودار"], icon: "mermaid" },
   "view.theme": { description: "میان تم روشن و تاریک جابه‌جا می‌شود.", keywords: ["theme", "dark", "light", "تم"], icon: "theme" },
   "view.commandPalette": { description: "فرمان‌های راوی را جست‌وجو و اجرا می‌کند.", keywords: ["command palette", "commands", "فرمان"], icon: "command" },

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "راوی",
-  "version": "1.5.2",
+  "version": "1.7.2",
   "identifier": "ir.raavi.markdown",
   "build": {
     "beforeDevCommand": "npm run tauri:frontend:dev",
@@ -20,6 +20,7 @@
         "minHeight": 680,
         "center": true,
         "visible": true,
+        "decorations": false,
         "backgroundColor": "#e9e5dc"
       }
     ],
@@ -33,7 +34,7 @@
     "publisher": "Raavi",
     "category": "Productivity",
     "shortDescription": "Persian Markdown viewer and editor",
-    "longDescription": "A local-first Persian Markdown viewer and editor with RTL/LTR handling, annotations, Mermaid diagrams, and portable .ravi documents.",
+    "longDescription": "A local-first Persian Markdown viewer and editor with RTL/LTR handling, portable annotations, and Mermaid diagrams.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

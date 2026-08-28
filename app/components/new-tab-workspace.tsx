@@ -233,7 +233,7 @@ export function NewTabWorkspace({
         <span className="workspace-office-setup__icon" aria-hidden="true">
           <FolderPlus size={28} />
         </span>
-        <h1 id="workspace-office-title">یک پوشه را به‌عنوان دفتر مرکزی انتخاب کنید</h1>
+        <h1 id="workspace-office-title">یک پوشه را به‌عنوان مخزن انتخاب کنید</h1>
         <p>
           فایل‌های Markdown و قالب‌های فارسی در همان پوشه ذخیره می‌شوند؛
           محتوا روی دستگاه شما می‌ماند.

@@ -103,15 +103,20 @@ test("P16 Reading matches Figma and drives the real reading surface", async ({
         node.querySelectorAll(".settings-segmented-control"),
         rect,
       ),
+      horizontalOverflow:
+        node.querySelector<HTMLElement>(".shortcut-settings-content")!
+          .scrollWidth -
+        node.querySelector<HTMLElement>(".shortcut-settings-content")!
+          .clientWidth,
     };
   });
-  expect(geometry.surface.width).toBe(1040);
-  expect(geometry.sections).toEqual([
-    { width: 1040, height: 412 },
-    { width: 1040, height: 412 },
-  ]);
-  expect(geometry.rows).toEqual(Array(6).fill({ width: 992, height: 88 }));
+  expect(geometry.sections).toHaveLength(2);
+  expect(geometry.sections[0].width).toBe(geometry.sections[1].width);
+  expect(geometry.sections[0].height).toBeLessThan(320);
+  expect(geometry.sections[1].height).toBeLessThan(320);
+  expect(geometry.rows.map((row) => row.height)).toEqual(Array(6).fill(64));
   expect(geometry.segments).toEqual(Array(3).fill({ width: 270, height: 40 }));
+  expect(geometry.horizontalOverflow).toBeLessThanOrEqual(0);
   await page.screenshot({
     path: ".artifacts/p16-settings-reading.png",
     fullPage: false,

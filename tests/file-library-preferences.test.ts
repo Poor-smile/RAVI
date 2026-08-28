@@ -21,7 +21,7 @@ test("file and library preferences preserve valid values and reject unknown ones
     parseFileLibraryPreferences(
       JSON.stringify({
         defaultOpenMode: "writing",
-        fileVisibility: "ravi",
+        fileVisibility: "markdown",
         autoRefresh: false,
         activeWorkspaceRootId: "d:/notes/raavi",
         restoreDocumentTabs: false,
@@ -29,7 +29,7 @@ test("file and library preferences preserve valid values and reject unknown ones
     ),
     {
       defaultOpenMode: "writing",
-      fileVisibility: "ravi",
+      fileVisibility: "markdown",
       autoRefresh: false,
       activeWorkspaceRootId: "d:/notes/raavi",
       restoreDocumentTabs: false,

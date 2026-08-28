@@ -36,7 +36,7 @@ const ROUNDTRIP_SOURCE = [
   "پایان سند",
 ].join("\n");
 
-test("saving and reopening a .ravi document preserves every block boundary", async ({
+test("saving and reopening a Markdown document preserves every block boundary", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 914 });
@@ -45,32 +45,32 @@ test("saving and reopening a .ravi document preserves every block boundary", asy
     "data-hydrated",
     "true",
   );
-  await openWritingDocument(page);
+  await openWritingDocument(page, { content: "" });
 
   const editor = page.locator("#markdown-editor .cm-content");
-  await editor.fill(ROUNDTRIP_SOURCE);
   await page.getByRole("button", { name: "متن خام", exact: true }).click();
+  await editor.fill(ROUNDTRIP_SOURCE);
   await expect.poll(() => sourceText(editor)).toBe(ROUNDTRIP_SOURCE);
 
   await page.locator('.topbar [data-command-id="file.save"]').click();
   const saveDialog = page.getByRole("dialog", { name: "ذخیره فایل" });
   await expect(saveDialog).toBeVisible();
-  await saveDialog.getByRole("radio", { name: /سند راوی/u }).check();
+  await saveDialog.getByRole("radio", { name: /Markdown/u }).check();
   await saveDialog.locator('input[data-editable-kind="saveName"]').fill(
-    "editor-kb-boundaries.ravi",
+    "editor-kb-boundaries.md",
   );
 
   const [download] = await Promise.all([
     page.waitForEvent("download"),
     saveDialog.getByRole("button", { name: "ذخیره فایل", exact: true }).click(),
   ]);
-  const roundtripPath = testInfo.outputPath("editor-kb-boundaries.ravi");
+  const roundtripPath = testInfo.outputPath("editor-kb-boundaries.md");
   await download.saveAs(roundtripPath);
 
   await editor.fill("متن موقت که باید با بازکردن فایل جایگزین شود");
   await expect.poll(() => sourceText(editor)).not.toBe(ROUNDTRIP_SOURCE);
   await page
-    .locator('input[type="file"][accept*=".ravi"]:not([multiple])')
+    .locator('input[type="file"][accept*=".md"]:not([multiple])')
     .setInputFiles(roundtripPath);
   const backToDesk = page.getByRole("button", { name: /بازگشت به میز/u });
   await expect(backToDesk).toBeVisible();

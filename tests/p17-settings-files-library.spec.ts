@@ -8,7 +8,7 @@ async function openFileSettings(page: Page) {
   await page.locator('[data-overflow-action="shortcut-settings"]').click();
   await page
     .getByRole("navigation", { name: "دسته‌های تنظیمات" })
-    .getByRole("button", { name: "فایل‌ها و دفتر" })
+    .getByRole("button", { name: "فایل‌ها و کتابخانه" })
     .click();
 }
 
@@ -21,23 +21,7 @@ test("P17 Files & Library is persistent and drives the local library", async ({
   try {
     await mkdir(libraryRoot, { recursive: true });
     await writeFile(path.join(libraryRoot, "یادداشت.md"), "# یادداشت", "utf8");
-    await writeFile(
-      path.join(libraryRoot, "پروژه.ravi"),
-      JSON.stringify({
-        format: "ravi",
-        version: 1,
-        document: {
-          name: "پروژه.md",
-          markdown: "# پروژه راوی",
-          revision: 1,
-        },
-        annotations: [],
-        versions: [],
-        assets: [],
-        updatedAt: new Date(0).toISOString(),
-      }),
-      "utf8",
-    );
+    await writeFile(path.join(libraryRoot, "پروژه.markdown"), "# پروژه", "utf8");
 
     await page.setViewportSize({ width: 1440, height: 1024 });
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -47,9 +31,9 @@ test("P17 Files & Library is persistent and drives the local library", async ({
     await page.locator("input[webkitdirectory]").setInputFiles(libraryRoot);
     await openFileSettings(page);
 
-    const dialog = page.getByRole("dialog", { name: "فایل‌ها و دفتر" });
+    const dialog = page.getByRole("dialog", { name: "پشتیبان‌گیری ابری" });
     await expect(dialog.locator(".file-library-settings-section")).toHaveCount(3);
-    await expect(dialog.getByRole("radiogroup")).toHaveCount(2);
+    await expect(dialog.getByRole("radiogroup")).toHaveCount(3);
     await expect(dialog.getByRole("switch", { name: "به‌روزرسانی خودکار" })).toHaveAttribute(
       "aria-checked",
       "true",
@@ -73,18 +57,24 @@ test("P17 Files & Library is persistent and drives the local library", async ({
           node.querySelectorAll(".settings-segmented-control"),
           size,
         ),
+        horizontalOverflow:
+          node.querySelector<HTMLElement>(".shortcut-settings-content")!
+            .scrollWidth -
+          node.querySelector<HTMLElement>(".shortcut-settings-content")!
+            .clientWidth,
       };
     });
-    expect(geometry.surface.width).toBe(1040);
-    expect(geometry.firstRow).toEqual({ width: 1008, height: 88 });
+    expect(geometry.surface.width).toBeGreaterThan(900);
+    expect(geometry.firstRow.height).toBe(64);
     expect(geometry.segments).toEqual([
       { width: 270, height: 40 },
       { width: 270, height: 40 },
     ]);
+    expect(geometry.horizontalOverflow).toBeLessThanOrEqual(0);
 
     await dialog
       .getByRole("radiogroup", { name: "نمایش در کتابخانه" })
-      .getByRole("radio", { name: "Raavi" })
+      .getByRole("radio", { name: "Markdown" })
       .click();
     await dialog.getByRole("switch", { name: "به‌روزرسانی خودکار" }).click();
     await expect
@@ -95,7 +85,7 @@ test("P17 Files & Library is persistent and drives the local library", async ({
       )
       .toEqual({
         defaultOpenMode: "reading",
-        fileVisibility: "ravi",
+        fileVisibility: "markdown",
         autoRefresh: false,
         activeWorkspaceRootId: "fallback:کتابخانه آزمون",
         restoreDocumentTabs: true,
@@ -105,9 +95,9 @@ test("P17 Files & Library is persistent and drives the local library", async ({
     await page.getByRole("button", { name: "کتابخانه", exact: true }).click();
     const tree = page.getByRole("tree", { name: "کاوشگر فایل‌های محلی" });
     await tree.getByRole("treeitem", { name: "کتابخانه آزمون" }).click();
-    await expect(tree.getByRole("treeitem", { name: "پروژه.ravi" })).toBeVisible();
-    await expect(tree.getByRole("treeitem", { name: "یادداشت.md" })).toHaveCount(0);
-    await tree.getByRole("treeitem", { name: "پروژه.ravi" }).click();
+    await expect(tree.getByRole("treeitem", { name: "پروژه.markdown" })).toBeVisible();
+    await expect(tree.getByRole("treeitem", { name: "یادداشت.md" })).toBeVisible();
+    await tree.getByRole("treeitem", { name: "پروژه.markdown" }).click();
     await expect(page.locator(".app-shell")).toHaveClass(/is-reading/);
 
     await page.getByRole("button", { name: "بازگشت به میز" }).click();

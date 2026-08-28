@@ -67,13 +67,21 @@ test("P15 Appearance matches Figma and applies persistent theme, accent and moti
         (button) => Math.round(button.getBoundingClientRect().height),
       ),
       motion: rect(".appearance-motion-control"),
+      horizontalOverflow:
+        document.querySelector<HTMLElement>(".shortcut-settings-content")!
+          .scrollWidth -
+        document.querySelector<HTMLElement>(".shortcut-settings-content")!
+          .clientWidth,
     };
   });
-  expect(geometry.section).toEqual({ width: 1040, height: 216 });
-  expect(geometry.accentSection).toEqual({ width: 1040, height: 310 });
-  expect(geometry.motionSection).toEqual({ width: 1040, height: 204 });
+  expect(geometry.section.width).toBe(geometry.accentSection.width);
+  expect(geometry.section.width).toBe(geometry.motionSection.width);
+  expect(geometry.section.height).toBeLessThan(200);
+  expect(geometry.accentSection.height).toBeLessThan(220);
+  expect(geometry.motionSection.height).toBeLessThan(180);
   expect(geometry.swatches).toEqual(Array(13).fill(44));
   expect(geometry.motion).toEqual({ width: 270, height: 40 });
+  expect(geometry.horizontalOverflow).toBeLessThanOrEqual(0);
 
   await page.screenshot({
     path: ".artifacts/p15-settings-appearance.png",
@@ -137,14 +145,23 @@ test("P15 Editing settings persist and drive the real Code surface", async ({
     .click();
 
   const dialog = page.getByRole("dialog", { name: "ویرایش و نمای کد" });
-  await expect(dialog.locator(".code-view-settings-card")).toHaveCSS(
-    "height",
-    "410px",
-  );
-  await expect(dialog.locator(".code-view-settings-controls")).toHaveCSS(
-    "width",
-    "820px",
-  );
+  const editingGeometry = await dialog.evaluate((node) => {
+    const card = node.querySelector<HTMLElement>(".code-view-settings-card")!;
+    const controls = node.querySelector<HTMLElement>(
+      ".code-view-settings-controls",
+    )!;
+    const content = node.querySelector<HTMLElement>(
+      ".shortcut-settings-content",
+    )!;
+    return {
+      cardHeight: Math.round(card.getBoundingClientRect().height),
+      controlsWidth: Math.round(controls.getBoundingClientRect().width),
+      horizontalOverflow: content.scrollWidth - content.clientWidth,
+    };
+  });
+  expect(editingGeometry.cardHeight).toBeLessThan(360);
+  expect(editingGeometry.controlsWidth).toBeLessThanOrEqual(860);
+  expect(editingGeometry.horizontalOverflow).toBeLessThanOrEqual(0);
   const toolbarSwitch = dialog.getByRole("switch", {
     name: "تولبار پایین نمای کد",
   });

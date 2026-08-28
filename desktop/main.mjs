@@ -4,7 +4,10 @@ import {
   dialog,
   ipcMain,
   nativeTheme,
+  protocol,
+  safeStorage,
   shell,
+  WebContentsView,
 } from "electron";
 import { access, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { readFileSync, renameSync, watch, writeFileSync } from "node:fs";
@@ -28,17 +31,50 @@ import {
 } from "./document-access.mjs";
 import {
   getCodexConnectionStatus,
+  getCodexModels,
+  runCodexAudioCleanup,
   runCodexPrompt,
   runCodexPersianReview,
   runCodexSmartAnnotations,
+  resetCodexConnection,
+  startCodexCliInstall,
   startCodexLogin,
 } from "./codex-cli.mjs";
+import {
+  clearStoredAiPreferences,
+  readStoredAiPreferences,
+  writeStoredAiPreferences,
+} from "./ai-preferences-store.mjs";
+import { createAudioLocalController } from "./audio-local.mjs";
+import { createAudioFileResponse } from "./audio-protocol.mjs";
+import {
+  STARTUP_RECOVERY_TIMEOUT_MS,
+  startupOverlayDataUrl,
+} from "./startup-overlay.mjs";
+import { createVaultBackupCoordinator } from "./backup-vault.mjs";
+import { createGoogleDriveBackupProvider } from "./google-drive-backup.mjs";
+import { createProtonDriveBackupProvider } from "./proton-drive-backup.mjs";
+import { restoreCloudBackupSet } from "./cloud-restore.mjs";
+import { createSoftwareUpdateController } from "./software-update.mjs";
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "raavi-audio",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
+]);
 
 const desktopDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(desktopDirectory, "..");
 const allowedLibraryRoots = new Set();
 const allowedDocumentPaths = new Set();
 const allowedExportPaths = new Set();
+const allowedRestorePaths = new Set();
 const libraryWatchers = new Map();
 const libraryWatchTimers = new Map();
 const libraryUndoRecords = new Map();
@@ -61,6 +97,7 @@ function applyWindowTheme(theme) {
   mainWindow.setBackgroundColor(
     currentWindowTheme === "dark" ? "#141A16" : "#E9E5DC",
   );
+  if (startupOverlayView) void renderStartupOverlay(startupOverlayState);
 }
 const MAX_DOCUMENT_VERSIONS = 30;
 const MAX_RENDERER_STATE_BYTES = 48 * 1024 * 1024;
@@ -77,6 +114,139 @@ let rendererStateReadCount = 0;
 let pendingDocumentRequest = initialDocumentPath
   ? { filePath: initialDocumentPath, openInReadingMode: true }
   : null;
+let audioLocalController = null;
+let backupCoordinator = null;
+let googleDriveBackupProvider = null;
+let protonDriveBackupProvider = null;
+let startupOverlayView = null;
+let startupOverlayTimer = null;
+let startupOverlayState = "loading";
+let startupDocumentRequest = null;
+let softwareUpdateController = null;
+const startupLogoDataUrls = new Map();
+
+function startupLogoDataUrl(theme = currentWindowTheme) {
+  const safeTheme = theme === "dark" ? "dark" : "light";
+  if (startupLogoDataUrls.has(safeTheme)) {
+    return startupLogoDataUrls.get(safeTheme);
+  }
+  try {
+    const svg = readFileSync(
+      path.join(appRoot, "build", safeTheme === "dark" ? "icon-dark.svg" : "icon.svg"),
+    );
+    const dataUrl = `data:image/svg+xml;base64,${svg.toString("base64")}`;
+    startupLogoDataUrls.set(safeTheme, dataUrl);
+    return dataUrl;
+  } catch (error) {
+    console.error("Raavi startup logo failed", error);
+    return "";
+  }
+}
+
+function clearStartupOverlayTimer() {
+  if (startupOverlayTimer) clearTimeout(startupOverlayTimer);
+  startupOverlayTimer = null;
+}
+
+function startupOverlayBounds() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { x: 0, y: 0, width: 1, height: 1 };
+  }
+  const [width, height] = mainWindow.getContentSize();
+  return {
+    x: 0,
+    y: 0,
+    width: Math.max(1, width),
+    height: Math.max(1, height),
+  };
+}
+
+function updateStartupOverlayBounds() {
+  if (!startupOverlayView || startupOverlayView.webContents.isDestroyed()) return;
+  startupOverlayView.setBounds(startupOverlayBounds());
+}
+
+async function renderStartupOverlay(state = "loading") {
+  if (!startupOverlayView || startupOverlayView.webContents.isDestroyed()) return;
+  startupOverlayState = state === "error" ? "error" : "loading";
+  await startupOverlayView.webContents
+    .loadURL(
+      startupOverlayDataUrl({
+        theme: currentWindowTheme,
+        state: startupOverlayState,
+        logoDataUrl: startupLogoDataUrl(),
+      }),
+    )
+    .catch((error) => console.error("Raavi startup overlay failed", error));
+}
+
+function armStartupOverlayTimeout() {
+  clearStartupOverlayTimer();
+  startupOverlayTimer = setTimeout(() => {
+    if (!startupOverlayView) return;
+    if (isSmokeTest) {
+      console.error("Raavi renderer did not become ready before the startup deadline.");
+      app.exit(1);
+      return;
+    }
+    void renderStartupOverlay("error");
+  }, STARTUP_RECOVERY_TIMEOUT_MS);
+}
+
+function removeStartupOverlay() {
+  clearStartupOverlayTimer();
+  const view = startupOverlayView;
+  startupOverlayView = null;
+  if (!view) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.contentView.removeChildView(view);
+  }
+  if (!view.webContents.isDestroyed()) view.webContents.close();
+}
+
+function retryStartup() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  rendererReady = false;
+  if (startupDocumentRequest) {
+    pendingDocumentRequest = { ...startupDocumentRequest };
+  }
+  void renderStartupOverlay("loading");
+  armStartupOverlayTimeout();
+  mainWindow.webContents.reloadIgnoringCache();
+}
+
+async function createStartupOverlay() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  startupOverlayView = new WebContentsView({
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  startupOverlayView.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  startupOverlayView.webContents.on("will-navigate", (event, url) => {
+    if (url === "raavi-retry://reload") {
+      event.preventDefault();
+      retryStartup();
+      return;
+    }
+    if (!url.startsWith("raavi-window://")) return;
+    event.preventDefault();
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const action = url.slice("raavi-window://".length).replace(/\/$/u, "");
+    if (action === "minimize") mainWindow.minimize();
+    if (action === "maximize") {
+      if (mainWindow.isMaximized()) mainWindow.unmaximize();
+      else mainWindow.maximize();
+    }
+    if (action === "close") mainWindow.close();
+  });
+  mainWindow.contentView.addChildView(startupOverlayView);
+  updateStartupOverlayBounds();
+  await renderStartupOverlay("loading");
+  armStartupOverlayTimeout();
+}
 
 function notifyLibraryChanged(rootPath, reason = "external") {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -149,6 +319,350 @@ function historyStatePath() {
 
 function rendererStatePath() {
   return path.join(app.getPath("userData"), "renderer-state.json");
+}
+
+function aiPreferencesPath() {
+  return path.join(app.getPath("userData"), "ai-preferences.json");
+}
+
+function googleDriveTokenPath() {
+  return path.join(app.getPath("userData"), "google-drive-token.dat");
+}
+
+function configuredGoogleClientId() {
+  const fromEnvironment = String(process.env.RAAVI_GOOGLE_CLIENT_ID ?? "").trim();
+  if (fromEnvironment) return fromEnvironment;
+  try {
+    return readFileSync(
+      path.join(appRoot, "build", "google-oauth-client-id.txt"),
+      "utf8",
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
+function configuredGoogleClientSecret() {
+  const fromEnvironment = String(process.env.RAAVI_GOOGLE_CLIENT_SECRET ?? "").trim();
+  if (fromEnvironment) return fromEnvironment;
+  try {
+    return readFileSync(
+      path.join(appRoot, "build", "google-oauth-client-secret.txt"),
+      "utf8",
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
+async function ensureBackupServices() {
+  if (
+    backupCoordinator &&
+    googleDriveBackupProvider &&
+    protonDriveBackupProvider
+  ) {
+    return {
+      coordinator: backupCoordinator,
+      providers: {
+        "google-drive": googleDriveBackupProvider,
+        "proton-drive": protonDriveBackupProvider,
+      },
+    };
+  }
+
+  const seal = async (value) => {
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw Object.assign(new Error("Secure token storage is unavailable."), {
+        code: "secure-storage-unavailable",
+      });
+    }
+    return safeStorage.encryptString(value).toString("base64");
+  };
+  const unseal = async (value) => {
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw Object.assign(new Error("Secure token storage is unavailable."), {
+        code: "secure-storage-unavailable",
+      });
+    }
+    return safeStorage.decryptString(Buffer.from(value, "base64"));
+  };
+
+  googleDriveBackupProvider = createGoogleDriveBackupProvider({
+    clientId: configuredGoogleClientId(),
+    clientSecret: configuredGoogleClientSecret(),
+    tokenPath: googleDriveTokenPath(),
+    openExternal: (url) => shell.openExternal(url),
+    seal,
+    unseal,
+  });
+  protonDriveBackupProvider = createProtonDriveBackupProvider({
+    userDataPath: app.getPath("userData"),
+    downloadsPath: app.getPath("downloads"),
+    openExternal: (url) => shell.openExternal(url),
+  });
+  const providers = {
+    "google-drive": googleDriveBackupProvider,
+    "proton-drive": protonDriveBackupProvider,
+  };
+  backupCoordinator = createVaultBackupCoordinator({
+    userDataPath: app.getPath("userData"),
+    providers,
+    prepareAudioAssets: (snapshot) =>
+      audioLocalController?.prepareBackupAssets(snapshot) ?? [],
+    onStatus(status) {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.send("backup:status-changed", status);
+    },
+  });
+  const selectedProviderId = (await backupCoordinator.status()).providerId;
+  const connection = await providers[selectedProviderId].connectionInfo();
+  await backupCoordinator.updateConnection(connection);
+  return { coordinator: backupCoordinator, providers };
+}
+
+async function getBackupStatus() {
+  const { coordinator } = await ensureBackupServices();
+  return coordinator.status();
+}
+
+async function getBackupProviderConnections() {
+  const { providers } = await ensureBackupServices();
+  const entries = await Promise.all(
+    Object.entries(providers).map(async ([providerId, provider]) => {
+      try {
+        const connection = await provider.connectionInfo();
+        return [
+          providerId,
+          {
+            state: ["connected", "reauth", "error"].includes(
+              connection?.state,
+            )
+              ? connection.state
+              : "disconnected",
+            accountEmail:
+              typeof connection?.accountEmail === "string"
+                ? connection.accountEmail
+                : "",
+          },
+        ];
+      } catch {
+        return [providerId, { state: "error", accountEmail: "" }];
+      }
+    }),
+  );
+  return Object.fromEntries(entries);
+}
+
+async function updateBackupPreferences(_event, preferences) {
+  const { coordinator } = await ensureBackupServices();
+  return coordinator.updatePreferences(preferences);
+}
+
+function validBackupProviderId(value) {
+  return value === "proton-drive" ? "proton-drive" : "google-drive";
+}
+
+async function selectBackupProvider(_event, providerId) {
+  const { coordinator, providers } = await ensureBackupServices();
+  const selectedProviderId = validBackupProviderId(providerId);
+  const connection = await providers[selectedProviderId].connectionInfo();
+  return coordinator.updateProvider(selectedProviderId, connection);
+}
+
+async function connectCloudProvider(providerId) {
+  const { coordinator, providers } = await ensureBackupServices();
+  const selectedProviderId = validBackupProviderId(providerId);
+  const provider = providers[selectedProviderId];
+  const currentStatus = await coordinator.status();
+  try {
+    const connection = await provider.connect();
+    if (currentStatus.providerId !== selectedProviderId) {
+      await coordinator.updateProvider(selectedProviderId, connection);
+    } else {
+      await coordinator.updateConnection(connection);
+    }
+    await coordinator.updateQuota(connection.quota ?? null);
+    void coordinator.flush();
+    return coordinator.status();
+  } catch (error) {
+    // Keep an already-active provider untouched while a second provider is
+    // authorizing. The destination only changes after the new login succeeds.
+    if (currentStatus.providerId === selectedProviderId) {
+      await coordinator.updateConnection({
+        state: error?.code === "reauth" ? "reauth" : "error",
+        accountEmail: "",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Cloud connection failed.",
+      });
+    }
+    return {
+      ...(await coordinator.status()),
+      connectionError: {
+        code: error?.code ?? "connection-error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Cloud connection failed.",
+      },
+    };
+  }
+}
+
+async function disconnectCloudProvider(providerId) {
+  const { coordinator, providers } = await ensureBackupServices();
+  const selectedProviderId = validBackupProviderId(providerId);
+  const provider = providers[selectedProviderId];
+  const connection = await provider.disconnect();
+  if ((await coordinator.status()).providerId === selectedProviderId) {
+    await coordinator.updateConnection(connection);
+  }
+  return coordinator.status();
+}
+
+async function connectGoogleDrive() {
+  return connectCloudProvider("google-drive");
+}
+
+async function disconnectGoogleDrive() {
+  return disconnectCloudProvider("google-drive");
+}
+
+async function connectBackupProvider(_event, providerId) {
+  return connectCloudProvider(providerId);
+}
+
+async function disconnectBackupProvider(_event, providerId) {
+  return disconnectCloudProvider(providerId);
+}
+
+async function promoteSnapshotToVault(_event, snapshot, reason) {
+  const { coordinator } = await ensureBackupServices();
+  return coordinator.stageSnapshot(snapshot, reason || "first-edit");
+}
+
+async function getSnapshotResidency(_event, snapshot) {
+  const { coordinator } = await ensureBackupServices();
+  return coordinator.documentResidency(snapshot);
+}
+
+async function flushBackup() {
+  const { coordinator } = await ensureBackupServices();
+  return coordinator.flush();
+}
+
+async function listCloudBackups() {
+  const { coordinator, providers } = await ensureBackupServices();
+  const status = await coordinator.status();
+  if (status.connection.state !== "connected") {
+    throw Object.assign(new Error("ابتدا فضای ابری را متصل کنید."), {
+      code: "backup-disconnected",
+    });
+  }
+  const provider = providers[status.providerId];
+  if (!provider?.listBackups) {
+    throw Object.assign(new Error("بازیابی برای این فضای ابری در دسترس نیست."), {
+      code: "restore-unsupported",
+    });
+  }
+  return provider.listBackups();
+}
+
+async function restoreCloudBackups(event, documentIds) {
+  const ids = Array.isArray(documentIds)
+    ? [...new Set(documentIds.map((value) => String(value || "")))]
+        .filter((value) => /^[a-f0-9]{16,64}$/iu.test(value))
+        .slice(0, 1_000)
+    : [];
+  if (!ids.length) {
+    throw Object.assign(new Error("حداقل یک سند را برای بازیابی انتخاب کنید."), {
+      code: "restore-selection-empty",
+    });
+  }
+  const { coordinator, providers } = await ensureBackupServices();
+  const status = await coordinator.status();
+  if (status.connection.state !== "connected") {
+    throw Object.assign(new Error("اتصال فضای ابری قطع شده است؛ دوباره وارد شوید."), {
+      code: "backup-disconnected",
+    });
+  }
+  const provider = providers[status.providerId];
+  if (!provider?.listBackups || !provider?.downloadBackup) {
+    throw Object.assign(new Error("بازیابی برای این فضای ابری در دسترس نیست."), {
+      code: "restore-unsupported",
+    });
+  }
+  const availableIds = new Set(
+    (await provider.listBackups()).map((backup) => backup.documentId),
+  );
+  const selectedIds = ids.filter((id) => availableIds.has(id));
+  if (!selectedIds.length) {
+    throw Object.assign(new Error("بکاپ‌های انتخاب‌شده دیگر در فضای ابری وجود ندارند."), {
+      code: "backup-missing",
+    });
+  }
+
+  const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+  const destination = await dialog.showOpenDialog(owner, {
+    title: "انتخاب محل بازیابی فایل‌های راوی",
+    buttonLabel: "بازیابی در این پوشه",
+    defaultPath: app.getPath("documents"),
+    properties: ["openDirectory", "createDirectory", "dontAddToRecent"],
+  });
+  if (destination.canceled || !destination.filePaths[0]) {
+    return { canceled: true, restored: [], failed: [] };
+  }
+
+  const result = await restoreCloudBackupSet({
+    documentIds: selectedIds,
+    parentDirectory: destination.filePaths[0],
+    downloadBackup: (documentId) => provider.downloadBackup(documentId),
+    saveHistory: saveHistoryForPath,
+  });
+  const restoreRoot = path.resolve(result.restoreRoot);
+  allowedRestorePaths.add(normalizedPathKey(restoreRoot));
+  allowedLibraryRoots.add(restoreRoot);
+  for (const item of result.restored) {
+    allowedDocumentPaths.add(normalizedPathKey(item.filePath));
+  }
+  await rememberLibraryFolder(restoreRoot);
+  watchLibraryFolder(restoreRoot);
+  notifyLibraryChanged(restoreRoot, "restore");
+  return {
+    canceled: false,
+    providerId: status.providerId,
+    ...result,
+  };
+}
+
+async function revealCloudRestore(_event, restoreRoot) {
+  const resolvedPath = path.resolve(String(restoreRoot || ""));
+  if (!allowedRestorePaths.has(normalizedPathKey(resolvedPath))) {
+    throw new Error("این مسیر بازیابی در نشست جاری تأیید نشده است.");
+  }
+  const error = await shell.openPath(resolvedPath);
+  return { revealed: !error };
+}
+
+let aiPreferencesWriteQueue = Promise.resolve();
+
+function getStoredAiPreferences() {
+  return readStoredAiPreferences(aiPreferencesPath());
+}
+
+function saveStoredAiPreferences(_event, preferences) {
+  aiPreferencesWriteQueue = aiPreferencesWriteQueue
+    .catch(() => {})
+    .then(() => writeStoredAiPreferences(aiPreferencesPath(), preferences));
+  return aiPreferencesWriteQueue;
+}
+
+function clearAiPreferences() {
+  aiPreferencesWriteQueue = aiPreferencesWriteQueue
+    .catch(() => {})
+    .then(() => clearStoredAiPreferences(aiPreferencesPath()));
+  return aiPreferencesWriteQueue;
 }
 
 async function readJsonFile(filePath, fallback) {
@@ -273,6 +787,16 @@ function saveRendererState(_event, snapshot) {
         await rename(temporaryPath, targetPath);
       } catch {
         await writeFile(targetPath, serialized, "utf8");
+      }
+      if (snapshot.residency && snapshot.residency !== "reading") {
+        void ensureBackupServices()
+          .then(({ coordinator }) =>
+            coordinator.stageSnapshot(
+              snapshot,
+              snapshot.vaultReason || "local-change",
+            ),
+          )
+          .catch(() => {});
       }
       return { saved: true };
     });
@@ -612,9 +1136,19 @@ async function enrichDocument(filePath, options = {}) {
     await recordRecent(filePath, documentValue.documentType);
   }
 
+  const { coordinator } = await ensureBackupServices();
+  const knownResidency = await coordinator.documentResidency({
+    activeDocumentPath: filePath,
+    fileName: documentValue.name,
+  });
+
   return {
     ...documentValue,
     openInReadingMode: Boolean(options.openInReadingMode),
+    residency:
+      knownResidency === "reading" && !options.openInReadingMode
+        ? "vault-local"
+        : knownResidency,
   };
 }
 
@@ -782,7 +1316,16 @@ async function openLibraryDocument(_event, filePath) {
     documentValue.versions = history.versions;
   }
   await recordRecent(filePath, documentValue.documentType);
-  return { ...documentValue, openInReadingMode: false };
+  const { coordinator } = await ensureBackupServices();
+  const knownResidency = await coordinator.documentResidency({
+    activeDocumentPath: filePath,
+    fileName: documentValue.name,
+  });
+  return {
+    ...documentValue,
+    openInReadingMode: false,
+    residency: knownResidency === "reading" ? "vault-local" : knownResidency,
+  };
 }
 
 async function readLibrarySearchText(_event, filePath) {
@@ -850,10 +1393,21 @@ async function saveMarkdown(event, payload) {
   const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
   const fileName = safeMarkdownName(payload?.fileName);
   const documentValue = validateDocumentPayload(payload?.document);
+  let defaultDirectory = app.getPath("documents");
+  if (typeof payload?.defaultDirectory === "string") {
+    const requestedDirectory = path.resolve(payload.defaultDirectory);
+    try {
+      if ((await stat(requestedDirectory)).isDirectory()) {
+        defaultDirectory = requestedDirectory;
+      }
+    } catch {
+      // A removed or inaccessible preference safely falls back to Documents.
+    }
+  }
   const result = await dialog.showSaveDialog(owner, {
     title: "ذخیره‌ی فایل Markdown",
     buttonLabel: "ذخیره فایل",
-    defaultPath: path.join(app.getPath("documents"), fileName),
+    defaultPath: path.join(defaultDirectory, fileName),
     filters: [
       { name: "Markdown", extensions: ["md", "markdown"] },
       { name: "همه‌ی فایل‌ها", extensions: ["*"] },
@@ -956,8 +1510,33 @@ async function revealExport(_event, payload) {
 }
 
 function registerDesktopHandlers() {
+  audioLocalController = createAudioLocalController({
+    emit(event) {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.send("audio:local-event", event);
+    },
+    ensureDocumentAccess,
+    getOwner: () => mainWindow,
+  });
   ipcMain.handle("renderer-state:get", getRendererState);
   ipcMain.handle("renderer-state:save", saveRendererState);
+  ipcMain.handle("backup:get-status", getBackupStatus);
+  ipcMain.handle(
+    "backup:get-provider-connections",
+    getBackupProviderConnections,
+  );
+  ipcMain.handle("backup:update-preferences", updateBackupPreferences);
+  ipcMain.handle("backup:select-provider", selectBackupProvider);
+  ipcMain.handle("backup:connect-provider", connectBackupProvider);
+  ipcMain.handle("backup:disconnect-provider", disconnectBackupProvider);
+  ipcMain.handle("backup:connect-google", connectGoogleDrive);
+  ipcMain.handle("backup:disconnect-google", disconnectGoogleDrive);
+  ipcMain.handle("backup:flush", flushBackup);
+  ipcMain.handle("backup:list-cloud", listCloudBackups);
+  ipcMain.handle("backup:restore-cloud", restoreCloudBackups);
+  ipcMain.handle("backup:reveal-restore", revealCloudRestore);
+  ipcMain.handle("vault:promote", promoteSnapshotToVault);
+  ipcMain.handle("vault:residency", getSnapshotResidency);
   ipcMain.handle(
     "renderer-state:save-reading-positions",
     saveRendererReadingPositions,
@@ -985,15 +1564,73 @@ function registerDesktopHandlers() {
   ipcMain.handle("export:pdf", exportPdf);
   ipcMain.handle("export:reveal", revealExport);
   ipcMain.handle("external:open-url", openExternalUrl);
+  ipcMain.handle("software-update:get-status", () =>
+    softwareUpdateController?.getState(),
+  );
+  ipcMain.handle("software-update:check", () =>
+    softwareUpdateController?.check({ manual: true }),
+  );
+  ipcMain.handle("software-update:download", () =>
+    softwareUpdateController?.download(),
+  );
+  ipcMain.handle("software-update:pause", () =>
+    softwareUpdateController?.pause(),
+  );
+  ipcMain.handle("software-update:resume", () =>
+    softwareUpdateController?.resume(),
+  );
+  ipcMain.handle("software-update:cancel", () =>
+    softwareUpdateController?.cancel(),
+  );
+  ipcMain.handle("software-update:install", async () => {
+    const result = await softwareUpdateController?.install();
+    if (result?.started) setTimeout(() => app.quit(), 120);
+    return result;
+  });
+  ipcMain.handle("software-update:open-notes", async () => {
+    const notesUrl = softwareUpdateController?.getState()?.notesUrl;
+    if (!notesUrl) return { opened: false };
+    await shell.openExternal(notesUrl);
+    return { opened: true };
+  });
+  ipcMain.handle("software-update:open-direct-download", async () => {
+    const directUrl = softwareUpdateController?.getDirectDownloadUrl();
+    if (!directUrl) return { opened: false };
+    await shell.openExternal(directUrl);
+    return { opened: true };
+  });
+  ipcMain.handle("ai:preferences-get", getStoredAiPreferences);
+  ipcMain.handle("ai:preferences-save", saveStoredAiPreferences);
+  ipcMain.handle("ai:preferences-clear", clearAiPreferences);
   ipcMain.handle("codex:connection-status", getCodexConnectionStatus);
+  ipcMain.handle("codex:models", getCodexModels);
+  ipcMain.handle("codex:install-cli", startCodexCliInstall);
   ipcMain.handle("codex:start-login", startCodexLogin);
+  ipcMain.handle("codex:reset-connection", resetCodexConnection);
   ipcMain.handle("codex:run", (_event, payload) => runCodexPrompt(payload));
+  ipcMain.handle("codex:audio-cleanup", (_event, payload) =>
+    runCodexAudioCleanup(payload),
+  );
   ipcMain.handle("codex:persian-review", (_event, payload) =>
     runCodexPersianReview(payload),
   );
   ipcMain.handle("codex:smart-annotations", (_event, payload) =>
     runCodexSmartAnnotations(payload),
   );
+  ipcMain.handle("audio:choose-asset", audioLocalController.chooseAudioAsset);
+  ipcMain.handle("audio:remove-asset", audioLocalController.removeAudioAsset);
+  ipcMain.handle("audio:resolve-asset", audioLocalController.resolveAudioAsset);
+  ipcMain.handle("audio:model-state", audioLocalController.getAudioModelState);
+  ipcMain.handle("audio:model-install", audioLocalController.installAudioModel);
+  ipcMain.handle("audio:model-pause", audioLocalController.pauseAudioModelInstall);
+  ipcMain.handle("audio:model-resume", audioLocalController.resumeAudioModelInstall);
+  ipcMain.handle("audio:model-delete", audioLocalController.deleteAudioModel);
+  ipcMain.handle("audio:transcription-start", audioLocalController.startAudioTranscription);
+  ipcMain.handle("audio:transcription-pause", audioLocalController.pauseAudioTranscription);
+  ipcMain.handle("audio:transcription-resume", audioLocalController.resumeAudioTranscription);
+  ipcMain.handle("audio:transcription-cancel", audioLocalController.cancelAudioTranscription);
+  ipcMain.handle("audio:transcription-list", audioLocalController.listAudioTranscriptionJobs);
+  ipcMain.handle("audio:transcription-save-result", audioLocalController.saveAudioTranscriptionResult);
   ipcMain.on("window:set-theme", (event, theme) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;
     applyWindowTheme(theme);
@@ -1016,11 +1653,22 @@ function registerDesktopHandlers() {
     if (pendingDocumentRequest) {
       const request = pendingDocumentRequest;
       pendingDocumentRequest = null;
+      startupDocumentRequest = { ...request };
       void openDocumentPath(request.filePath, {
         openInReadingMode: request.openInReadingMode,
       });
+    } else {
+      removeStartupOverlay();
     }
-    if (isSmokeTest) setTimeout(() => app.quit(), 600);
+    if (isSmokeTest && !startupDocumentRequest) {
+      setTimeout(() => app.quit(), 600);
+    }
+  });
+  ipcMain.on("renderer:document-presented", (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return;
+    startupDocumentRequest = null;
+    removeStartupOverlay();
+    if (isSmokeTest) setTimeout(() => app.quit(), 200);
   });
 }
 
@@ -1042,6 +1690,7 @@ async function openDocumentPath(filePath, options = {}) {
     if (!isSmokeTest) mainWindow.show();
     mainWindow.focus();
   } catch {
+    if (startupOverlayView) void renderStartupOverlay("error");
     if (!isSmokeTest) {
       dialog.showErrorBox(
         "بازکردن فایل ممکن نبود",
@@ -1054,6 +1703,7 @@ async function openDocumentPath(filePath, options = {}) {
 async function createWindow() {
   if (!localServer) localServer = await createRaaviServer();
   rendererReady = false;
+  currentWindowTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
 
   mainWindow = new BrowserWindow({
     width: 1540,
@@ -1062,7 +1712,8 @@ async function createWindow() {
     minHeight: 680,
     show: false,
     frame: false,
-    backgroundColor: "#e9e5dc",
+    backgroundColor:
+      currentWindowTheme === "dark" ? "#141A16" : "#E9E5DC",
     icon: windowIconPath(),
     title: "راوی — Markdown فارسی",
     webPreferences: {
@@ -1075,6 +1726,7 @@ async function createWindow() {
   });
 
   mainWindow.setMenuBarVisibility(false);
+  mainWindow.on("resize", updateStartupOverlayBounds);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: "deny" };
@@ -1085,21 +1737,31 @@ async function createWindow() {
       if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     }
   });
-  mainWindow.once("ready-to-show", () => {
-    if (!isSmokeTest) mainWindow?.show();
-  });
   mainWindow.webContents.once(
     "did-fail-load",
     (_event, _errorCode, errorDescription) => {
       console.error("Raavi desktop load failed", errorDescription);
+      if (startupOverlayView) void renderStartupOverlay("error");
       if (isSmokeTest) app.exit(1);
     },
   );
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("Raavi renderer process ended", details.reason);
+    if (startupOverlayView) void renderStartupOverlay("error");
+  });
+  mainWindow.on("unresponsive", () => {
+    console.error("Raavi renderer became unresponsive during startup.");
+    if (startupOverlayView) void renderStartupOverlay("error");
+  });
   mainWindow.on("closed", () => {
     rendererReady = false;
+    startupDocumentRequest = null;
+    removeStartupOverlay();
     mainWindow = null;
   });
 
+  await createStartupOverlay();
+  if (!isSmokeTest) mainWindow.show();
   await mainWindow.loadURL(localServer.origin);
 }
 
@@ -1125,7 +1787,30 @@ if (!hasSingleInstanceLock) {
   nativeTheme.themeSource = "system";
   registerDesktopHandlers();
 
-  app.whenReady().then(createWindow);
+  app.whenReady().then(async () => {
+    softwareUpdateController = createSoftwareUpdateController({
+      currentVersion: app.getVersion(),
+      userDataPath: app.getPath("userData"),
+      publicKeyPath: path.join(appRoot, "build", "update-public-key.pem"),
+      manifestUrl:
+        process.env.RAAVI_UPDATE_MANIFEST_URL || undefined,
+      emit(status) {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.webContents.send("software-update:status-changed", status);
+      },
+    });
+    protocol.handle("raavi-audio", async (request) => {
+      const filePath = audioLocalController?.resolveProtocol(request.url);
+      if (!filePath) return new Response("Audio asset not found", { status: 404 });
+      try {
+        return await createAudioFileResponse(request, filePath);
+      } catch {
+        return new Response("Audio asset not found", { status: 404 });
+      }
+    });
+    await createWindow();
+    if (!isSmokeTest) softwareUpdateController.start();
+  });
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
   });
@@ -1133,7 +1818,11 @@ if (!hasSingleInstanceLock) {
     if (process.platform !== "darwin") app.quit();
   });
   app.on("before-quit", () => {
+    clearStartupOverlayTimer();
     closeLibraryWatchers();
+    audioLocalController?.dispose();
+    backupCoordinator?.dispose();
+    softwareUpdateController?.dispose();
     if (localServer) void localServer.close();
   });
 }
