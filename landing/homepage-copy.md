@@ -210,11 +210,11 @@ console.log("راوی آماده است");
 
 ### Windows
 
-نصب آسان · نسخهٔ `2.2.0` · ۹۶٫۹۷ مگابایت
+نصب آسان · نسخهٔ `2.2.1` · ۱۰۱٫۶۸ مگابایت
 
 **وضعیت:** آمادهٔ دانلود
 
-[دانلود Windows](https://dl2.gptt.ir/raavi/stable/2.2.0/Raavi-Setup-2.2.0-x64.exe)
+[دانلود Windows](https://dl2.gptt.ir/raavi/stable/2.2.1/Raavi-Setup-2.2.1-x64.exe)
 
 #### جزئیات و بررسی اصالت فایل
 
@@ -224,21 +224,21 @@ console.log("راوی آماده است");
 x64 برای بیشتر رایانه‌های امروزی است. کد SHA256 کمک می‌کند مطمئن شوید فایل دانلودشده دقیقاً همان نسخهٔ رسمی است.
 
 ```text
-7321B4511E6D39C8FE97973EAAF50853283C0EC463628C5D355AC90D117E6E5A
+E9B1D515AC9E3D5986E5ADA4E711605E4D0330C9C7296C4E034AFC380F0B4EF3
 ```
 
 کپی کد
 
 ### macOS
 
-نسخهٔ `2.2.0` · ساخت جداگانه برای Apple Silicon و Intel
+نسخهٔ `2.2.1` · ساخت جداگانه برای Apple Silicon و Intel
 
 **وضعیت:** آمادهٔ دانلود · بدون امضای Developer ID اپل
 
-- [دانلود DMG برای Apple Silicon](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.dmg) · `arm64` · ۱۳۴٫۴۱ مگابایت
-- [دانلود ZIP برای Apple Silicon](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.zip)
-- [دانلود DMG برای Intel](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.dmg) · `x64` · ۱۳۶٫۱۶ مگابایت
-- [دانلود ZIP برای Intel](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.zip)
+- [دانلود DMG برای Apple Silicon](https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-arm64-unsigned.dmg) · `arm64` · ۱۳۴٫۴۱ مگابایت
+- [دانلود ZIP برای Apple Silicon](https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-arm64-unsigned.zip)
+- [دانلود DMG برای Intel](https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-x64-unsigned.dmg) · `x64` · ۱۳۶٫۱۶ مگابایت
+- [دانلود ZIP برای Intel](https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-x64-unsigned.zip)
 
 اگر در «دربارهٔ این Mac» نام M1، M2، M3 یا M4 را می‌بینید، نسخهٔ Apple Silicon را بگیرید؛ در غیر این صورت نسخهٔ Intel مناسب است.
 
@@ -247,20 +247,20 @@ x64 برای بیشتر رایانه‌های امروزی است. کد SHA256 �
 SHA256 فایل DMG نسخهٔ Apple Silicon:
 
 ```text
-0709cd096e79b7ba785b4448bd7cb209ffdce7e79929a89a72ba4f9b2a7415e6
+06CF8C7422D86006527AB1FD6D3CB7F028EC4398C51AA7975ACB432033AE47B3
 ```
 
 SHA256 فایل DMG نسخهٔ Intel:
 
 ```text
-910bc85c254c6200c07b9d205f351394c0e3c999e9bb5e88acfd6560ee70b2d9
+4CA5305B1EFE4ABCB3FE29900A928761DBFDE7945F4B934920D8FD901467D4E8
 ```
 
-[فهرست کامل SHA-256 فایل‌های macOS](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-SHA256SUMS.txt)
+[فهرست کامل SHA-256 فایل‌های macOS](https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-SHA256SUMS.txt)
 
 ### روند انتشار
 
-هر نسخه از یک tag مشترک ساخته می‌شود: نخست آزمون و ثبت نسخه، سپس ساخت بومی Windows، Apple Silicon و Intel، بعد کنترل معماری و checksum و در پایان بروزرسانی سایت. آپدیتر امن از یک manifest مشترک، بستهٔ متناسب با Windows، Apple Silicon یا Intel را انتخاب و قبل از نصب با SHA-512 و امضای Ed25519 اعتبارسنجی می‌کند؛ GitHub Release مسیر دریافت دستی جایگزین است. خروجی macOS نسخهٔ 2.2.0 پیش از فعال‌شدن این زیرساخت ساخته شده و آپدیتر macOS از نخستین build بعدی فعال می‌شود.
+هر نسخه از یک tag مشترک ساخته می‌شود: نخست آزمون و ثبت نسخه، سپس ساخت بومی Windows، Apple Silicon و Intel، بعد کنترل معماری و checksum و در پایان بروزرسانی سایت. آپدیتر امن از یک manifest مشترک، بستهٔ متناسب با Windows، Apple Silicon یا Intel را انتخاب و قبل از نصب با SHA-512 و امضای Ed25519 اعتبارسنجی می‌کند؛ GitHub Release مسیر دریافت دستی جایگزین است. از نسخهٔ 2.2.1 این مسیر بروزرسانی داخلی روی هر سه خروجی فعال است.
 
 ### Linux
 

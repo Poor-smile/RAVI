@@ -30,11 +30,11 @@
 نسخهٔ رسمی Windows x64 با Electron و نصب‌کنندهٔ NSIS روی هاست دانلود مستقل منتشر
 می‌شود و داخل بستهٔ landing یا هاست اصلی قرار نمی‌گیرد:
 
-`https://dl2.gptt.ir/raavi/stable/2.2.0/Raavi-Setup-2.2.0-x64.exe`
+`https://dl2.gptt.ir/raavi/stable/2.2.1/Raavi-Setup-2.2.1-x64.exe`
 
-SHA256 نسخهٔ 2.2.0:
+SHA256 نسخهٔ 2.2.1:
 
-`7321B4511E6D39C8FE97973EAAF50853283C0EC463628C5D355AC90D117E6E5A`
+`E9B1D515AC9E3D5986E5ADA4E711605E4D0330C9C7296C4E034AFC380F0B4EF3`
 
 نسخه، Installer و checksum هر انتشار باید در GitHub Releases هم ثبت شوند:
 
@@ -42,20 +42,19 @@ SHA256 نسخهٔ 2.2.0:
 
 Tauri و فایل Portable بخشی از مسیر انتشار Windows نسخهٔ ۲ نیستند.
 
-نسخهٔ 2.2.0 برای هر دو معماری macOS از GitHub Release رسمی دریافت می‌شود:
+نسخهٔ 2.2.1 برای هر دو معماری macOS از GitHub Release رسمی دریافت می‌شود:
 
-- Apple Silicon DMG: `https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.dmg`
-- Intel DMG: `https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.dmg`
-- فایل‌های ZIP و فهرست SHA-256: `https://github.com/Poor-smile/RAVI/releases/tag/v2.2.0`
+- Apple Silicon DMG: `https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-arm64-unsigned.dmg`
+- Intel DMG: `https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-x64-unsigned.dmg`
+- فایل‌های ZIP و فهرست SHA-256: `https://github.com/Poor-smile/RAVI/releases/tag/v2.2.1`
 
 این خروجی‌ها فعلاً Developer ID و notarization اپل ندارند و نام فایل، متن صفحه و
 وضعیت دانلود باید همیشه این موضوع را شفاف نشان دهند. در هر انتشار بعدی، صفحهٔ
 معرفی فقط پس از تکمیل هر دو معماری، هر دو قالب DMG/ZIP و فایل checksum به نسخهٔ
 جدید اشاره می‌کند. آپدیتر امن از manifest مشترک، بستهٔ `win32-x64`،
 `darwin-arm64` یا `darwin-x64` را انتخاب و پیش از نصب با SHA-512 و امضای Ed25519
-اعتبارسنجی می‌کند. GitHub Release مسیر دانلود دستی جایگزین باقی می‌ماند. چون
-خروجی macOS نسخهٔ 2.2.0 پیش از اضافه‌شدن این زیرساخت ساخته شده است، آپدیتر
-macOS از نخستین build پس از 2.2.0 در دسترس خواهد بود.
+اعتبارسنجی می‌کند. GitHub Release مسیر دانلود دستی جایگزین باقی می‌ماند. از نسخهٔ
+2.2.1، بروزرسانی داخلی برای Windows، Apple Silicon و Intel فعال است.
 
 لینک حمایت پروژه به `https://daramet.com/poorsmile` می‌رود.
 
