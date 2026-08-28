@@ -11,6 +11,8 @@ export type SoftwareUpdatePhase =
 export type SoftwareUpdateState = {
   phase: SoftwareUpdatePhase;
   currentVersion: string;
+  platform: string;
+  arch: string;
   version: string;
   notesUrl: string;
   downloadedBytes: number;
@@ -24,6 +26,8 @@ export type SoftwareUpdateState = {
 export const DEFAULT_SOFTWARE_UPDATE_STATE: SoftwareUpdateState = {
   phase: "idle",
   currentVersion: "",
+  platform: "",
+  arch: "",
   version: "",
   notesUrl: "",
   downloadedBytes: 0,

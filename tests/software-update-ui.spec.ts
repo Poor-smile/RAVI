@@ -4,6 +4,8 @@ import type { SoftwareUpdateState } from "../app/software-update/types";
 const availableState: SoftwareUpdateState = {
   phase: "available",
   currentVersion: "2.1.13",
+  platform: "win32",
+  arch: "x64",
   version: "2.2.0",
   notesUrl: "https://ravi.poorsmile.ir/updates/releases/2.2.0.json",
   downloadedBytes: 0,

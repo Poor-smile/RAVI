@@ -38,8 +38,8 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
       type="image/webp"
       fetchpriority="high"
     />
-    <link rel="stylesheet" href="./style.css?v=2.2.0-1" />
-    <script src="./app.js?v=2.2.0-1" defer></script>
+    <link rel="stylesheet" href="./style.css?v=2.2.0-3" />
+    <script src="./app.js?v=2.2.0-3" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">رفتن به محتوای اصلی</a>
@@ -415,7 +415,8 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
           <div class="download-heading-copy">
             <p>
               نسخهٔ وب بدون نصب آماده است. برای اتصال پوشه‌ها و باز کردن مستقیم
-              فایل‌ها از سیستم‌عامل، نسخهٔ Windows یا Linux را دریافت کنید.
+              فایل‌ها از سیستم‌عامل، نسخهٔ مناسب Windows، macOS یا Linux را
+              دریافت کنید.
             </p>
             <button
               class="button button-secondary changelog-trigger"
@@ -487,16 +488,89 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
             </a>
           </article>
 
-          <article class="download-row">
+          <article class="download-row download-macos">
             <div class="platform-mark" aria-hidden="true">mac</div>
-            <div>
+            <div class="release-copy">
               <h3>macOS</h3>
-              <p>برای رایانه‌های Apple silicon و Intel</p>
+              <p>
+                نسخهٔ <bdi dir="ltr">2.2.0</bdi> · ساخت جداگانه برای Apple
+                Silicon و Intel
+              </p>
+              <details class="release-details">
+                <summary>انتخاب معماری و بررسی اصالت فایل</summary>
+                <div class="release-details-body mac-release-details">
+                  <p class="mac-architecture-help">
+                    اگر در بخش «دربارهٔ این Mac» نام M1، M2، M3 یا M4 را
+                    می‌بینید، نسخهٔ Apple Silicon را بگیرید؛ در غیر این صورت
+                    نسخهٔ Intel مناسب است.
+                  </p>
+                  <div class="mac-build-list">
+                    <section class="mac-build" aria-labelledby="mac-arm-title">
+                      <div class="mac-build-heading">
+                        <h4 id="mac-arm-title">Apple Silicon</h4>
+                        <span><bdi dir="ltr">arm64 · DMG · 134.41 MB</bdi></span>
+                      </div>
+                      <div class="release-hash-row">
+                        <code class="release-hash" dir="ltr">0709cd096e79b7ba785b4448bd7cb209ffdce7e79929a89a72ba4f9b2a7415e6</code>
+                        <button
+                          class="hash-copy-button"
+                          type="button"
+                          data-copy-hash="0709cd096e79b7ba785b4448bd7cb209ffdce7e79929a89a72ba4f9b2a7415e6"
+                          aria-label="کپی‌کردن کد بررسی فایل macOS برای Apple Silicon"
+                        >کپی کد</button>
+                      </div>
+                      <a
+                        class="release-alt-link"
+                        href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.zip"
+                      >دریافت فایل ZIP برای Apple Silicon</a>
+                    </section>
+
+                    <section class="mac-build" aria-labelledby="mac-intel-title">
+                      <div class="mac-build-heading">
+                        <h4 id="mac-intel-title">Intel</h4>
+                        <span><bdi dir="ltr">x64 · DMG · 136.16 MB</bdi></span>
+                      </div>
+                      <div class="release-hash-row">
+                        <code class="release-hash" dir="ltr">910bc85c254c6200c07b9d205f351394c0e3c999e9bb5e88acfd6560ee70b2d9</code>
+                        <button
+                          class="hash-copy-button"
+                          type="button"
+                          data-copy-hash="910bc85c254c6200c07b9d205f351394c0e3c999e9bb5e88acfd6560ee70b2d9"
+                          aria-label="کپی‌کردن کد بررسی فایل macOS برای Intel"
+                        >کپی کد</button>
+                      </div>
+                      <a
+                        class="release-alt-link"
+                        href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.zip"
+                      >دریافت فایل ZIP برای Intel</a>
+                    </section>
+                  </div>
+                  <p class="mac-signing-note">
+                    این خروجی‌ها فعلاً بدون امضای Developer ID اپل منتشر
+                    شده‌اند؛ بنابراین macOS ممکن است در نخستین اجرا هشدار
+                    امنیتی نشان دهد. فایل رسمی را فقط از GitHub Release راوی
+                    دریافت کنید.
+                  </p>
+                  <a
+                    class="release-alt-link"
+                    href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-SHA256SUMS.txt"
+                  >فهرست کامل SHA-256 فایل‌های macOS</a>
+                </div>
+              </details>
             </div>
-            <span class="release-state">هنوز منتشر نشده</span>
-            <span class="button button-disabled" aria-disabled="true">
-              به‌زودی
-            </span>
+            <span class="release-state state-unsigned">بدون امضای اپل</span>
+            <div class="release-actions" aria-label="دانلود macOS بر اساس معماری">
+              <a
+                class="button button-primary"
+                href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.dmg"
+                aria-label="دانلود راوی 2.2.0 برای macOS Apple Silicon، حجم ۱۳۴٫۴۱ مگابایت"
+              >Apple Silicon</a>
+              <a
+                class="button button-secondary"
+                href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.dmg"
+                aria-label="دانلود راوی 2.2.0 برای macOS Intel، حجم ۱۳۶٫۱۶ مگابایت"
+              >Intel</a>
+            </div>
           </article>
 
           <article class="download-row download-linux">
@@ -538,6 +612,33 @@ FORM: متن و نتیجه در دو برگ موازی، با اتصال مست�
             </a>
           </article>
         </div>
+        <aside class="release-path" aria-labelledby="release-path-title">
+          <div class="release-path-heading">
+            <span class="release-path-mark" aria-hidden="true">✓</span>
+            <div>
+              <strong id="release-path-title">انتشار قابل بررسی، پیش از اعلام عمومی</strong>
+              <p>
+                هر نسخه از یک tag مشترک ساخته می‌شود؛ Windows روی هاست دانلود
+                و GitHub ثبت می‌شود و ساخت‌های بومی macOS روی GitHub Actions
+                آماده می‌شوند.
+              </p>
+            </div>
+          </div>
+          <ol class="release-path-steps">
+            <li><span>آزمون و ثبت نسخه</span><small>کد، دفتر تغییرات و tag یکسان</small></li>
+            <li><span>ساخت بومی</span><small>Windows x64، Apple Silicon و Intel</small></li>
+            <li><span>کنترل اصالت</span><small>معماری، سلامت بسته و checksum</small></li>
+            <li><span>انتشار نهایی</span><small>سایت فقط پس از کامل‌شدن همهٔ خروجی‌ها</small></li>
+          </ol>
+          <p class="release-channel-note">
+            آپدیتر امن Windows و macOS از یک manifest مشترک، بستهٔ متناسب با
+            سیستم‌عامل و معماری دستگاه را انتخاب، دانلود و پیش از نصب با
+            SHA-512 و امضای Ed25519 اعتبارسنجی می‌کند. GitHub Release مسیر
+            دریافت دستی جایگزین است. خروجی macOS نسخهٔ 2.2.0 پیش از فعال‌شدن
+            این زیرساخت منتشر شده و آپدیتر macOS از نخستین build بعدی فعال
+            خواهد بود.
+          </p>
+        </aside>
         <p class="visually-hidden" id="hash-copy-status" aria-live="polite"></p>
       </section>
 

@@ -196,7 +196,7 @@ console.log("راوی آماده است");
 
 ## در مرورگر یا روی دسکتاپ.
 
-نسخهٔ وب بدون نصب آماده است. برای اتصال پوشه‌ها و باز کردن مستقیم فایل‌ها از سیستم‌عامل، نسخهٔ Windows یا Linux را دریافت کنید.
+نسخهٔ وب بدون نصب آماده است. برای اتصال پوشه‌ها و باز کردن مستقیم فایل‌ها از سیستم‌عامل، نسخهٔ مناسب Windows، macOS یا Linux را دریافت کنید.
 
 - دفتر تغییرات
 
@@ -231,11 +231,36 @@ x64 برای بیشتر رایانه‌های امروزی است. کد SHA256 �
 
 ### macOS
 
-برای رایانه‌های Apple silicon و Intel
+نسخهٔ `2.2.0` · ساخت جداگانه برای Apple Silicon و Intel
 
-**وضعیت:** هنوز منتشر نشده
+**وضعیت:** آمادهٔ دانلود · بدون امضای Developer ID اپل
 
-به‌زودی
+- [دانلود DMG برای Apple Silicon](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.dmg) · `arm64` · ۱۳۴٫۴۱ مگابایت
+- [دانلود ZIP برای Apple Silicon](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.zip)
+- [دانلود DMG برای Intel](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.dmg) · `x64` · ۱۳۶٫۱۶ مگابایت
+- [دانلود ZIP برای Intel](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.zip)
+
+اگر در «دربارهٔ این Mac» نام M1، M2، M3 یا M4 را می‌بینید، نسخهٔ Apple Silicon را بگیرید؛ در غیر این صورت نسخهٔ Intel مناسب است.
+
+این خروجی‌ها فعلاً بدون امضای Developer ID اپل منتشر شده‌اند؛ بنابراین macOS ممکن است در نخستین اجرا هشدار امنیتی نشان دهد. فایل رسمی را فقط از GitHub Release راوی دریافت کنید.
+
+SHA256 فایل DMG نسخهٔ Apple Silicon:
+
+```text
+0709cd096e79b7ba785b4448bd7cb209ffdce7e79929a89a72ba4f9b2a7415e6
+```
+
+SHA256 فایل DMG نسخهٔ Intel:
+
+```text
+910bc85c254c6200c07b9d205f351394c0e3c999e9bb5e88acfd6560ee70b2d9
+```
+
+[فهرست کامل SHA-256 فایل‌های macOS](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-SHA256SUMS.txt)
+
+### روند انتشار
+
+هر نسخه از یک tag مشترک ساخته می‌شود: نخست آزمون و ثبت نسخه، سپس ساخت بومی Windows، Apple Silicon و Intel، بعد کنترل معماری و checksum و در پایان بروزرسانی سایت. آپدیتر امن از یک manifest مشترک، بستهٔ متناسب با Windows، Apple Silicon یا Intel را انتخاب و قبل از نصب با SHA-512 و امضای Ed25519 اعتبارسنجی می‌کند؛ GitHub Release مسیر دریافت دستی جایگزین است. خروجی macOS نسخهٔ 2.2.0 پیش از فعال‌شدن این زیرساخت ساخته شده و آپدیتر macOS از نخستین build بعدی فعال می‌شود.
 
 ### Linux
 

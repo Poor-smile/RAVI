@@ -1338,6 +1338,177 @@ code {
   font-weight: 700;
 }
 
+.state-unsigned {
+  color: var(--saving);
+  font-weight: 700;
+}
+
+.release-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-block-start: 4px;
+}
+
+.release-actions .button {
+  min-width: 118px;
+  padding-inline: 14px;
+  white-space: nowrap;
+}
+
+.mac-release-details {
+  max-width: 680px;
+}
+
+.mac-architecture-help {
+  margin-block-start: 0 !important;
+}
+
+.mac-build-list {
+  display: grid;
+  gap: 18px;
+  margin-block-start: 16px;
+}
+
+.mac-build + .mac-build {
+  padding-block-start: 18px;
+  border-block-start: 1px solid var(--rule);
+}
+
+.mac-build-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 20px;
+}
+
+.mac-build-heading h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.mac-build-heading span {
+  color: var(--ink-500);
+  font-size: 10px;
+}
+
+.release-alt-link {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  margin-block-start: 8px;
+  color: var(--proof-blue-dark);
+  font-size: 11px;
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.mac-signing-note {
+  margin-block: 18px 0 !important;
+  padding-block-start: 16px;
+  border-block-start: 1px solid var(--rule);
+  color: var(--ink-700);
+}
+
+.release-path {
+  width: min(1180px, 100%);
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(520px, 1.4fr);
+  gap: 28px 52px;
+  margin: 44px auto 0;
+  padding-block-start: 28px;
+  border-block-start: 1px solid var(--ink-950);
+}
+
+.release-path-heading {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: start;
+  gap: 14px;
+}
+
+.release-path-mark {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  color: var(--paper-50);
+  background: var(--ink-950);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.release-path-heading strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.release-path-heading p,
+.release-channel-note {
+  margin: 6px 0 0;
+  color: var(--ink-700);
+  font-size: 12px;
+  line-height: 1.95;
+}
+
+.release-path-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: release-step;
+}
+
+.release-path-steps li {
+  position: relative;
+  min-width: 0;
+  padding: 36px 14px 0;
+  border-block-start: 1px solid var(--rule-strong);
+  counter-increment: release-step;
+}
+
+.release-path-steps li::before {
+  content: counter(release-step, decimal-leading-zero);
+  position: absolute;
+  inset-block-start: -13px;
+  inset-inline-start: 0;
+  padding-inline-end: 8px;
+  color: var(--proof-blue-dark);
+  background: var(--paper-100);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.release-path-steps span,
+.release-path-steps small {
+  display: block;
+}
+
+.release-path-steps span {
+  color: var(--ink-900);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.release-path-steps small {
+  margin-block-start: 6px;
+  color: var(--ink-500);
+  font-size: 10px;
+  line-height: 1.8;
+}
+
+.release-channel-note {
+  grid-column: 2;
+  margin: -10px 0 0;
+  padding-block-start: 18px;
+  border-block-start: 1px solid var(--rule);
+}
+
 .button-disabled {
   color: var(--ink-500);
   background: var(--paper-200);
@@ -1855,6 +2026,25 @@ code {
     grid-row: 1 / span 2;
   }
 
+  .download-row .release-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .download-row .release-actions .button {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .release-path {
+    grid-template-columns: 1fr;
+  }
+
+  .release-channel-note {
+    grid-column: auto;
+    margin-block-start: 0;
+  }
+
   .support-section {
     grid-template-columns: 1fr;
   }
@@ -1971,6 +2161,36 @@ code {
     width: 100%;
     grid-column: 1 / -1;
     grid-row: auto;
+  }
+
+  .download-row .release-actions {
+    width: 100%;
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .download-row .release-actions .button {
+    grid-column: auto;
+    width: auto;
+  }
+
+  .release-path {
+    gap: 30px;
+    margin-block-start: 34px;
+  }
+
+  .release-path-steps {
+    grid-template-columns: 1fr 1fr;
+    gap: 34px 0;
+  }
+
+  .release-path-steps li:nth-child(3),
+  .release-path-steps li:nth-child(4) {
+    margin-block-start: 4px;
+  }
+
+  .release-channel-note {
+    margin-block-start: 0;
   }
 
   .platform-mark {
@@ -2437,7 +2657,8 @@ code {
           <div class="download-heading-copy">
             <p>
               نسخهٔ وب بدون نصب آماده است. برای اتصال پوشه‌ها و باز کردن مستقیم
-              فایل‌ها از سیستم‌عامل، نسخهٔ Windows یا Linux را دریافت کنید.
+              فایل‌ها از سیستم‌عامل، نسخهٔ مناسب Windows، macOS یا Linux را
+              دریافت کنید.
             </p>
             <button
               class="button button-secondary changelog-trigger"
@@ -2475,7 +2696,7 @@ code {
             <div class="platform-mark" aria-hidden="true">Win</div>
             <div class="release-copy">
               <h3>Windows</h3>
-              <p>نصب آسان · نسخهٔ <bdi dir="ltr">2.0.0</bdi> · ۹۶٫۷۰ مگابایت</p>
+              <p>نصب آسان · نسخهٔ <bdi dir="ltr">2.2.0</bdi> · ۹۶٫۹۷ مگابایت</p>
               <details class="release-details">
                 <summary>جزئیات و بررسی اصالت فایل</summary>
                 <div class="release-details-body">
@@ -2488,11 +2709,11 @@ code {
                     مطمئن شوید فایل دانلودشده دقیقاً همان نسخهٔ رسمی است.
                   </p>
                   <div class="release-hash-row">
-                    <code class="release-hash" dir="ltr">FD196BB7BC8978820EA402B4C7924076FCFE5D8A487C6F648FF8692356CD44E0</code>
+                    <code class="release-hash" dir="ltr">7321B4511E6D39C8FE97973EAAF50853283C0EC463628C5D355AC90D117E6E5A</code>
                     <button
                       class="hash-copy-button"
                       type="button"
-                      data-copy-hash="FD196BB7BC8978820EA402B4C7924076FCFE5D8A487C6F648FF8692356CD44E0"
+                      data-copy-hash="7321B4511E6D39C8FE97973EAAF50853283C0EC463628C5D355AC90D117E6E5A"
                       aria-label="کپی‌کردن کد بررسی فایل Windows"
                     >کپی کد</button>
                   </div>
@@ -2502,24 +2723,96 @@ code {
             <span class="release-state state-ready">آمادهٔ دانلود</span>
             <a
               class="button button-primary"
-              href="./downloads/Raavi-Setup-2.0.0-x64.exe?v=2.0.0"
-              download
-              aria-label="دانلود راوی 2.0.0 برای Windows، حجم ۹۶٫۷۰ مگابایت"
+              href="https://dl2.gptt.ir/raavi/stable/2.2.0/Raavi-Setup-2.2.0-x64.exe"
+              aria-label="دانلود راوی 2.2.0 برای Windows، حجم ۹۶٫۹۷ مگابایت"
             >
               دانلود Windows
             </a>
           </article>
 
-          <article class="download-row">
+          <article class="download-row download-macos">
             <div class="platform-mark" aria-hidden="true">mac</div>
-            <div>
+            <div class="release-copy">
               <h3>macOS</h3>
-              <p>برای رایانه‌های Apple silicon و Intel</p>
+              <p>
+                نسخهٔ <bdi dir="ltr">2.2.0</bdi> · ساخت جداگانه برای Apple
+                Silicon و Intel
+              </p>
+              <details class="release-details">
+                <summary>انتخاب معماری و بررسی اصالت فایل</summary>
+                <div class="release-details-body mac-release-details">
+                  <p class="mac-architecture-help">
+                    اگر در بخش «دربارهٔ این Mac» نام M1، M2، M3 یا M4 را
+                    می‌بینید، نسخهٔ Apple Silicon را بگیرید؛ در غیر این صورت
+                    نسخهٔ Intel مناسب است.
+                  </p>
+                  <div class="mac-build-list">
+                    <section class="mac-build" aria-labelledby="mac-arm-title">
+                      <div class="mac-build-heading">
+                        <h4 id="mac-arm-title">Apple Silicon</h4>
+                        <span><bdi dir="ltr">arm64 · DMG · 134.41 MB</bdi></span>
+                      </div>
+                      <div class="release-hash-row">
+                        <code class="release-hash" dir="ltr">0709cd096e79b7ba785b4448bd7cb209ffdce7e79929a89a72ba4f9b2a7415e6</code>
+                        <button
+                          class="hash-copy-button"
+                          type="button"
+                          data-copy-hash="0709cd096e79b7ba785b4448bd7cb209ffdce7e79929a89a72ba4f9b2a7415e6"
+                          aria-label="کپی‌کردن کد بررسی فایل macOS برای Apple Silicon"
+                        >کپی کد</button>
+                      </div>
+                      <a
+                        class="release-alt-link"
+                        href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.zip"
+                      >دریافت فایل ZIP برای Apple Silicon</a>
+                    </section>
+
+                    <section class="mac-build" aria-labelledby="mac-intel-title">
+                      <div class="mac-build-heading">
+                        <h4 id="mac-intel-title">Intel</h4>
+                        <span><bdi dir="ltr">x64 · DMG · 136.16 MB</bdi></span>
+                      </div>
+                      <div class="release-hash-row">
+                        <code class="release-hash" dir="ltr">910bc85c254c6200c07b9d205f351394c0e3c999e9bb5e88acfd6560ee70b2d9</code>
+                        <button
+                          class="hash-copy-button"
+                          type="button"
+                          data-copy-hash="910bc85c254c6200c07b9d205f351394c0e3c999e9bb5e88acfd6560ee70b2d9"
+                          aria-label="کپی‌کردن کد بررسی فایل macOS برای Intel"
+                        >کپی کد</button>
+                      </div>
+                      <a
+                        class="release-alt-link"
+                        href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.zip"
+                      >دریافت فایل ZIP برای Intel</a>
+                    </section>
+                  </div>
+                  <p class="mac-signing-note">
+                    این خروجی‌ها فعلاً بدون امضای Developer ID اپل منتشر
+                    شده‌اند؛ بنابراین macOS ممکن است در نخستین اجرا هشدار
+                    امنیتی نشان دهد. فایل رسمی را فقط از GitHub Release راوی
+                    دریافت کنید.
+                  </p>
+                  <a
+                    class="release-alt-link"
+                    href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-SHA256SUMS.txt"
+                  >فهرست کامل SHA-256 فایل‌های macOS</a>
+                </div>
+              </details>
             </div>
-            <span class="release-state">هنوز منتشر نشده</span>
-            <span class="button button-disabled" aria-disabled="true">
-              به‌زودی
-            </span>
+            <span class="release-state state-unsigned">بدون امضای اپل</span>
+            <div class="release-actions" aria-label="دانلود macOS بر اساس معماری">
+              <a
+                class="button button-primary"
+                href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.dmg"
+                aria-label="دانلود راوی 2.2.0 برای macOS Apple Silicon، حجم ۱۳۴٫۴۱ مگابایت"
+              >Apple Silicon</a>
+              <a
+                class="button button-secondary"
+                href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.dmg"
+                aria-label="دانلود راوی 2.2.0 برای macOS Intel، حجم ۱۳۶٫۱۶ مگابایت"
+              >Intel</a>
+            </div>
           </article>
 
           <article class="download-row download-linux">
@@ -2561,6 +2854,33 @@ code {
             </a>
           </article>
         </div>
+        <aside class="release-path" aria-labelledby="release-path-title">
+          <div class="release-path-heading">
+            <span class="release-path-mark" aria-hidden="true">✓</span>
+            <div>
+              <strong id="release-path-title">انتشار قابل بررسی، پیش از اعلام عمومی</strong>
+              <p>
+                هر نسخه از یک tag مشترک ساخته می‌شود؛ Windows روی هاست دانلود
+                و GitHub ثبت می‌شود و ساخت‌های بومی macOS روی GitHub Actions
+                آماده می‌شوند.
+              </p>
+            </div>
+          </div>
+          <ol class="release-path-steps">
+            <li><span>آزمون و ثبت نسخه</span><small>کد، دفتر تغییرات و tag یکسان</small></li>
+            <li><span>ساخت بومی</span><small>Windows x64، Apple Silicon و Intel</small></li>
+            <li><span>کنترل اصالت</span><small>معماری، سلامت بسته و checksum</small></li>
+            <li><span>انتشار نهایی</span><small>سایت فقط پس از کامل‌شدن همهٔ خروجی‌ها</small></li>
+          </ol>
+          <p class="release-channel-note">
+            آپدیتر امن Windows و macOS از یک manifest مشترک، بستهٔ متناسب با
+            سیستم‌عامل و معماری دستگاه را انتخاب، دانلود و پیش از نصب با
+            SHA-512 و امضای Ed25519 اعتبارسنجی می‌کند. GitHub Release مسیر
+            دریافت دستی جایگزین است. خروجی macOS نسخهٔ 2.2.0 پیش از فعال‌شدن
+            این زیرساخت منتشر شده و آپدیتر macOS از نخستین build بعدی فعال
+            خواهد بود.
+          </p>
+        </aside>
         <p class="visually-hidden" id="hash-copy-status" aria-live="polite"></p>
       </section>
 
@@ -2670,6 +2990,8 @@ code {
       <div class="footer-links">
         <a href="#top">ابتدای صفحه</a>
         <a href="https://raviweb.poorsmile.ir/">نسخهٔ وب</a>
+        <a href="./privacy/" lang="en" dir="ltr">Privacy Policy</a>
+        <a href="./terms/" lang="en" dir="ltr">Terms of Use</a>
         <a href="https://ravi.poorsmile.ir">ravi.poorsmile.ir</a>
       </div>
     </footer>

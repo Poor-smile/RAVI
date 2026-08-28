@@ -1297,6 +1297,177 @@ code {
   font-weight: 700;
 }
 
+.state-unsigned {
+  color: var(--saving);
+  font-weight: 700;
+}
+
+.release-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-block-start: 4px;
+}
+
+.release-actions .button {
+  min-width: 118px;
+  padding-inline: 14px;
+  white-space: nowrap;
+}
+
+.mac-release-details {
+  max-width: 680px;
+}
+
+.mac-architecture-help {
+  margin-block-start: 0 !important;
+}
+
+.mac-build-list {
+  display: grid;
+  gap: 18px;
+  margin-block-start: 16px;
+}
+
+.mac-build + .mac-build {
+  padding-block-start: 18px;
+  border-block-start: 1px solid var(--rule);
+}
+
+.mac-build-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 20px;
+}
+
+.mac-build-heading h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.mac-build-heading span {
+  color: var(--ink-500);
+  font-size: 10px;
+}
+
+.release-alt-link {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  margin-block-start: 8px;
+  color: var(--proof-blue-dark);
+  font-size: 11px;
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.mac-signing-note {
+  margin-block: 18px 0 !important;
+  padding-block-start: 16px;
+  border-block-start: 1px solid var(--rule);
+  color: var(--ink-700);
+}
+
+.release-path {
+  width: min(1180px, 100%);
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(520px, 1.4fr);
+  gap: 28px 52px;
+  margin: 44px auto 0;
+  padding-block-start: 28px;
+  border-block-start: 1px solid var(--ink-950);
+}
+
+.release-path-heading {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: start;
+  gap: 14px;
+}
+
+.release-path-mark {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  color: var(--paper-50);
+  background: var(--ink-950);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.release-path-heading strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.release-path-heading p,
+.release-channel-note {
+  margin: 6px 0 0;
+  color: var(--ink-700);
+  font-size: 12px;
+  line-height: 1.95;
+}
+
+.release-path-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: release-step;
+}
+
+.release-path-steps li {
+  position: relative;
+  min-width: 0;
+  padding: 36px 14px 0;
+  border-block-start: 1px solid var(--rule-strong);
+  counter-increment: release-step;
+}
+
+.release-path-steps li::before {
+  content: counter(release-step, decimal-leading-zero);
+  position: absolute;
+  inset-block-start: -13px;
+  inset-inline-start: 0;
+  padding-inline-end: 8px;
+  color: var(--proof-blue-dark);
+  background: var(--paper-100);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.release-path-steps span,
+.release-path-steps small {
+  display: block;
+}
+
+.release-path-steps span {
+  color: var(--ink-900);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.release-path-steps small {
+  margin-block-start: 6px;
+  color: var(--ink-500);
+  font-size: 10px;
+  line-height: 1.8;
+}
+
+.release-channel-note {
+  grid-column: 2;
+  margin: -10px 0 0;
+  padding-block-start: 18px;
+  border-block-start: 1px solid var(--rule);
+}
+
 .button-disabled {
   color: var(--ink-500);
   background: var(--paper-200);
@@ -1814,6 +1985,25 @@ code {
     grid-row: 1 / span 2;
   }
 
+  .download-row .release-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .download-row .release-actions .button {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .release-path {
+    grid-template-columns: 1fr;
+  }
+
+  .release-channel-note {
+    grid-column: auto;
+    margin-block-start: 0;
+  }
+
   .support-section {
     grid-template-columns: 1fr;
   }
@@ -1930,6 +2120,36 @@ code {
     width: 100%;
     grid-column: 1 / -1;
     grid-row: auto;
+  }
+
+  .download-row .release-actions {
+    width: 100%;
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .download-row .release-actions .button {
+    grid-column: auto;
+    width: auto;
+  }
+
+  .release-path {
+    gap: 30px;
+    margin-block-start: 34px;
+  }
+
+  .release-path-steps {
+    grid-template-columns: 1fr 1fr;
+    gap: 34px 0;
+  }
+
+  .release-path-steps li:nth-child(3),
+  .release-path-steps li:nth-child(4) {
+    margin-block-start: 4px;
+  }
+
+  .release-channel-note {
+    margin-block-start: 0;
   }
 
   .platform-mark {

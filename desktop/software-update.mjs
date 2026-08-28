@@ -62,30 +62,9 @@ function safeArtifactPath(value) {
   return candidate;
 }
 
-export function validateUpdateManifest(value) {
-  if (!value || typeof value !== "object") {
-    throw new Error("update_invalid_manifest");
-  }
-  const artifact = value.artifact;
-  if (!artifact || typeof artifact !== "object") {
-    throw new Error("update_invalid_artifact");
-  }
-  const version = String(value.version ?? "");
-  if (!normalizedVersion(version)) throw new Error("update_invalid_version");
-  const size = Number(artifact.size);
-  if (!Number.isSafeInteger(size) || size <= 0) {
-    throw new Error("update_invalid_size");
-  }
-  const sha512 = String(artifact.sha512 ?? "").toLowerCase();
-  if (!/^[a-f0-9]{128}$/.test(sha512)) {
-    throw new Error("update_invalid_sha512");
-  }
-  const signature = String(artifact.signature ?? "");
-  if (!signature || !/^[A-Za-z0-9+/]+={0,2}$/.test(signature)) {
-    throw new Error("update_invalid_signature");
-  }
-  const mirrors = Array.isArray(value.mirrors)
-    ? value.mirrors.map((mirror, index) => ({
+function validateMirrors(value) {
+  const mirrors = Array.isArray(value)
+    ? value.map((mirror, index) => ({
         id: String(mirror?.id ?? `mirror-${index + 1}`),
         baseUrl: requiredHttpsUrl(
           mirror?.baseUrl,
@@ -94,27 +73,98 @@ export function validateUpdateManifest(value) {
       }))
     : [];
   if (!mirrors.length) throw new Error("update_missing_mirrors");
-  const artifactPath = safeArtifactPath(artifact.path);
-  const notesUrl = value.notesUrl
-    ? requiredHttpsUrl(value.notesUrl, "update_invalid_notes_url")
-    : "";
+  return mirrors;
+}
+
+function validateArtifact(value, { platform, arch, fallbackMirrors }) {
+  if (!value || typeof value !== "object") {
+    throw new Error("update_invalid_artifact");
+  }
+  const size = Number(value.size);
+  if (!Number.isSafeInteger(size) || size <= 0) {
+    throw new Error("update_invalid_size");
+  }
+  const sha512 = String(value.sha512 ?? "").toLowerCase();
+  if (!/^[a-f0-9]{128}$/.test(sha512)) {
+    throw new Error("update_invalid_sha512");
+  }
+  const signature = String(value.signature ?? "");
+  if (!signature || !/^[A-Za-z0-9+/]+={0,2}$/.test(signature)) {
+    throw new Error("update_invalid_signature");
+  }
+  const artifactPath = safeArtifactPath(value.path);
+  if (platform === "win32" && !artifactPath.toLowerCase().endsWith(".exe")) {
+    throw new Error("update_invalid_windows_artifact");
+  }
+  if (platform === "darwin" && !artifactPath.toLowerCase().endsWith(".dmg")) {
+    throw new Error("update_invalid_macos_artifact");
+  }
+  const mirrors = value.mirrors
+    ? validateMirrors(value.mirrors)
+    : fallbackMirrors;
+  if (!mirrors.length) throw new Error("update_missing_mirrors");
   return {
-    schema: Number(value.schema) || 1,
-    channel: String(value.channel || "stable"),
-    version,
-    publishedAt: String(value.publishedAt || ""),
-    notesUrl,
-    artifact: {
-      path: artifactPath,
-      size,
-      sha512,
-      signature,
-    },
+    platform,
+    arch,
+    path: artifactPath,
+    size,
+    sha512,
+    signature,
     mirrors,
   };
 }
 
+export function updateArtifactKey(platform, arch) {
+  return `${String(platform)}-${String(arch)}`;
+}
+
+export function validateUpdateManifest(
+  value,
+  { platform = process.platform, arch = process.arch } = {},
+) {
+  if (!value || typeof value !== "object") {
+    throw new Error("update_invalid_manifest");
+  }
+  const version = String(value.version ?? "");
+  if (!normalizedVersion(version)) throw new Error("update_invalid_version");
+  const schema = Number(value.schema) || 1;
+  const fallbackMirrors = value.mirrors
+    ? validateMirrors(value.mirrors)
+    : [];
+  const artifactKey = updateArtifactKey(platform, arch);
+  let rawArtifact = value.artifacts?.[artifactKey];
+  if (!rawArtifact) {
+    if (schema >= 2 || platform !== "win32" || arch !== "x64") {
+      throw new Error("update_unsupported_platform");
+    }
+    rawArtifact = value.artifact;
+  }
+  const artifact = validateArtifact(rawArtifact, {
+    platform,
+    arch,
+    fallbackMirrors,
+  });
+  const notesUrl = value.notesUrl
+    ? requiredHttpsUrl(value.notesUrl, "update_invalid_notes_url")
+    : "";
+  return {
+    schema,
+    channel: String(value.channel || "stable"),
+    version,
+    publishedAt: String(value.publishedAt || ""),
+    notesUrl,
+    artifact,
+    mirrors: artifact.mirrors,
+  };
+}
+
 export function updateSignaturePayload(manifest) {
+  if (Number(manifest.schema) >= 2) {
+    return Buffer.from(
+      `${manifest.version}\n${manifest.artifact.platform}\n${manifest.artifact.arch}\n${manifest.artifact.path}\n${manifest.artifact.size}\n${manifest.artifact.sha512}`,
+      "utf8",
+    );
+  }
   return Buffer.from(
     `${manifest.version}\n${manifest.artifact.path}\n${manifest.artifact.size}\n${manifest.artifact.sha512}`,
     "utf8",
@@ -157,6 +207,9 @@ function friendlyError(error) {
     return "فایل دریافت‌شده معتبر نبود؛ مسیر جایگزین امتحان می‌شود.";
   }
   if (code === "update_no_newer_version") return "نسخهٔ تازه‌تری پیدا نشد.";
+  if (code === "update_unsupported_platform") {
+    return "برای معماری این دستگاه هنوز بستهٔ بروزرسانی منتشر نشده است.";
+  }
   return "در حال حاضر مسیر دانلود در دسترس نیست.";
 }
 
@@ -169,6 +222,8 @@ export function createSoftwareUpdateController({
   emit = () => {},
   launchInstaller,
   checkIntervalMs = UPDATE_CHECK_INTERVAL_MS,
+  platform = process.platform,
+  arch = process.arch,
 }) {
   if (typeof fetchImpl !== "function") throw new Error("update_fetch_unavailable");
   const downloadsDirectory = path.join(userDataPath, "updates");
@@ -181,6 +236,8 @@ export function createSoftwareUpdateController({
   let state = {
     phase: "idle",
     currentVersion,
+    platform,
+    arch,
     version: "",
     notesUrl: "",
     downloadedBytes: 0,
@@ -212,7 +269,10 @@ export function createSoftwareUpdateController({
         cache: "no-store",
       });
       if (!response.ok) throw new Error(`update_manifest_http_${response.status}`);
-      manifest = validateUpdateManifest(await response.json());
+      manifest = validateUpdateManifest(await response.json(), {
+        platform,
+        arch,
+      });
       const checkedAt = new Date().toISOString();
       if (compareVersions(manifest.version, currentVersion) <= 0) {
         return setState({
@@ -430,6 +490,12 @@ export function createSoftwareUpdateController({
     }
     if (launchInstaller) {
       await launchInstaller(state.installerPath);
+    } else if (platform === "darwin") {
+      const child = spawn("/usr/bin/open", [state.installerPath], {
+        detached: true,
+        stdio: "ignore",
+      });
+      child.unref();
     } else {
       const child = spawn(state.installerPath, [], {
         detached: true,

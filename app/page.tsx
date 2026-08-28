@@ -650,8 +650,8 @@ function detectDesktopInstallRecommendation(): DesktopInstallRecommendation {
     return {
       platformLabel: "macOS",
       description:
-        "نسخه macOS هنوز منتشر نشده است؛ وضعیت انتشار آن را در وب‌سایت راوی ببینید.",
-      actionLabel: "مشاهده وضعیت macOS",
+        "نسخه macOS برای Apple Silicon و Intel منتشر شده است؛ راوی معماری مناسب و روند بروزرسانی را در صفحه دانلود توضیح می‌دهد.",
+      actionLabel: "دانلود برای macOS",
       href: DESKTOP_DOWNLOAD_PAGE,
     };
   }

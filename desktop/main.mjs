@@ -1794,6 +1794,8 @@ if (!hasSingleInstanceLock) {
       publicKeyPath: path.join(appRoot, "build", "update-public-key.pem"),
       manifestUrl:
         process.env.RAAVI_UPDATE_MANIFEST_URL || undefined,
+      platform: process.platform,
+      arch: process.arch,
       emit(status) {
         if (!mainWindow || mainWindow.isDestroyed()) return;
         mainWindow.webContents.send("software-update:status-changed", status);

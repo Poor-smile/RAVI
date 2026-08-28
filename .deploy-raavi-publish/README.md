@@ -21,23 +21,41 @@
 پنجره با کش غیرفعال می‌خواند. در نسخهٔ منتشرشده و بستهٔ ZIP، این فایل باید کنار
 `index.html` باقی بماند تا فهرست تغییرات همیشه از همان منبع اصلی به‌روز شود.
 
-## افزودن فایل‌های دانلود
+## فایل‌های دانلود
 
 نسخهٔ Linux x64 در مسیر `downloads/Raavi-1.0.0-linux-x64-portable.tar.gz` منتشر شده است. SHA256 این فایل:
 
 `0C363E8F39D479F4B983A7C5DFA8B43D40DE3039B8F0FA98FBF7D168AA59BCA2`
 
-نسخهٔ رسمی Windows x64 با Electron و نصب‌کنندهٔ NSIS در مسیر `downloads/Raavi-Setup-2.0.0-x64.exe` منتشر شده است. SHA256 این فایل:
+نسخهٔ رسمی Windows x64 با Electron و نصب‌کنندهٔ NSIS روی هاست دانلود مستقل منتشر
+می‌شود و داخل بستهٔ landing یا هاست اصلی قرار نمی‌گیرد:
 
-`FD196BB7BC8978820EA402B4C7924076FCFE5D8A487C6F648FF8692356CD44E0`
+`https://dl2.gptt.ir/raavi/stable/2.2.0/Raavi-Setup-2.2.0-x64.exe`
+
+SHA256 نسخهٔ 2.2.0:
+
+`7321B4511E6D39C8FE97973EAAF50853283C0EC463628C5D355AC90D117E6E5A`
+
+نسخه، Installer و checksum هر انتشار باید در GitHub Releases هم ثبت شوند:
+
+`https://github.com/Poor-smile/RAVI/releases`
 
 Tauri و فایل Portable بخشی از مسیر انتشار Windows نسخهٔ ۲ نیستند.
 
-تا زمانی که خروجی رسمی آماده نشده، دکمهٔ macOS عمداً غیرفعال است. پس از آماده‌شدن فایل بعدی:
+نسخهٔ 2.2.0 برای هر دو معماری macOS از GitHub Release رسمی دریافت می‌شود:
 
-1. فایل‌ها را در پوشه‌ای مانند `downloads/` قرار دهید.
-2. در `index.html`، وضعیت همان سیستم‌عامل را به لینک دانلود واقعی تبدیل کنید.
-3. نام نسخه، حجم فایل و معماری پردازنده را دقیق بنویسید.
+- Apple Silicon DMG: `https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.dmg`
+- Intel DMG: `https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.dmg`
+- فایل‌های ZIP و فهرست SHA-256: `https://github.com/Poor-smile/RAVI/releases/tag/v2.2.0`
+
+این خروجی‌ها فعلاً Developer ID و notarization اپل ندارند و نام فایل، متن صفحه و
+وضعیت دانلود باید همیشه این موضوع را شفاف نشان دهند. در هر انتشار بعدی، صفحهٔ
+معرفی فقط پس از تکمیل هر دو معماری، هر دو قالب DMG/ZIP و فایل checksum به نسخهٔ
+جدید اشاره می‌کند. آپدیتر امن از manifest مشترک، بستهٔ `win32-x64`،
+`darwin-arm64` یا `darwin-x64` را انتخاب و پیش از نصب با SHA-512 و امضای Ed25519
+اعتبارسنجی می‌کند. GitHub Release مسیر دانلود دستی جایگزین باقی می‌ماند. چون
+خروجی macOS نسخهٔ 2.2.0 پیش از اضافه‌شدن این زیرساخت ساخته شده است، آپدیتر
+macOS از نخستین build پس از 2.2.0 در دسترس خواهد بود.
 
 لینک حمایت پروژه به `https://daramet.com/poorsmile` می‌رود.
 

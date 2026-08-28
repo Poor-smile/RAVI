@@ -42,11 +42,20 @@ SHA256 نسخهٔ 2.2.0:
 
 Tauri و فایل Portable بخشی از مسیر انتشار Windows نسخهٔ ۲ نیستند.
 
-تا زمانی که خروجی رسمی آماده نشده، دکمهٔ macOS عمداً غیرفعال است. پس از آماده‌شدن فایل بعدی:
+نسخهٔ 2.2.0 برای هر دو معماری macOS از GitHub Release رسمی دریافت می‌شود:
 
-1. فایل حجیم را روی هاست دانلود نسخه‌بندی‌شده قرار دهید.
-2. در `index.html`، وضعیت همان سیستم‌عامل را به URL عمومی هاست دانلود تبدیل کنید.
-3. نام نسخه، حجم فایل و معماری پردازنده را دقیق بنویسید.
+- Apple Silicon DMG: `https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.dmg`
+- Intel DMG: `https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.dmg`
+- فایل‌های ZIP و فهرست SHA-256: `https://github.com/Poor-smile/RAVI/releases/tag/v2.2.0`
+
+این خروجی‌ها فعلاً Developer ID و notarization اپل ندارند و نام فایل، متن صفحه و
+وضعیت دانلود باید همیشه این موضوع را شفاف نشان دهند. در هر انتشار بعدی، صفحهٔ
+معرفی فقط پس از تکمیل هر دو معماری، هر دو قالب DMG/ZIP و فایل checksum به نسخهٔ
+جدید اشاره می‌کند. آپدیتر امن از manifest مشترک، بستهٔ `win32-x64`،
+`darwin-arm64` یا `darwin-x64` را انتخاب و پیش از نصب با SHA-512 و امضای Ed25519
+اعتبارسنجی می‌کند. GitHub Release مسیر دانلود دستی جایگزین باقی می‌ماند. چون
+خروجی macOS نسخهٔ 2.2.0 پیش از اضافه‌شدن این زیرساخت ساخته شده است، آپدیتر
+macOS از نخستین build پس از 2.2.0 در دسترس خواهد بود.
 
 لینک حمایت پروژه به `https://daramet.com/poorsmile` می‌رود.
 

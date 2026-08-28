@@ -1,7 +1,7 @@
 # راهنمای انتشار عمومی راوی
 
 این سند، مسیر مرجع انتشار عمومی نسخه‌های Windows و macOS راوی است. در هر انتشار، مقدار
-`X.Y.Z` را با نسخهٔ جدید جایگزین کنید. ترتیب مراحل این سند بخشی از گیت انتشار
+`X.Y.Z` را با نسخهٔ جدید جایگزین کنید. ترتیب اجرایی بخش صفر، بخشی از گیت انتشار
 است؛ به‌خصوص `stable.json` باید همیشه آخرین فایل منتشرشده باشد.
 
 مخزن پروژه:
@@ -10,19 +10,49 @@
 https://github.com/Poor-smile/RAVI
 ```
 
+## 0. ترتیب اجرایی غیرقابل جابه‌جایی
+
+شمارهٔ بخش‌های این سند برای مراجعه است؛ ترتیب واقعی هر انتشار دقیقاً این است:
+
+1. نسخه، `README.md`، `CHANGELOG.md` و متن‌های سایت را روی همان commit هماهنگ کنید.
+2. گیت تست و ساخت Windows را پاس کنید و Installer همان نسخه را بسازید.
+3. Installer حجیم Windows را روی هاست دانلود آپلود و با دانلود کامل، اندازه و
+   SHA-512 اعتبارسنجی کنید؛ `stable.json` را هنوز نسازید یا منتشر نکنید.
+4. release notes سبک را روی دامنهٔ اصلی قرار دهید، اما `stable.json` را هنوز
+   overwrite نکنید.
+5. commit انتشار را روی `main`، tag را روی همان commit و GitHub Release عمومی را
+   همراه Installer و checksum ثبت کنید.
+6. Workflow ساخت macOS را برای همان tag کامل کنید؛ هر دو معماری، DMG، ZIP، گزارش
+   ساخت و فایل SHA-256 باید در همان GitHub Release حاضر باشند.
+7. DMG هر دو معماری را از همان GitHub Release دریافت کنید، manifest چندسکویی را
+   بسازید و هر سه artifact بروزرسانی Windows، Apple Silicon و Intel را روی هاست
+   دانلود قرار دهید. اندازه، SHA-512 و امضای Ed25519 هر سه باید کنترل شود.
+8. لینک‌های Windows و macOS، حجم، معماری، checksum و وضعیت امضا را در landing
+   نهایی کنید و سایت را منتشر و آنلاین کنترل کنید.
+9. فقط پس از کامل‌شدن همهٔ گیت‌های بالا، `stable.json` را منتشر کنید تا بروزرسانی
+   داخلی Windows و macOS هم‌زمان فعال شود.
+10. دانلود عمومی و بنر بروزرسانی را روی Windows، Apple Silicon و Intel کنترل
+    کنید؛ سپس اعلان عمومی را بفرستید.
+
+اگر macOS عمداً در یک انتشار ارائه نمی‌شود، این محدودیت باید پیش از مرحلهٔ ۵ در
+`CHANGELOG.md`، `README.md`، متن GitHub Release و landing نوشته شود؛ حذف خاموش این
+مرحله مجاز نیست.
+
 ## 1. معماری انتشار
 
 | نوع فایل | محل نگهداری | آدرس عمومی |
 | --- | --- | --- |
 | نصب‌کنندهٔ حجیم Windows | هاست دانلود، زیر `public_html/raavi/stable/X.Y.Z/` | `https://dl2.gptt.ir/raavi/stable/X.Y.Z/Raavi-Setup-X.Y.Z-x64.exe` |
-| DMG و ZIP macOS برای Apple Silicon و Intel | GitHub Release همان tag | `https://github.com/Poor-smile/RAVI/releases/tag/vX.Y.Z` |
+| DMG بروزرسانی macOS برای Apple Silicon و Intel | هاست دانلود، کنار Installer Windows | `https://dl2.gptt.ir/raavi/stable/X.Y.Z/` |
+| DMG و ZIP جایگزین macOS برای دانلود دستی | GitHub Release همان tag | `https://github.com/Poor-smile/RAVI/releases/tag/vX.Y.Z` |
 | manifest سبک | هاست اصلی، `ravi.poorsmile.ir/updates/stable.json` | `https://ravi.poorsmile.ir/updates/stable.json` |
 | یادداشت نسخه | هاست اصلی، `ravi.poorsmile.ir/updates/releases/X.Y.Z.json` | `https://ravi.poorsmile.ir/updates/releases/X.Y.Z.json` |
 | آرشیو عمومی انتشار | GitHub Release با tag، changelog، Installer و checksum | `https://github.com/Poor-smile/RAVI/releases/tag/vX.Y.Z` |
 
 قواعد ثابت:
 
-- فایل‌های حجیم، از جمله Installer، نباید روی هاست `ravi.poorsmile.ir` قرار بگیرند.
+- فایل‌های حجیم، از جمله Installer Windows و DMGهای macOS، نباید روی هاست
+  `ravi.poorsmile.ir` قرار بگیرند.
 - هر نسخهٔ عمومی باید علاوه بر هاست اختصاصی، یک GitHub Release کامل داشته باشد.
   GitHub آرشیو عمومی و مسیر دانلود دستی جایگزین است؛ منبع اصلی updater داخلی نیست،
   مگر اینکه URL آن صریحاً به `mirrors` اضافه شود.
@@ -32,12 +62,17 @@ https://github.com/Poor-smile/RAVI
 - فایل macOS بدون امضای Developer ID باید در نام خود `unsigned` داشته باشد. انتشار
   خودکار فایل unsigned ممنوع است و تنها اجرای دستی با تأیید صریح
   `allow_unsigned=true` می‌تواند آن را به Release پیوست کند.
+- landing فقط پس از پایان موفق هر دو job ساخت macOS و job انتشار assetها مجاز است
+  لینک نسخهٔ جدید را نمایش دهد. دکمهٔ macOS نباید به asset ناقص یا Workflow در حال
+  اجرا اشاره کند.
 - فایل نصب‌کننده در هاست دانلود باید نسخه‌بندی‌شده و immutable باشد؛ نسخهٔ جدید
   نباید روی پوشهٔ نسخهٔ قبلی overwrite شود.
 - مسیر FTP با ریشهٔ وب یکی نیست. فایل عمومی باید زیر `public_html` قرار بگیرد؛
   آپلود در `/raavi/...` ریشهٔ FTP، URL عمومی نمی‌سازد.
 - `stable.json` تنها سوئیچ فعال‌سازی عمومی نسخه است و باید بعد از اعتبارسنجی کامل
-  Installer منتشر شود.
+  هر سه artifact بروزرسانی منتشر شود. schema 2 باید کلیدهای `win32-x64`،
+  `darwin-arm64` و `darwin-x64` را داشته باشد؛ فیلد قدیمی `artifact` برای سازگاری
+  updaterهای Windows قبلی حفظ می‌شود.
 - ترتیب `mirrors` در manifest ترتیب تلاش برنامه است. منبع فعال فعلی
   `https://dl2.gptt.ir` است. برای افزودن یا تعویض هاست، فقط base URLها را با
   `RAAVI_UPDATE_MIRRORS` تغییر دهید؛ مسیر artifact روی همهٔ mirrorها باید یکسان
@@ -114,6 +149,18 @@ npm version X.Y.Z --no-git-tag-version
 - `landing/README.md`
 - `app/components/about-dialog.tsx`
 - صفحهٔ معرفی و لینک دانلود در `landing/`
+
+در landing برای macOS این موارد الزامی‌اند:
+
+- دو انتخاب صریح `Apple Silicon (arm64)` و `Intel (x64)`؛
+- لینک مستقیم DMG و لینک جایگزین ZIP از همان GitHub Release؛
+- نسخه، حجم و SHA-256 واقعی هر DMG؛
+- وضعیت Developer ID و notarization؛ فایل unsigned باید در نام و میکروکپی صفحه
+  بدون ابهام مشخص باشد؛
+- توضیح آپدیتر داخلی مشترک Windows و macOS، انتخاب خودکار معماری و اعتبارسنجی
+  SHA-512 و Ed25519؛
+- GitHub Release به‌عنوان مسیر دانلود دستی جایگزین؛ اگر یک نسخهٔ قدیمی پیش از
+  اضافه‌شدن آپدیتر macOS ساخته شده، این محدودیت باید کنار همان نسخه صریح بماند.
 
 در صفحهٔ معرفی، لینک Installer باید مستقیم به هاست دانلود اشاره کند:
 
@@ -197,6 +244,13 @@ Raavi-X.Y.Z-macOS-x64-build-report.txt
 Workflow معماری باینری را با `lipo`، سلامت DMG را با `hdiutil` و ساختار ZIP و
 `.app` را پیش از انتشار بررسی می‌کند.
 
+این مرحله زمانی کامل است که Workflow موفق شده و فهرست assetهای Release شامل هر
+هفت خروجی بالا باشد. تا آن زمان:
+
+- landing را روی نسخهٔ جدید macOS منتشر نکنید؛
+- `stable.json` را فعال نکنید؛
+- اعلان عمومی نفرستید.
+
 برای امضا و notarization عمومی، این Secretها را در GitHub repository ثبت کنید:
 
 ```text
@@ -227,12 +281,17 @@ npm run desktop:pack:mac:x64
 
 ## 6. ساخت بستهٔ امضاشدهٔ بروزرسانی
 
-mirrorهای فعال را مشخص و بستهٔ انتشار را تولید کنید:
+پس از کامل‌شدن Workflow macOS، هر دو DMG را از GitHub Release به پوشهٔ `release`
+دریافت کنید. نام فایل می‌تواند امضاشده یا دارای پسوند `-unsigned` باشد، اما معماری
+باید دقیقاً در نام مشخص باشد. سپس mirrorهای فعال را مشخص و manifest چندسکویی را
+تولید کنید:
 
 ```powershell
 $env:RAAVI_UPDATE_MIRRORS='https://dl2.gptt.ir'
+$env:RAAVI_MAC_ARM64_ARTIFACT=(Resolve-Path 'release\Raavi-X.Y.Z-macOS-arm64.dmg')
+$env:RAAVI_MAC_X64_ARTIFACT=(Resolve-Path 'release\Raavi-X.Y.Z-macOS-x64.dmg')
 npm run release:update:prepare
-Remove-Item Env:RAAVI_UPDATE_MIRRORS
+Remove-Item Env:RAAVI_UPDATE_MIRRORS,Env:RAAVI_MAC_ARM64_ARTIFACT,Env:RAAVI_MAC_X64_ARTIFACT
 ```
 
 برای چند mirror، base URLها را با ویرگول و به‌ترتیب اولویت وارد کنید:
@@ -245,11 +304,17 @@ $env:RAAVI_UPDATE_MIRRORS='https://dl2.gptt.ir,https://download-backup.example.c
 
 ```text
 artifacts/update-publish/heavy/raavi/stable/X.Y.Z/Raavi-Setup-X.Y.Z-x64.exe
+artifacts/update-publish/heavy/raavi/stable/X.Y.Z/Raavi-X.Y.Z-macOS-arm64.dmg
+artifacts/update-publish/heavy/raavi/stable/X.Y.Z/Raavi-X.Y.Z-macOS-x64.dmg
 artifacts/update-publish/lightweight/updates/stable.json
 artifacts/update-publish/lightweight/updates/releases/X.Y.Z.json
 ```
 
-`stable.json` شامل نسخه، اندازه، SHA-512، امضای Ed25519، مسیر artifact و mirrorهاست.
+`stable.json` شامل نسخه، سه artifact پلتفرمی، اندازه، SHA-512، امضای Ed25519، مسیر
+و mirrorهاست. updater با `process.platform` و `process.arch` فقط artifact بومی
+دستگاه را انتخاب می‌کند؛ platform و arch نیز داخل payload امضا هستند تا جایگزینی
+متقاطع فایل ممکن نباشد. فیلد legacy `artifact` نسخهٔ Windows را برای کلاینت‌های
+قدیمی حفظ می‌کند.
 کلید عمومی داخل `build/update-public-key.pem` قرار دارد. کلید خصوصی باید خارج از
 مخزن و فقط روی دستگاه انتشار نگهداری شود.
 
@@ -259,30 +324,37 @@ artifacts/update-publish/lightweight/updates/releases/X.Y.Z.json
 npm run test:update
 ```
 
-نکتهٔ مهم: هنگام آپلود Installer، دوباره `release:update:prepare` را اجرا نکنید؛
+نکتهٔ مهم: هنگام آپلود artifactها، دوباره `release:update:prepare` را اجرا نکنید؛
 بازنویسی هم‌زمان فایل staging می‌تواند فایل آپلودشده را خراب کند. اگر لازم است بسته
 دوباره تولید شود، ابتدا upload را متوقف و سپس از اول شروع کنید.
 
 ## 7. کنترل artifactهای محلی
 
-manifest محلی را بخوانید و با فایل حجیم تطبیق دهید:
+manifest محلی را بخوانید و با هر سه فایل حجیم تطبیق دهید:
 
 ```powershell
 $manifestPath = 'artifacts\update-publish\lightweight\updates\stable.json'
-$artifactPath = 'artifacts\update-publish\heavy\raavi\stable\X.Y.Z\Raavi-Setup-X.Y.Z-x64.exe'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-$artifact = Get-Item -LiteralPath $artifactPath
-$sha512 = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA512).Hash.ToLowerInvariant()
+$heavyRoot = 'artifacts\update-publish\heavy\raavi\stable\X.Y.Z'
 
-if ($artifact.Length -ne $manifest.artifact.size) { throw 'Artifact size mismatch' }
-if ($sha512 -ne $manifest.artifact.sha512) { throw 'Artifact SHA-512 mismatch' }
+foreach ($key in 'win32-x64','darwin-arm64','darwin-x64') {
+  $entry = $manifest.artifacts.$key
+  if (-not $entry) { throw "Missing manifest artifact: $key" }
+  $artifactPath = Join-Path $heavyRoot ([IO.Path]::GetFileName($entry.path))
+  $artifact = Get-Item -LiteralPath $artifactPath
+  $sha512 = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA512).Hash.ToLowerInvariant()
+  if ($artifact.Length -ne $entry.size) { throw "Artifact size mismatch: $key" }
+  if ($sha512 -ne $entry.sha512) { throw "Artifact SHA-512 mismatch: $key" }
+}
 ```
 
 کنترل کنید که:
 
 - `version` برابر `X.Y.Z` است.
 - اولین `baseUrl` برابر `https://dl2.gptt.ir` است.
-- `artifact.path` برابر مسیر نسخه‌بندی‌شدهٔ Installer است.
+- کلیدهای `win32-x64`، `darwin-arm64` و `darwin-x64` حاضرند و path هرکدام به
+  artifact نسخه‌بندی‌شدهٔ همان پلتفرم اشاره می‌کند.
+- `artifact.path` legacy با `artifacts.win32-x64.path` یکسان است.
 - `notesUrl` به دامنهٔ اصلی اشاره می‌کند.
 - هیچ URL با پروتکل `http` داخل manifest وجود ندارد.
 
@@ -301,6 +373,16 @@ curl.exe --fail --ftp-create-dirs `
   --upload-file "artifacts\update-publish\heavy\raavi\stable\X.Y.Z\Raavi-Setup-X.Y.Z-x64.exe" `
   "ftp://$env:RAAVI_FTP_HOST/public_html/raavi/stable/X.Y.Z/Raavi-Setup-X.Y.Z-x64.exe"
 
+curl.exe --fail --ftp-create-dirs `
+  --user $env:RAAVI_FTP_USER `
+  --upload-file "artifacts\update-publish\heavy\raavi\stable\X.Y.Z\Raavi-X.Y.Z-macOS-arm64.dmg" `
+  "ftp://$env:RAAVI_FTP_HOST/public_html/raavi/stable/X.Y.Z/Raavi-X.Y.Z-macOS-arm64.dmg"
+
+curl.exe --fail --ftp-create-dirs `
+  --user $env:RAAVI_FTP_USER `
+  --upload-file "artifacts\update-publish\heavy\raavi\stable\X.Y.Z\Raavi-X.Y.Z-macOS-x64.dmg" `
+  "ftp://$env:RAAVI_FTP_HOST/public_html/raavi/stable/X.Y.Z/Raavi-X.Y.Z-macOS-x64.dmg"
+
 Remove-Item Env:RAAVI_FTP_HOST
 Remove-Item Env:RAAVI_FTP_USER
 ```
@@ -309,13 +391,18 @@ Remove-Item Env:RAAVI_FTP_USER
 قطع شد، فایل ناقص را جایگزین کنید و به اندازهٔ نمایش‌داده‌شده در پنل اعتماد نکنید؛
 اعتبارسنجی کامل مرحلهٔ بعد الزامی است.
 
-## 9. اعتبارسنجی لینک عمومی Installer
+## 9. اعتبارسنجی لینک‌های عمومی updater
 
 ابتدا status، اندازه و پشتیبانی Range را بررسی کنید:
 
 ```powershell
-$installerUrl = 'https://dl2.gptt.ir/raavi/stable/X.Y.Z/Raavi-Setup-X.Y.Z-x64.exe'
-curl.exe -sS -I --max-time 30 $installerUrl
+$urls = @(
+  'https://dl2.gptt.ir/raavi/stable/X.Y.Z/Raavi-Setup-X.Y.Z-x64.exe',
+  'https://dl2.gptt.ir/raavi/stable/X.Y.Z/Raavi-X.Y.Z-macOS-arm64.dmg',
+  'https://dl2.gptt.ir/raavi/stable/X.Y.Z/Raavi-X.Y.Z-macOS-x64.dmg'
+)
+$installerUrl = $urls[0]
+$urls | ForEach-Object { curl.exe -sS -I --max-time 30 $_ }
 ```
 
 پاسخ باید این ویژگی‌ها را داشته باشد:
@@ -350,9 +437,13 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { validateUpdateManifest, verifyDownloadedUpdate } from './desktop/software-update.mjs';
 
-const manifest = validateUpdateManifest(JSON.parse(
+const rawManifest = JSON.parse(
   await readFile('artifacts/update-publish/lightweight/updates/stable.json', 'utf8'),
-));
+);
+const manifest = validateUpdateManifest(rawManifest, {
+  platform: 'win32',
+  arch: 'x64',
+});
 const publicKey = await readFile('build/update-public-key.pem');
 await verifyDownloadedUpdate({
   filePath: path.resolve('.artifacts/verify-Raavi-Setup-X.Y.Z-x64.exe'),
@@ -362,6 +453,10 @@ await verifyDownloadedUpdate({
 console.log('PUBLIC_INSTALLER_SIGNATURE_VERIFIED');
 '@ | node --input-type=module -
 ```
+
+همین دانلود کامل و `verifyDownloadedUpdate` را برای `darwin-arm64` و `darwin-x64`
+نیز با DMG متناظر تکرار کنید؛ HEAD یا checksum موجود در GitHub به‌تنهایی جایگزین
+کنترل artifact روی هاست دانلود نیست.
 
 اگر هر کدام از این کنترل‌ها fail شد:
 
@@ -393,6 +488,14 @@ https://ravi.poorsmile.ir/updates/releases/X.Y.Z.json
 - [ ] commit انتشار روی `origin/main` قرار دارد.
 - [ ] tag `vX.Y.Z` روی همان commit ثبت و push شده است.
 - [ ] GitHub Release عمومی است و Installer و فایل SHA-256 آن دانلود می‌شوند.
+- [ ] Workflow macOS برای همان tag موفق شده و DMG، ZIP، گزارش ساخت و checksum هر
+      دو معماری در GitHub Release دانلود می‌شوند؛ یا نبود macOS در همهٔ اسناد
+      انتشار صریح اعلام شده است.
+- [ ] DMG بروزرسانی هر دو معماری روی هاست دانلود قرار دارد و artifactهای
+      `darwin-arm64` و `darwin-x64` در manifest با اندازه، SHA-512 و امضای مستقل
+      ثبت شده‌اند.
+- [ ] landing با لینک، نسخه، حجم، SHA-256 و وضعیت امضای واقعی Windows و macOS
+      منتشر و آنلاین کنترل شده است.
 - [ ] Installer هاست دانلود به‌طور کامل دانلود و اندازه، SHA-512 و امضای آن تایید شده است.
 - [ ] release notes سبک روی دامنهٔ اصلی منتشر و خوانده شده است.
 
@@ -403,8 +506,8 @@ Local:  artifacts/update-publish/lightweight/updates/stable.json
 Remote: /home3/hpoorsma/ravi.poorsmile.ir/updates/stable.json
 ```
 
-آپلود `stable.json` نسخه را برای کاربران عمومی فعال می‌کند. پیش از آن اعلان انتشار
-ارسال نکنید و صفحهٔ دانلود را روی نسخهٔ جدید نبرید.
+آپلود `stable.json` نسخه را برای کاربران عمومی Windows و macOS فعال می‌کند. پیش
+از آن اعلان انتشار ارسال نکنید و صفحهٔ دانلود را روی نسخهٔ جدید نبرید.
 
 ## 11. کنترل آنلاین پس از فعال‌سازی
 
@@ -422,6 +525,8 @@ $manifest.version
 $manifest.mirrors[0].baseUrl
 $manifest.artifact.path
 $manifest.artifact.size
+$manifest.artifacts.'darwin-arm64'.path
+$manifest.artifacts.'darwin-x64'.path
 $notes.version
 ```
 
@@ -430,17 +535,36 @@ $notes.version
 - نسخهٔ manifest و notes برابر `X.Y.Z` باشد.
 - mirror اصلی `https://dl2.gptt.ir` باشد.
 - Installer عمومی همچنان با `HTTP 200` و اندازهٔ صحیح پاسخ دهد.
-- یک نسخهٔ قدیمی راوی، وضعیت `available` برای `X.Y.Z` دریافت کند.
+- DMG بروزرسانی arm64 و x64 با `HTTP 200` و اندازهٔ صحیح پاسخ دهند.
+- یک نسخهٔ قدیمی راوی روی هر سه هدف، وضعیت `available` برای `X.Y.Z` دریافت کند.
 - با دکمهٔ «بررسی بروزرسانی»، بنر پایین راست ظاهر شود.
 - مسیرهای `available → downloading → paused/resumed → ready` کار کنند.
+- روی macOS، برنامه artifact همان معماری را انتخاب کند و پس از اعتبارسنجی DMG،
+  دکمهٔ نصب همان فایل را با ابزار استاندارد macOS باز کند.
 - بعد از نصب روی نسخهٔ قبلی، مخزن و تنظیمات کاربر حفظ شوند.
 - بروزرسانی به‌تنهایی First Run را دوباره باز نکند؛ First Run فقط وقتی نمایش داده
   شود که اتصال ChatGPT/Codex یا حداقل یک سرویس بکاپ هنوز کامل نشده است.
 
 ## 12. صفحهٔ معرفی و نسخهٔ وب
 
-صفحهٔ معرفی را با نسخه، حجم، SHA-256، تغییرات و لینک مستقیم هاست دانلود بروزرسانی
-کنید. بستهٔ landing نباید Installer را در خود داشته باشد.
+صفحهٔ معرفی را با نسخه، حجم، SHA-256، تغییرات و لینک مستقیم هاست دانلود Windows و
+لینک‌های GitHub Release برای Apple Silicon و Intel بروزرسانی کنید. بستهٔ landing
+نباید Installer، DMG یا ZIP را در خود داشته باشد.
+
+ترتیب نمایش و وضعیت‌ها:
+
+- Windows: لینک Installer هاست دانلود، وضعیت «آمادهٔ دانلود» و checksum واقعی؛
+- macOS: دو دکمهٔ معماری، لینک جایگزین ZIP، checksum واقعی و وضعیت امضا؛
+- Windows و macOS: پیشنهاد و دانلود داخلی از manifest مشترک؛
+- macOS: انتخاب خودکار Apple Silicon یا Intel و باقی‌ماندن GitHub Release به‌عنوان
+  مسیر دستی جایگزین؛
+- نسخه‌ای که پیش از زیرساخت macOS updater ساخته شده باید محدودیت خود را صریح نشان
+  دهد و نباید به‌عنوان دارای updater معرفی شود؛
+- روند انتشار عمومی: test/tag، ساخت بومی، کنترل اصالت و انتشار نهایی؛ سایت باید
+  روشن کند که همهٔ خروجی‌ها از یک tag مشترک آمده‌اند.
+
+پیش از بسته‌بندی، لینک همهٔ فایل‌های macOS را با `HTTP 200` کنترل کنید و نام asset
+نمایش‌داده‌شده در سایت را با نام موجود در GitHub Release تطبیق دهید.
 
 ```powershell
 Copy-Item CHANGELOG.md landing\CHANGELOG.md -Force
@@ -572,15 +696,20 @@ gh release view vX.Y.Z `
 نسخهٔ notarized نیز `notarization=requested` و گیت `spctl` باید موفق باشند. وجود
 فقط یک معماری، DMG بدون ZIP یا فایل فاقد checksum انتشار macOS کامل محسوب نمی‌شود.
 
+پس از کامل‌شدن assetهای macOS، `README.md`، متن Release و landing را یک بار دیگر
+با نام، اندازه، checksum و وضعیت امضای خروجی واقعی تطبیق دهید. این بازبینی یک
+مرحلهٔ مستقل انتشار است و با موفق‌شدن Workflow به‌تنهایی جایگزین نمی‌شود.
+
 صفحهٔ عمومی زیر باید باز شود و هر دو asset قابل دانلود باشند:
 
 ```text
 https://github.com/Poor-smile/RAVI/releases/tag/vX.Y.Z
 ```
 
-انتشار GitHub الزامی است، اما manifest پیش‌فرض همچنان به هاست دانلود اختصاصی اشاره
-می‌کند. GitHub را بدون طراحی مسیر asset ثابت، HTTPS مستقیم و تست fallback وارد
-`RAAVI_UPDATE_MIRRORS` نکنید.
+انتشار GitHub الزامی است، اما manifest پیش‌فرض هر سه artifact را از هاست دانلود
+اختصاصی می‌گیرد. GitHub مسیر دریافت دستی و آرشیو عمومی جایگزین است؛ آن را بدون
+طراحی مسیر asset ثابت، HTTPS مستقیم و تست fallback وارد `RAAVI_UPDATE_MIRRORS`
+نکنید.
 
 ## 14. نگهداری سه نسخه و rollback
 
@@ -614,6 +743,15 @@ https://raviweb.poorsmile.ir/
 دانلود Windows:
 https://dl2.gptt.ir/raavi/stable/X.Y.Z/Raavi-Setup-X.Y.Z-x64.exe
 
+دانلود macOS برای Apple Silicon:
+MAC_ARM64_DMG_URL
+
+دانلود macOS برای Intel:
+MAC_X64_DMG_URL
+
+وضعیت امضای macOS:
+SIGNED_AND_NOTARIZED یا UNSIGNED_WITH_DISCLOSURE
+
 صفحه معرفی و تغییرات:
 https://ravi.poorsmile.ir/
 
@@ -635,8 +773,14 @@ NEW_HASH
 - URL عمومی Installer روی هاست دانلود
 - نتیجهٔ دانلود کامل، SHA-512 و امضای Ed25519
 - URL و نسخهٔ `stable.json`
+- کلید و URL artifactهای `win32-x64`، `darwin-arm64` و `darwin-x64` و نتیجهٔ
+  انتخاب معماری در آزمون updater
 - وضعیت صفحهٔ معرفی و نسخهٔ وب، در صورت انتشار
 - شناسهٔ commit روی `main` و tag انتشار
 - لینک GitHub Release و وضعیت دانلود Installer و checksum آن
+- وضعیت Workflow macOS، Runner هر معماری، DMG و ZIPهای Apple Silicon و Intel،
+  checksumها و وضعیت Developer ID/notarization
+- تطبیق لینک‌ها، حجم‌ها، checksumها و میکروکپی unsigned در landing با assetهای
+  واقعی GitHub Release
 - وضعیت نگهداری سه نسخه
 - هر blocker، rollback یا نکتهٔ باقی‌مانده
