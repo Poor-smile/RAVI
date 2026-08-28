@@ -272,10 +272,7 @@ test("W03 assembles the viewport-sized 760px writing document, live blocks, gutt
   await page
     .getByRole("button", { name: "ویرایش روان", exact: true })
     .click();
-  await page
-    .locator(".cm-rich-code")
-    .getByRole("button", { name: "ویرایش متن Markdown" })
-    .click();
+  await editor.locator(".cm-line-code").filter({ hasText: "const value" }).click();
   await dragHandle.focus();
   await dragHandle.press("Alt+ArrowUp");
   await page.getByRole("button", { name: "متن خام", exact: true }).click();

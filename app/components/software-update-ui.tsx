@@ -65,7 +65,7 @@ function UpdateGlyph({ phase }: { phase: SoftwareUpdateState["phase"] }) {
 }
 
 function updateCopy(state: SoftwareUpdateState) {
-  const version = formatVersion(state.version || "2.2.0");
+  const version = formatVersion(state.version || "2.2.1");
   switch (state.phase) {
     case "checking":
       return {

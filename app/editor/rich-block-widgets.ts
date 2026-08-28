@@ -8,7 +8,7 @@ import { MATERIAL_SYMBOL_PATHS } from "../icons/material-symbol-paths";
 import { formulaAccessibleText } from "../formula/model";
 import { createMermaidBlobUrl, type MermaidBlobUrl } from "../mermaid/blob-url";
 import { mermaidSvgAccessibleName } from "../mermaid/use-mermaid-render";
-import type { CalloutDescriptor, FenceDescriptor, ImageDescriptor, TableDescriptor } from "./rich-blocks";
+import type { FenceDescriptor, ImageDescriptor, TableDescriptor } from "./rich-blocks";
 import {
   appendGfmTableColumn,
   appendGfmTableRow,
@@ -178,46 +178,6 @@ abstract class SourceBlockWidget extends WidgetType {
   }
 
   ignoreEvent() { return true; }
-}
-
-export class CodeBlockWidget extends SourceBlockWidget {
-  constructor(from: number, to: number, source: string, private readonly fence: FenceDescriptor) {
-    super(from, to, source);
-  }
-
-  eq(other: CodeBlockWidget) {
-    return other.from === this.from && other.to === this.to && other.source === this.source;
-  }
-
-  toDOM(view: EditorView) {
-    const shell = widgetShell(
-      "code",
-      `بلوک کد ${this.fence.language || "ساده"}`,
-      this.from,
-      this.to,
-      view,
-    );
-    const { header, actions } = widgetHeader("کد", this.fence.language || "متن ساده");
-    const copy = actionButton("کپی کد", async () => {
-      try {
-        await navigator.clipboard.writeText(this.fence.code);
-        copy.dataset.copied = "true";
-        copy.textContent = "کپی شد";
-        window.setTimeout(() => { copy.textContent = "کپی کد"; delete copy.dataset.copied; }, 1400);
-      } catch {
-        view.dispatch({ effects: EditorView.announce.of("کپی کد ممکن نشد") });
-      }
-    });
-    actions.append(copy, this.editButton(view));
-    const pre = document.createElement("pre");
-    pre.dir = "ltr";
-    pre.tabIndex = 0;
-    const code = document.createElement("code");
-    code.textContent = this.fence.code;
-    pre.append(code);
-    shell.append(header, pre);
-    return shell;
-  }
 }
 
 type TableCellPosition = { row: number; column: number };
@@ -1162,33 +1122,6 @@ export class TableBlockWidget extends SourceBlockWidget {
   destroy(dom: HTMLElement) {
     tableContextMenus.get(dom)?.remove();
     tableContextMenus.delete(dom);
-  }
-}
-
-export class CalloutBlockWidget extends SourceBlockWidget {
-  constructor(from: number, to: number, source: string, private readonly callout: CalloutDescriptor) {
-    super(from, to, source);
-  }
-
-  eq(other: CalloutBlockWidget) {
-    return other.from === this.from && other.to === this.to && other.source === this.source;
-  }
-
-  toDOM(view: EditorView) {
-    const shell = widgetShell(
-      `callout is-${this.callout.kind}`,
-      `${this.callout.title}؛ فراخوان`,
-      this.from,
-      this.to,
-      view,
-    );
-    const { header, actions } = widgetHeader(this.callout.title, "فراخوان");
-    actions.append(this.editButton(view));
-    const body = document.createElement("p");
-    body.dir = "auto";
-    body.textContent = this.callout.body || "بدون متن";
-    shell.append(header, body);
-    return shell;
   }
 }
 

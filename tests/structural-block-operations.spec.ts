@@ -74,10 +74,7 @@ test("Ctrl/Cmd+D prevents the browser default, duplicates multiline metadata and
   const original = ["قبل", "", block, "", "بعد"].join("\n");
   const duplicated = ["قبل", "", block, "", block, "", "بعد"].join("\n");
   await editor.fill(original);
-  await page
-    .locator(".cm-rich-code")
-    .getByRole("button", { name: "ویرایش متن Markdown" })
-    .click();
+  await editor.locator(".cm-line-code").filter({ hasText: "const metadata" }).click();
   await editor.focus();
 
   const shortcut = await editor.evaluate((content) => {
@@ -186,10 +183,7 @@ test("Alt+Arrow moves one complete multiline block in one undo step", async ({
     "بلوک آخر",
   ].join("\n");
   await editor.fill(original);
-  await page
-    .locator(".cm-rich-code")
-    .getByRole("button", { name: "ویرایش متن Markdown" })
-    .click();
+  await editor.locator(".cm-line-code").filter({ hasText: "const value" }).click();
 
   const dragHandle = page.locator(".writing-block-drag-handle");
   await dragHandle.focus();

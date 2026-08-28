@@ -28,8 +28,6 @@ import {
   TaskMarkerWidget,
 } from "./live-preview-widgets";
 import {
-  CalloutBlockWidget,
-  CodeBlockWidget,
   FootnoteWidget,
   ImageBlockWidget,
   AudioBlockWidget,
@@ -41,7 +39,6 @@ import {
 import { parseMarkdownAudio } from "../audio/markdown";
 import {
   footnoteReferences,
-  parseCallout,
   parseFence,
   parseGfmTable,
   parseMarkdownImage,
@@ -507,9 +504,6 @@ export function buildLivePreviewDecorations(view: EditorView) {
             `cm-live-list-item cm-live-list-depth-${depth}`,
           );
         } else if (node.name === "Blockquote") {
-          if (parseCallout(view.state.sliceDoc(node.from, node.to))) {
-            return false;
-          }
           const first = view.state.doc.lineAt(node.from).number;
           const last = view.state.doc.lineAt(Math.max(node.from, node.to - 1)).number;
           for (let lineNumber = first; lineNumber <= last; lineNumber += 1) {
@@ -761,25 +755,24 @@ function buildRichBlockDecorations(
       to: range.to,
       enter(node) {
         if (node.name === "FencedCode") {
-          if (!selectionTouchesRange(view.state, node, view.hasFocus)) {
-            const source = view.state.sliceDoc(node.from, node.to);
-            const fence = parseFence(source);
-            if (fence) {
-              decorations.push(
-                Decoration.replace({
-                  block: true,
-                  widget: fence.mermaid
-                    ? new MermaidBlockWidget(
-                        node.from,
-                        node.to,
-                        source,
-                        fence,
-                        options.openMermaidStudio,
-                      )
-                    : new CodeBlockWidget(node.from, node.to, source, fence),
-                }).range(node.from, node.to),
-              );
-            }
+          const source = view.state.sliceDoc(node.from, node.to);
+          const fence = parseFence(source);
+          if (
+            fence?.mermaid
+            && !selectionTouchesRange(view.state, node, view.hasFocus)
+          ) {
+            decorations.push(
+              Decoration.replace({
+                block: true,
+                widget: new MermaidBlockWidget(
+                  node.from,
+                  node.to,
+                  source,
+                  fence,
+                  options.openMermaidStudio,
+                ),
+              }).range(node.from, node.to),
+            );
           }
           return false;
         }
@@ -861,26 +854,6 @@ function buildRichBlockDecorations(
             }
           }
           return false;
-        }
-        if (node.name === "Blockquote") {
-          const source = view.state.sliceDoc(node.from, node.to);
-          const callout = parseCallout(source);
-          if (callout) {
-            if (!selectionTouchesRange(view.state, node, view.hasFocus)) {
-              decorations.push(
-                Decoration.replace({
-                  block: true,
-                  widget: new CalloutBlockWidget(
-                    node.from,
-                    node.to,
-                    source,
-                    callout,
-                  ),
-                }).range(node.from, node.to),
-              );
-            }
-            return false;
-          }
         }
       },
     });

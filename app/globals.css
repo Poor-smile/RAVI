@@ -18055,7 +18055,6 @@ html[data-motion="reduced"] *::after {
   border-color: var(--proof-blue);
 }
 
-.cm-rich-code pre,
 .cm-rich-text-alternative pre {
   max-width: 100%;
   margin: 0;
@@ -18409,34 +18408,6 @@ html[data-motion="reduced"] *::after {
   height: 1px;
   margin: 0;
   background: var(--rule);
-}
-
-.cm-rich-callout {
-  --callout-accent: var(--proof-blue);
-}
-
-.cm-rich-callout.is-warning {
-  --callout-accent: var(--error);
-}
-
-.cm-rich-callout.is-tip {
-  --callout-accent: var(--success);
-}
-
-.cm-rich-callout .cm-rich-header {
-  border-block-end-color: color-mix(in srgb, var(--callout-accent) 42%, var(--rule));
-}
-
-.cm-rich-callout .cm-rich-header::before {
-  content: "※";
-  color: var(--callout-accent);
-  font-weight: 800;
-}
-
-.cm-rich-callout > p {
-  margin: 0;
-  padding: 10px 12px 12px;
-  white-space: pre-wrap;
 }
 
 .cm-rich-media-stage {

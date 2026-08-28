@@ -66,19 +66,21 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   });
 
-  test("renders code, table, image, callout and footnotes without changing source", async ({ page }) => {
+  test("keeps ordinary code inline while rendering specialized blocks without changing source", async ({ page }) => {
     const editor = await openFixture(page);
-    const code = page.locator(".cm-rich-code").first();
-    await expect(code).toBeVisible();
-    await code.getByRole("button", { name: "کپی کد" }).click();
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("const پیام");
-    await code.getByRole("button", { name: "ویرایش متن Markdown" }).click();
+    await expect(page.locator(".cm-rich-code")).toHaveCount(0);
     await expect(editor).toContainText("```ts");
+    await expect(
+      editor.locator(".cm-line-code").filter({ hasText: "const پیام" }),
+    ).toBeVisible();
+    await expect(page.locator(".cm-rich-callout")).toHaveCount(0);
+    await expect(
+      editor.locator(".cm-live-quote").filter({ hasText: "یادداشت نمونه‌خوان" }),
+    ).toBeVisible();
     await editor.focus();
     await page.keyboard.press("Control+Home");
 
     await expect(page.locator(".cm-rich-table").first()).toBeVisible();
-    await expect(page.locator(".cm-rich-callout")).toContainText("یادداشت نمونه‌خوان");
     const image = page.getByRole("group", { name: "طرح نمونه" });
     await image.scrollIntoViewIfNeeded();
     await expect(image.getByRole("note")).toContainText(
@@ -447,17 +449,18 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
     ).toContainText("متن بالای جدول");
   });
 
-  test("Ctrl+Enter leaves every rich block rendered and focuses a new Text Block after it", async ({
+  test("Ctrl+Enter exits inline code and rich tables into a new Text Block", async ({
     page,
   }) => {
     const editor = await openFixture(page);
-    const code = page.locator(".cm-rich-code").first();
     const table = page.locator(".cm-rich-table").first();
 
-    await code.focus();
-    await code.press("Control+Enter");
+    const codeLine = editor.locator(".cm-line-code").filter({ hasText: "console.log" });
+    await codeLine.click();
+    await editor.press("Control+Enter");
     await expect(editor).toBeFocused();
-    await expect(code).toBeVisible();
+    await expect(page.locator(".cm-rich-code")).toHaveCount(0);
+    await expect(editor).toContainText("```ts");
 
     const firstCell = table.locator("tbody textarea").first();
     await firstCell.focus();
@@ -477,7 +480,7 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
     await expect.poll(() => copiedMarkdown(page)).toBe(expected);
   });
 
-  test("Ctrl+Enter uses the same insert-after contract for image, callout, Mermaid and Formula", async ({
+  test("Ctrl+Enter uses the same insert-after contract for boxed media", async ({
     page,
   }) => {
     const content = [
@@ -498,9 +501,9 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
       "$$",
     ].join("\n");
     const editor = await openFixture(page, content);
+    await expect(page.locator(".cm-rich-callout")).toHaveCount(0);
     const blocks = [
       page.locator(".cm-rich-image"),
-      page.locator(".cm-rich-callout"),
       page.locator(".cm-rich-mermaid"),
       page.locator(".cm-rich-formula"),
     ];
@@ -515,7 +518,6 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
 
     const expected = content
       .replace("\")\n\n> [!NOTE]", "\")\n\n\n\n> [!NOTE]")
-      .replace("> بدنهٔ یادداشت\n\n```mermaid", "> بدنهٔ یادداشت\n\n\n\n```mermaid")
       .replace(
         "  A[آغاز] --> B[پایان]\n```\n\n$$",
         () => "  A[آغاز] --> B[پایان]\n```\n\n\n\n$$",
@@ -761,19 +763,14 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
     expect(await copiedMarkdown(page)).toBe(invalidRevision);
   });
 
-  test("reflows rich blocks at 320px and 200% zoom", async ({ page }) => {
+  test("keeps inline code visible at 320px and 200% zoom", async ({ page }) => {
     await openFixture(page);
     await page.setViewportSize({ width: 320, height: 720 });
     await page.getByRole("tab", { name: "نوشتن", exact: true }).click();
     await page.evaluate(() => { document.documentElement.style.zoom = "2"; });
-    const code = page.locator(".cm-rich-code").first();
-    await expect(code).toBeVisible();
-    const overflow = await code.evaluate((element) => element.scrollWidth - element.clientWidth);
-    expect(overflow).toBeLessThanOrEqual(1);
-    const actions = code.locator(".cm-rich-action");
-    for (let index = 0; index < await actions.count(); index += 1) {
-      const box = await actions.nth(index).boundingBox();
-      expect(box?.height ?? 0).toBeGreaterThanOrEqual(43);
-    }
+    await expect(page.locator(".cm-rich-code")).toHaveCount(0);
+    const codeLine = page.locator(".cm-line-code").filter({ hasText: "const پیام" });
+    await expect(codeLine).toBeVisible();
+    await expect(codeLine).toHaveAttribute("dir", "ltr");
   });
 });

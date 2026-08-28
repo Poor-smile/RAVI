@@ -4,15 +4,15 @@
 
 ## آخرین نسخهٔ پایدار
 
-**راوی 2.2.0 برای Windows و macOS**
+**راوی 2.2.1 برای Windows و macOS**
 
-- [دانلود Installer رسمی Windows x64](https://dl2.gptt.ir/raavi/stable/2.2.0/Raavi-Setup-2.2.0-x64.exe)
-- [دانلود macOS برای Apple Silicon](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-arm64-unsigned.dmg)
-- [دانلود macOS برای Intel](https://github.com/Poor-smile/RAVI/releases/download/v2.2.0/Raavi-2.2.0-macOS-x64-unsigned.dmg)
-- [یادداشت انتشار 2.2.0](https://ravi.poorsmile.ir/updates/releases/2.2.0.json)
+- [دانلود Installer رسمی Windows x64](https://dl2.gptt.ir/raavi/stable/2.2.1/Raavi-Setup-2.2.1-x64.exe)
+- [دانلود macOS برای Apple Silicon](https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-arm64-unsigned.dmg)
+- [دانلود macOS برای Intel](https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-x64-unsigned.dmg)
+- [یادداشت انتشار 2.2.1](https://ravi.poorsmile.ir/updates/releases/2.2.1.json)
 - [همهٔ نسخه‌ها در GitHub](https://github.com/Poor-smile/RAVI/releases)
 
-خروجی‌های macOS نسخهٔ 2.2.0 فعلاً بدون امضای Developer ID منتشر می‌شوند و نام
+خروجی‌های macOS نسخهٔ 2.2.1 فعلاً بدون امضای Developer ID منتشر می‌شوند و نام
 فایل آن‌ها صریحاً `unsigned` دارد. پس از افزودن گواهی و اطلاعات notarization اپل
 به Secretهای GitHub، همان پایپ‌لاین فایل‌های امضاشده و تأییدشدهٔ اپل را بدون این
 پسوند تولید می‌کند.
@@ -20,9 +20,9 @@
 راوی بروزرسانی‌های تازه را از manifest امضاشده بررسی می‌کند، فایل را در پس‌زمینه
 دریافت می‌کند و پیش از نصب، اندازه، SHA-512 و امضای Ed25519 آن را اعتبارسنجی می‌کند.
 manifest چندسکویی بستهٔ `win32-x64`، `darwin-arm64` یا `darwin-x64` را متناسب با
-دستگاه انتخاب می‌کند. خروجی‌های macOS نسخهٔ 2.2.0 پیش از این تغییر ساخته شده‌اند؛
-آپدیتر داخلی macOS از نخستین build پس از 2.2.0 فعال می‌شود و GitHub Release مسیر
-دستی جایگزین باقی می‌ماند.
+دستگاه انتخاب می‌کند. از نسخهٔ 2.2.1، Windows و macOS هر دو بررسی نسخه، دانلود
+پس‌زمینه، مکث و ادامه و اعتبارسنجی فایل را داخل راوی انجام می‌دهند؛ GitHub Release
+مسیر دریافت دستی جایگزین باقی می‌ماند.
 
 ## امکانات
 
@@ -163,7 +163,7 @@ Workflow فایل `.github/workflows/release-macos.yml` روی GitHub Actions ه
 می‌کند و فقط به یک GitHub Release موجود متصل می‌شود. انتشار unsigned به‌صورت
 پیش‌فرض ممنوع است و تنها در اجرای دستیِ صریح با `allow_unsigned=true` مجاز می‌شود.
 
-در انتشارهای بعد از 2.2.0، DMG هر معماری علاوه بر GitHub Release روی هاست دانلود
+از انتشار 2.2.1، DMG هر معماری علاوه بر GitHub Release روی هاست دانلود
 نسخه‌بندی‌شده قرار می‌گیرد و `stable.json` schema 2 آن را با اندازه، SHA-512 و
 امضای Ed25519 مستقل معرفی می‌کند. برنامه فقط artifact معماری جاری را دریافت و پس
 از اعتبارسنجی، نصب‌کنندهٔ استاندارد macOS را باز می‌کند.
