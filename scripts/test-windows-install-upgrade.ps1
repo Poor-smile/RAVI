@@ -82,8 +82,13 @@ function Install-Version([string]$Installer, [string]$Version) {
   foreach ($folder in @([Environment]::GetFolderPath('CommonDesktopDirectory'), [Environment]::GetFolderPath('CommonPrograms'))) {
     $shortcut = Join-Path $folder 'راوی.lnk'
     if (!(Test-Path -LiteralPath $shortcut)) { throw "Missing shortcut: $shortcut" }
+    # WScript can return an empty target for a non-ASCII shortcut filename.
+    # Read a byte-identical copy with an ASCII name; retain it as evidence.
+    $shortcutEvidence = Join-Path $evidence "shortcut-$Version-$([IO.Path]::GetFileName($folder)).lnk"
+    Copy-Item -LiteralPath $shortcut -Destination $shortcutEvidence
+    if ((Get-FileHash -LiteralPath $shortcut -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $shortcutEvidence -Algorithm SHA256).Hash) { throw 'Shortcut evidence differs from installed shortcut.' }
     $shell = New-Object -ComObject WScript.Shell
-    $actualTarget = $shell.CreateShortcut($shortcut).TargetPath
+    $actualTarget = $shell.CreateShortcut($shortcutEvidence).TargetPath
     [pscustomobject]@{ shortcut=$shortcut;actualTarget=$actualTarget;expectedTarget=$exe;targetExists=(Test-Path -LiteralPath $actualTarget) } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence "shortcut-$Version-$([IO.Path]::GetFileName($folder)).json") -Encoding UTF8
     if ($actualTarget -ne $exe) { throw "Shortcut target does not match the installation: '$actualTarget' != '$exe'." }
   }
