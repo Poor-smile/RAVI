@@ -83,7 +83,9 @@ function Install-Version([string]$Installer, [string]$Version) {
     $shortcut = Join-Path $folder 'راوی.lnk'
     if (!(Test-Path -LiteralPath $shortcut)) { throw "Missing shortcut: $shortcut" }
     $shell = New-Object -ComObject WScript.Shell
-    if ($shell.CreateShortcut($shortcut).TargetPath -ne $exe) { throw 'Shortcut target does not match the installation.' }
+    $actualTarget = $shell.CreateShortcut($shortcut).TargetPath
+    [pscustomobject]@{ shortcut=$shortcut;actualTarget=$actualTarget;expectedTarget=$exe;targetExists=(Test-Path -LiteralPath $actualTarget) } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence "shortcut-$Version-$([IO.Path]::GetFileName($folder)).json") -Encoding UTF8
+    if ($actualTarget -ne $exe) { throw "Shortcut target does not match the installation: '$actualTarget' != '$exe'." }
   }
   Assert-Preserved
   Record-Result "installed-$Version" @{installLocation=$installRoot;associations=$true;shortcuts=$true;dataPreserved=$true}
