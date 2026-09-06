@@ -1,85 +1,38 @@
-# لندینگ راوی
+# لندینگ راوی 2.4.5
 
-## آماده‌سازی انتشار 2.4.5
-
-نصب‌کنندهٔ Windows نسخهٔ 2.4.5 روی هاست دانلود قرار گرفته و با دانلود کامل،
-SHA-512 و امضای Ed25519 تأیید شده است:
-
-`https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-Setup-2.4.5-x64.exe`
-
-اندازه: ۱۰۵٬۵۸۲٬۱۱۳ بایت. SHA-256:
-
-`8B9D4B4244C96FAD834E169173CFC693F1D28A7406E3341E359EBEEC29AE02B5`
-
-این فایل فاقد امضای Authenticode ویندوز است؛ امضای Ed25519 به‌روزرسان را نباید
-به‌عنوان امضای Windows معرفی کرد. نصب و ارتقای واقعی روی ماشین آزمایشی مدیر هنوز
-اجرا نشده‌اند. قبل از تغییر نسخهٔ جاری سایت، یادداشت نسخه، GitHub Release و
-خروجی‌های macOS همان نسخه باید طبق `docs/RELEASE_GUIDE_FA.md` تکمیل شوند.
-
-لینک‌های بخش‌های بعد، نسخهٔ عمومی فعلی 2.2.1 را نشان می‌دهند و تا فعال‌سازی نهایی
-انتشار حفظ می‌شوند.
-
-این پوشه یک سایت ایستای سبک است و به نصب وردپرس، پایگاه داده، Node.js یا فرایند build نیاز ندارد.
-
-## بارگذاری روی هاست
-
-1. همهٔ محتویات این پوشه را در پوشهٔ مقصد سایت یا زیردامنه آپلود کنید.
-2. اگر فایل ZIP را آپلود می‌کنید، آن را در همان پوشه Extract کنید.
-3. مطمئن شوید `index.html` مستقیماً در ریشهٔ مقصد قرار گرفته است، نه داخل یک پوشهٔ تو‌در‌تو.
-4. نشانی سایت را باز کنید و بخش «برگهٔ زنده» را یک بار ویرایش و بازنشانی کنید.
-
-## ویرایش محتوا
-
-- متن اصلی نمونه و معرفی محصول فقط در `landing.md` نگهداری می‌شود.
-- ساختار صفحه در `index.html`، ظاهر در `style.css` و تبدیل زندهٔ Markdown در `app.js` است.
-- تصاویر واقعی نرم‌افزار در `assets/screens/` و فونت‌ها در `assets/fonts/` قرار دارند.
-
-## دفتر تغییرات
-
-دکمهٔ «دفتر تغییرات» در بخش دانلود، فایل `CHANGELOG.md` را هنگام هر بار بازشدن
-پنجره با کش غیرفعال می‌خواند. در نسخهٔ منتشرشده و بستهٔ ZIP، این فایل باید کنار
-`index.html` باقی بماند تا فهرست تغییرات همیشه از همان منبع اصلی به‌روز شود.
+این پوشه صفحهٔ ایستای معرفی و دانلود راوی است. بسته‌های حجیم Windows و DMG مک روی
+هاست دانلود مستقل و ZIPهای مک در GitHub Release نگهداری می‌شوند؛ داخل بستهٔ سایت
+یا هاست اصلی نصب‌کننده قرار نمی‌گیرد.
 
 ## فایل‌های دانلود
 
-نسخهٔ Linux x64 در مسیر `downloads/Raavi-1.0.0-linux-x64-portable.tar.gz` منتشر شده است. SHA256 این فایل:
+- [Windows x64 — 105.6 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-Setup-2.4.5-x64.exe)
+  SHA-256: `8b9d4b4244c96fad834e169173cfc693f1d28a7406e3341e359ebeec29ae02b5`
+- [macOS Apple Silicon · arm64 — 134.8 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-2.4.5-macOS-arm64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-arm64-unsigned.zip)
+  SHA-256: `9c3b0aa6b519f6d568796a805dee22034d90359091e86061f86b454dcdbcbb07`
+- [macOS Intel · x64 — 138.7 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-2.4.5-macOS-x64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-x64-unsigned.zip)
+  SHA-256: `535b9ae45ae0e07b98d4ae03d688dd1c3d189275a87616e784ecca9284085768`
 
-`0C363E8F39D479F4B983A7C5DFA8B43D40DE3039B8F0FA98FBF7D168AA59BCA2`
+[GitHub Release و گزارش ساخت](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.5) · [SHA-256 مک](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-SHA256SUMS.txt)
 
-نسخهٔ رسمی Windows x64 با Electron و نصب‌کنندهٔ NSIS روی هاست دانلود مستقل منتشر
-می‌شود و داخل بستهٔ landing یا هاست اصلی قرار نمی‌گیرد:
+Windows امضای Authenticode ندارد؛ macOS بدون Developer ID و notarization با پسوند
+`unsigned` ارائه می‌شود. Ed25519 به‌روزرسان، امضای Windows یا اپل نیست. نصب تازه، حذف و
+ارتقای واقعی از 2.2.1 روی Windows آزمایشی مدیر موفق بودند و سند و نظر حفظ شدند.
+[گزارش آزمون](https://github.com/Poor-smile/RAVI/actions/runs/34036808090). Linux
+برای نسخهٔ 2.4.5 ارائه نشده و دکمهٔ آن غیرفعال است.
 
-`https://dl2.gptt.ir/raavi/stable/2.2.1/Raavi-Setup-2.2.1-x64.exe`
+## بارگذاری روی هاست
 
-SHA256 نسخهٔ 2.2.1:
+از `npm run build:landing` برای ساخت بسته استفاده کنید. فایل‌های صفحه و پوشهٔ
+`assets` باید مستقیم زیر `/home3/hpoorsma/ravi.poorsmile.ir/` قرار بگیرند.
+پوشه‌های `updates`، `privacy` و نسخه‌های قدیمی را حذف نکنید.
 
-`E9B1D515AC9E3D5986E5ADA4E711605E4D0330C9C7296C4E034AFC380F0B4EF3`
+انتشار صفحه فقط پس از تکمیل و بررسی هر دو معماری مک مجاز است. `stable.json`
+طبق راهنمای انتشار همیشه آخرین فایل فعال‌سازی است.
 
-نسخه، Installer و checksum هر انتشار باید در GitHub Releases هم ثبت شوند:
+## ویرایش محتوا
 
-`https://github.com/Poor-smile/RAVI/releases`
-
-Tauri و فایل Portable بخشی از مسیر انتشار Windows نسخهٔ ۲ نیستند.
-
-نسخهٔ 2.2.1 برای هر دو معماری macOS از GitHub Release رسمی دریافت می‌شود:
-
-- Apple Silicon DMG: `https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-arm64-unsigned.dmg`
-- Intel DMG: `https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-x64-unsigned.dmg`
-- فایل‌های ZIP و فهرست SHA-256: `https://github.com/Poor-smile/RAVI/releases/tag/v2.2.1`
-
-این خروجی‌ها فعلاً Developer ID و notarization اپل ندارند و نام فایل، متن صفحه و
-وضعیت دانلود باید همیشه این موضوع را شفاف نشان دهند. در هر انتشار بعدی، صفحهٔ
-معرفی فقط پس از تکمیل هر دو معماری، هر دو قالب DMG/ZIP و فایل checksum به نسخهٔ
-جدید اشاره می‌کند. آپدیتر امن از manifest مشترک، بستهٔ `win32-x64`،
-`darwin-arm64` یا `darwin-x64` را انتخاب و پیش از نصب با SHA-512 و امضای Ed25519
-اعتبارسنجی می‌کند. GitHub Release مسیر دانلود دستی جایگزین باقی می‌ماند. از نسخهٔ
-2.2.1، بروزرسانی داخلی برای Windows، Apple Silicon و Intel فعال است.
-
-لینک حمایت پروژه به `https://daramet.com/poorsmile` می‌رود.
-
-## نکتهٔ هاست
-
-بستهٔ انتشار، متن کامل `landing.md` را داخل `index.html` نیز قرار می‌دهد تا نمونهٔ
-زنده به دسترسی جداگانهٔ فایل وابسته نباشد. در نسخهٔ توسعه، اگر مرورگر یا هاست
-دریافت فایل‌های `.md` را مسدود کند، نمونهٔ داخلی فعال می‌شود و ویرایش و
-پیش‌نمایش از کار نمی‌افتند.
+ساختار صفحه در `index.html`، ظاهر در `style.css` و رفتار در `app.js` است.
+متن نمونه در `landing.md` نگهداری و هنگام بسته‌بندی داخل HTML نیز قرار می‌گیرد.
+تصاویر برنامه در `assets/screens` و فونت‌ها در `assets/fonts` قرار دارند.
+فایل `CHANGELOG.md` باید کنار صفحه باقی بماند.

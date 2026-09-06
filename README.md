@@ -1,42 +1,35 @@
 # راوی
 
-ویور و ویرایشگر سبک Markdown فارسی با چیدمان راست‌به‌چپ و فونت IRANSansX.
+ویور و ویرایشگر Markdown فارسی با چیدمان راست‌به‌چپ و فونت IRANSansX.
 
-## انتشار در حال آماده‌سازی: 2.4.5
+## نسخهٔ عمومی 2.4.5
 
-نسخهٔ 2.4.5 شامل پنجرهٔ نظر در مرکز صفحه، ذخیرهٔ مقاوم‌تر فایل، جداسازی اجرای
-Mermaid، اصلاح پیمایش سندهای بلند و رفع جابه‌جایی تمرکز هنگام تایپ فرمول است.
+پنجرهٔ نظر در مرکز صفحه، ذخیرهٔ مقاوم‌تر فایل، جداسازی اجرای Mermaid، اصلاح پیمایش
+سندهای بلند و رفع جابه‌جایی تمرکز هنگام تایپ فرمول در این نسخه ارائه شده‌اند.
 ۴۶۱ آزمون واحد و ۲۳۸ آزمون عملکردی روی نامزد Windows پاس شده‌اند؛ یک آزمون R10
-فایل ورودی اختصاصی در دسترس ندارد.
+به ورودی اختصاصیِ فراهم‌نشده نیاز دارد.
 
-نصب‌کنندهٔ Windows این نسخه فاقد امضای Authenticode است. اصالت بستهٔ به‌روزرسان
-با Ed25519 و SHA-512 بررسی می‌شود؛ این امضا جای امضای معتبر Windows را نمی‌گیرد.
-انتقال داده از 2.2.1 آزمایش شده، اما اجرای واقعی نصب و ارتقا روی ماشین آزمایشی
-مدیر هنوز انجام نشده است. خروجی macOS همین نسخه هنوز ساخته و منتشر نشده است.
+- [Windows x64 — 105.6 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-Setup-2.4.5-x64.exe)
+  SHA-256: `8b9d4b4244c96fad834e169173cfc693f1d28a7406e3341e359ebeec29ae02b5`
+- [macOS Apple Silicon · arm64 — 134.8 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-2.4.5-macOS-arm64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-arm64-unsigned.zip)
+  SHA-256: `9c3b0aa6b519f6d568796a805dee22034d90359091e86061f86b454dcdbcbb07`
+- [macOS Intel · x64 — 138.7 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-2.4.5-macOS-x64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-x64-unsigned.zip)
+  SHA-256: `535b9ae45ae0e07b98d4ae03d688dd1c3d189275a87616e784ecca9284085768`
+- [یادداشت انتشار](https://ravi.poorsmile.ir/updates/releases/2.4.5.json)
+- [GitHub Release، بسته‌های جایگزین و گزارش ساخت](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.5)
+- [SHA-256 بسته‌های مک](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-SHA256SUMS.txt)
 
-تا تکمیل مراحل [راهنمای انتشار](docs/RELEASE_GUIDE_FA.md)، نسخهٔ عمومی زیر حفظ می‌شود.
+نصب‌کنندهٔ Windows فاقد امضای Authenticode است. بسته‌های macOS برای هر دو معماری
+روی runner واقعی همان معماری از tag یکسان ساخته شده‌اند؛ Developer ID و notarization
+ندارند و نام فایل‌ها صریحاً `unsigned` است. اصالت بستهٔ به‌روزرسان با Ed25519 و
+SHA-512 بررسی می‌شود؛ این امضا جای امضای سیستم‌عامل را نمی‌گیرد.
 
-## نسخهٔ عمومی فعلی
-
-**راوی 2.2.1 برای Windows و macOS**
-
-- [دانلود Installer رسمی Windows x64](https://dl2.gptt.ir/raavi/stable/2.2.1/Raavi-Setup-2.2.1-x64.exe)
-- [دانلود macOS برای Apple Silicon](https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-arm64-unsigned.dmg)
-- [دانلود macOS برای Intel](https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-x64-unsigned.dmg)
-- [یادداشت انتشار 2.2.1](https://ravi.poorsmile.ir/updates/releases/2.2.1.json)
-- [همهٔ نسخه‌ها در GitHub](https://github.com/Poor-smile/RAVI/releases)
-
-خروجی‌های macOS نسخهٔ 2.2.1 فعلاً بدون امضای Developer ID منتشر می‌شوند و نام
-فایل آن‌ها صریحاً `unsigned` دارد. پس از افزودن گواهی و اطلاعات notarization اپل
-به Secretهای GitHub، همان پایپ‌لاین فایل‌های امضاشده و تأییدشدهٔ اپل را بدون این
-پسوند تولید می‌کند.
-
-راوی بروزرسانی‌های تازه را از manifest امضاشده بررسی می‌کند، فایل را در پس‌زمینه
-دریافت می‌کند و پیش از نصب، اندازه، SHA-512 و امضای Ed25519 آن را اعتبارسنجی می‌کند.
-manifest چندسکویی بستهٔ `win32-x64`، `darwin-arm64` یا `darwin-x64` را متناسب با
-دستگاه انتخاب می‌کند. از نسخهٔ 2.2.1، Windows و macOS هر دو بررسی نسخه، دانلود
-پس‌زمینه، مکث و ادامه و اعتبارسنجی فایل را داخل راوی انجام می‌دهند؛ GitHub Release
-مسیر دریافت دستی جایگزین باقی می‌ماند.
+نصب تازه، حذف و ارتقای واقعی از 2.2.1 به 2.4.5 روی ماشین موقت Windows با دسترسی
+مدیر موفق بودند؛ سند فارسی، نظر و دادهٔ کاربر حفظ شدند.
+[گزارش آزمون نصب و ارتقا](https://github.com/Poor-smile/RAVI/actions/runs/34036808090). اعتبارسنجی نمای موبایل
+در دامنهٔ این انتشار نبوده است. ترتیب فعال‌سازی updater در
+[راهنمای انتشار](docs/RELEASE_GUIDE_FA.md) و شواهد اجرا در
+[گزارش انتشار](docs/RELEASE_EXECUTION_2.4.5_FA.md) ثبت می‌شود.
 
 ## امکانات
 

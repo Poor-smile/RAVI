@@ -1274,7 +1274,8 @@ a {
 }
 
 .download-shell {
-  overflow: hidden;
+  max-height: calc(100svh - 40px);
+  overflow: auto;
   background: rgba(248, 250, 255, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.85);
   border-radius: 16px;
@@ -1786,3 +1787,10 @@ a {
     font-size: 14px;
   }
 }
+
+.release-download-details { margin: 0 24px 24px; font-size: 12px; line-height: 1.9; }
+.release-download-details summary { cursor: pointer; font-weight: 600; }
+.release-download-details ul { display: grid; gap: 16px; padding: 0; list-style: none; }
+.release-download-details li { display: grid; gap: 4px; padding-block: 10px; border-bottom: 1px solid rgba(128, 145, 180, .25); }
+.release-download-details code { display: block; overflow-wrap: anywhere; user-select: all; font-size: 11px; text-align: left; }
+.release-download-details a { color: inherit; text-underline-offset: 3px; }
