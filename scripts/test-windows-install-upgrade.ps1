@@ -60,7 +60,16 @@ function Install-Version([string]$Installer, [string]$Version) {
   $process = Start-Process -FilePath $Installer -ArgumentList @('/S', "/D=$installRoot") -WindowStyle Hidden -PassThru
   if (!$process.WaitForExit(180000)) { throw 'Installer did not finish within three minutes; inspect the test VM.' }
   if ($process.ExitCode -ne 0) { throw "Installer exit code: $($process.ExitCode); reboot-required codes are not counted as a pass." }
-  $installed = @(Get-RaaviInstallations | Where-Object { $_.InstallLocation.TrimEnd('\') -eq $installRoot.TrimEnd('\') })
+  $preflight.installationExecuted = $true
+  $preflight | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence 'preflight.json') -Encoding UTF8
+  $registrations = @(Get-RaaviInstallations)
+  $registrations | Select-Object DisplayName, DisplayVersion, UninstallString, InstallLocation, PSPath | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence "registry-$Version.json") -Encoding UTF8
+  # NSIS stores InstallLocation in its separate application key. The uninstall
+  # registration records the same directory in its quoted UninstallString.
+  $installed = @($registrations | Where-Object {
+    $uninstallMatch = [regex]::Match([string]$_.UninstallString, '^"([^"]+)"')
+    $uninstallMatch.Success -and (Split-Path -Parent $uninstallMatch.Groups[1].Value).TrimEnd('\') -eq $installRoot.TrimEnd('\')
+  })
   if ($installed.Count -ne 1 -or $installed[0].DisplayVersion -ne $Version) { throw 'Installed version or upgrade identity is incorrect.' }
   $exe = Join-Path $installRoot 'Raavi.exe'
   if (!(Test-Path -LiteralPath $exe)) { throw 'Installed executable is missing.' }
@@ -77,8 +86,6 @@ function Install-Version([string]$Installer, [string]$Version) {
     if ($shell.CreateShortcut($shortcut).TargetPath -ne $exe) { throw 'Shortcut target does not match the installation.' }
   }
   Assert-Preserved
-  $preflight.installationExecuted = $true
-  $preflight | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence 'preflight.json') -Encoding UTF8
   Record-Result "installed-$Version" @{installLocation=$installRoot;associations=$true;shortcuts=$true;dataPreserved=$true}
 }
 function Uninstall-Version {
