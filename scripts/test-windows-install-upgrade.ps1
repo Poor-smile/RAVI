@@ -101,7 +101,16 @@ function Uninstall-Version {
   $process = Start-Process -FilePath $uninstaller -ArgumentList @('/S','/allusers') -WindowStyle Hidden -PassThru
   if (!$process.WaitForExit(180000) -or $process.ExitCode -ne 0) { throw 'Uninstaller did not complete successfully.' }
   $deadline = [DateTime]::UtcNow.AddSeconds(30)
-  while ((Test-Path -LiteralPath (Join-Path $installRoot 'Raavi.exe')) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 250 }
+  # The NSIS bootstrap exits before its temporary uninstaller child finishes.
+  # File removal precedes registry cleanup; wait for the complete final state.
+  do {
+    $executableRemains = Test-Path -LiteralPath (Join-Path $installRoot 'Raavi.exe')
+    $registrationRemains = @(Get-RaaviInstallations).Count -ne 0
+    $associationRemains = Test-Path -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\Software\Classes\Raavi.Markdown'
+    if (!$executableRemains -and !$registrationRemains -and !$associationRemains) { break }
+    Start-Sleep -Milliseconds 250
+  } while ([DateTime]::UtcNow -lt $deadline)
+  @(Get-RaaviInstallations) | Select-Object DisplayName, DisplayVersion, UninstallString, PSPath | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'registry-after-uninstall.json') -Encoding UTF8
   if (Test-Path -LiteralPath (Join-Path $installRoot 'Raavi.exe')) { throw 'Executable remains after uninstall.' }
   if (@(Get-RaaviInstallations).Count -ne 0) { throw 'Uninstall registration remains.' }
   if (Test-Path -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\Software\Classes\Raavi.Markdown') { throw 'File association remains after uninstall.' }
