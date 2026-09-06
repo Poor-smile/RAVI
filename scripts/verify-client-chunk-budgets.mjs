@@ -1,9 +1,10 @@
 import { readFile, readdir, stat } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const defaultAssetsDirectory = path.join(projectRoot, "dist", "client", "assets");
+const defaultAssetsDirectory = path.join(projectRoot, "dist", "client", "_next", "static", "chunks");
 const budgetFile = path.join(
   projectRoot,
   "app",
@@ -89,7 +90,7 @@ export async function verifyClientChunkBudgets(
   return results;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   verifyClientChunkBudgets().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;

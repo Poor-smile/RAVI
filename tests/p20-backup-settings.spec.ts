@@ -24,7 +24,9 @@ test("Backup Settings follows the Raavi shell and persists the user policy", asy
   await expect(dialog.locator('img[src$="google-sign-in-g.svg"]')).toBeVisible();
   await expect(dialog.getByRole("radio", { name: /Google Drive/u })).toHaveAttribute("aria-checked", "true");
   await expect(dialog.getByRole("radio", { name: /Proton Drive/u })).toBeVisible();
-  await expect(dialog.getByText("Reading Cache همیشه خارج می‌ماند.")).toBeVisible();
+  await expect(
+    dialog.getByText("این قاعده روی فایل‌های داخل مخزن اعمال می‌شود؛ کش مطالعه همیشه خارج می‌ماند."),
+  ).toBeVisible();
 
   const switches = dialog.locator(".backup-policy-section [role=switch]");
   await expect(switches).toHaveCount(5);

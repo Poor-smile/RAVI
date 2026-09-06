@@ -109,7 +109,15 @@ test.describe("Persian command palette", () => {
     await editor.focus();
     await page.keyboard.press("End");
     await page.keyboard.press("Control+K");
-    await expect(page.locator(".command-palette-list [role=option]")).not.toHaveCount(0);
+    const palette = page.getByRole("dialog", { name: "مرکز فرمان راوی" });
+    const input = palette.getByRole("combobox", { name: "جست‌وجوی فرمان" });
+    await input.fill("بلوک کد");
+    const codeBlock = palette.getByRole("option", { name: /درج بلوک کد/ });
+    await expect(codeBlock).toBeVisible();
+    await expect(codeBlock).toContainText("Alt+Shift+C");
+    await page.keyboard.press("Enter");
+    await expect(palette).toBeHidden();
+    await expect(page.locator(".cm-ch")).toContainText("text");
   });
 
   test("keeps the editor slash surface limited to structural block types", async ({ page }) => {
@@ -127,11 +135,24 @@ test.describe("Persian command palette", () => {
     await page.keyboard.type("/");
     const slashMenu = page.getByRole("menu", { name: "نوع بلوک" });
     await expect(slashMenu).toBeVisible();
-    await expect(slashMenu.getByRole("menuitemradio")).toHaveCount(14);
+    await expect(slashMenu.getByRole("menuitemradio")).toHaveCount(15);
     await expect(slashMenu).toContainText("تیتر ۱");
+    await expect(
+      slashMenu.getByRole("menuitemradio", { name: "بلوک کد" }),
+    ).toBeVisible();
     await expect(
       slashMenu.getByRole("menuitemradio", { name: "جداکننده" }),
     ).toBeVisible();
+    const imageBlock = slashMenu.getByRole("menuitemradio", {
+      name: "تصویر",
+    });
+    const formulaBlock = slashMenu.getByRole("menuitemradio", {
+      name: "فرمول",
+    });
+    await imageBlock.scrollIntoViewIfNeeded();
+    await formulaBlock.scrollIntoViewIfNeeded();
+    await expect(imageBlock).toBeVisible();
+    await expect(formulaBlock).toBeVisible();
     await expect(slashMenu).not.toContainText("تغییر تم روشن و تاریک");
   });
 });

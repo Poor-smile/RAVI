@@ -117,6 +117,7 @@ test("R07 matches the exact 232×68 text-size popover from Figma", async ({
     const valueStyle = getComputedStyle(valueNode);
     return {
       menu: rect(element),
+      trigger: rect(document.querySelector(".reading-header-tools-toggle")!),
       decrease: rect(controls[0]),
       value: rect(valueNode),
       increase: rect(controls[1]),
@@ -135,10 +136,10 @@ test("R07 matches the exact 232×68 text-size popover from Figma", async ({
     };
   });
 
-  expect(contract.menu).toEqual({ x: 32, y: 86, width: 232, height: 68 });
-  expect(contract.decrease).toEqual({ x: 64, y: 102, width: 36, height: 36 });
-  expect(contract.value).toEqual({ x: 108, y: 108, width: 80, height: 24 });
-  expect(contract.increase).toEqual({ x: 196, y: 102, width: 36, height: 36 });
+  expect(contract.menu).toEqual({ x: contract.trigger.x - 120, y: contract.trigger.y + 36, width: 232, height: 68 });
+  expect(contract.decrease).toEqual({ x: contract.menu.x + 32, y: contract.menu.y + 16, width: 36, height: 36 });
+  expect(contract.value).toEqual({ x: contract.menu.x + 76, y: contract.menu.y + 22, width: 80, height: 24 });
+  expect(contract.increase).toEqual({ x: contract.menu.x + 164, y: contract.menu.y + 16, width: 36, height: 36 });
   expect(contract.surface).toEqual({
     background: "rgb(255, 255, 255)",
     border: "0px",
@@ -213,7 +214,7 @@ test("R07 enforces 16–22, keyboard navigation, and Escape focus restoration", 
   await expect(menu).toBeHidden();
 });
 
-test("R07 keeps the four-item Reading Rail reachable beside the mobile Drawer", async ({
+test("R07 keeps the Reading Rail reachable beside the mobile Drawer", async ({
   page,
 }) => {
   await openReadingFixture(page, { width: 375, height: 812 });
@@ -227,7 +228,7 @@ test("R07 keeps the four-item Reading Rail reachable beside the mobile Drawer", 
   await expect(sidebar).toHaveClass(/has-persistent-rail/);
   await expect(sidebar).toHaveAttribute("role", "complementary");
   await expect(rail).toBeVisible();
-  await expect(rail.getByRole("button")).toHaveCount(4);
+  await expect(rail.getByRole("button")).toHaveCount(5);
   await expect(commentsTrigger).toBeVisible();
   await expect(
     page.locator(".reading-header-outline-toggle--mobile"),

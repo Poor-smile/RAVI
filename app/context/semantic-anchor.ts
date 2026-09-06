@@ -48,6 +48,15 @@ export function previewElementSourceOffset(element: HTMLElement) {
   return Math.max(0, localOffset + (Number.isFinite(chunkStart) ? chunkStart : 0));
 }
 
+export function findPreviewHeading(
+  article: HTMLElement,
+  heading: { level: number; offset: number },
+) {
+  return Array.from(article.querySelectorAll<HTMLElement>(
+    `h${heading.level}[data-source-offset]`,
+  )).find((element) => previewElementSourceOffset(element) === heading.offset) ?? null;
+}
+
 export function closestSemanticOffset(
   offsets: readonly number[],
   requestedOffset: number,

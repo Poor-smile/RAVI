@@ -57,6 +57,18 @@ test("P19 lists the complete active catalog with search and real keycaps", async
   );
   await expect(dividerRow).toContainText("درج جداکننده");
   await expect(dividerRow.locator("kbd")).toHaveText(["Alt", "Shift", "H"]);
+  const codeBlockRow = dialog.locator(
+    '[data-settings-shortcut-id="edit.codeBlock"]',
+  );
+  await expect(codeBlockRow).toContainText("درج بلوک کد");
+  await expect(codeBlockRow.locator("kbd")).toHaveText([
+    "Alt",
+    "Shift",
+    "C",
+  ]);
+  await search.fill("بلوک کد");
+  await expect(codeBlockRow).toBeVisible();
+  await search.fill("");
   await search.fill("جداکننده");
   await expect(dividerRow).toBeVisible();
   await page.screenshot({

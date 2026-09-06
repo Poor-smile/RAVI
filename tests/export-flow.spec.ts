@@ -60,7 +60,7 @@ test.afterAll(async () => {
 
 test("preserves the ultimate Markdown acceptance counts in Word and PDF", async () => {
   test.setTimeout(180_000);
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ channel: process.env.RAAVI_TEST_BROWSER_CHANNEL });
   try {
     const page = await browser.newPage();
     await page.addInitScript((uiSelector) => {
@@ -164,7 +164,7 @@ test("preserves the ultimate Markdown acceptance counts in Word and PDF", async 
 });
 
 test("downloads an editable Word file from the export dialog", async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ channel: process.env.RAAVI_TEST_BROWSER_CHANNEL });
   try {
     const page = await browser.newPage();
     await page.goto(server.origin);
@@ -202,7 +202,7 @@ test("downloads an editable Word file from the export dialog", async () => {
 });
 
 test("embeds Mermaid as padded SVG with an adaptive high-resolution PNG fallback", async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ channel: process.env.RAAVI_TEST_BROWSER_CHANNEL });
   try {
     const page = await browser.newPage();
     await page.goto(server.origin);
@@ -282,7 +282,7 @@ test("embeds Mermaid as padded SVG with an adaptive high-resolution PNG fallback
 });
 
 test("prepares the preview and opens the browser PDF print flow", async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ channel: process.env.RAAVI_TEST_BROWSER_CHANNEL });
   try {
     const page = await browser.newPage();
     await page.addInitScript(() => {
@@ -339,7 +339,7 @@ test("prepares the preview and opens the browser PDF print flow", async () => {
 });
 
 test("requires explicit confirmation before exporting a failed Mermaid diagram", async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ channel: process.env.RAAVI_TEST_BROWSER_CHANNEL });
   try {
     const page = await browser.newPage();
     await page.addInitScript(() => {

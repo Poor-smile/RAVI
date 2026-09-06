@@ -51,6 +51,10 @@ test("W07 keeps Code and block Writing synchronized and promotes either leaf to 
   await expect(writingPane.locator(".pane-title strong")).toHaveText("نوشتن");
   await expect(codePane.locator("#markdown-editor")).toBeVisible();
   await expect(writingPane.locator("#writing-editor")).toBeVisible();
+  await expect(codePane.locator("#markdown-editor .cm-content")).toHaveCSS(
+    "padding",
+    "36px 24px 80px",
+  );
   await expect(writingPane.locator(".writing-block-gutter")).toBeVisible();
   await expect(separator).toHaveAttribute("aria-valuenow", "50");
 
@@ -75,6 +79,10 @@ test("W07 keeps Code and block Writing synchronized and promotes either leaf to 
   expect(gutterBox!.y).toBeGreaterThanOrEqual(writingHeaderBox!.y + writingHeaderBox!.height);
   expect(Math.abs(gutterBox!.y - activeLineBox!.y)).toBeLessThanOrEqual(12);
   expect(gutterBox!.x).toBeGreaterThanOrEqual(activeLineBox!.x + activeLineBox!.width);
+  await page.screenshot({
+    path: ".artifacts/w07-split-edit.png",
+    fullPage: true,
+  });
   await page.keyboard.press("Control+End");
   await page.keyboard.press("Enter");
   await page.keyboard.insertText("یک بند تازه از نمای نوشتن");
@@ -162,9 +170,9 @@ test("W07 compact breakpoint exposes Code and Writing without a split shell", as
   const code = page.locator('[data-workspace-screen="code"]');
   await expect(code).toBeVisible();
   const codeHeader = code.locator(".editor-pane > .pane-header");
-  await expect(codeHeader).toHaveCSS("display", "contents");
+  await expect(codeHeader).toBeHidden();
   await expect(codeHeader.locator(".pane-title")).toBeHidden();
-  await expect(codeHeader.locator(".editor-primary-tools")).toBeVisible();
+  await expect(codeHeader.locator(".editor-primary-tools")).toBeHidden();
 
   await mobileTabs.getByRole("tab", { name: "نوشتن", exact: true }).click();
   const writing = page.locator('[data-workspace-screen="writing"]');
@@ -173,4 +181,41 @@ test("W07 compact breakpoint exposes Code and Writing without a split shell", as
   await expect(writingHeader).toHaveCSS("display", "contents");
   await expect(writingHeader.locator(".pane-title")).toBeHidden();
   await expect(writingHeader.locator(".editor-primary-tools")).toBeVisible();
+});
+
+test("W07 gives the Code leaf a bounded inset on ultrawide screens", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 3440, height: 1440 });
+  await page.goto("/");
+  await expect(page.locator(".app-shell")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
+  await page
+    .locator('input[type="file"][accept*=".md"]')
+    .first()
+    .setInputFiles({
+      name: "ultrawide-split.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("# نمای دوگانه\n\nفاصلهٔ بخش کد در نمایش فوق‌عریض."),
+    });
+  const leaveReading = page.getByRole("button", {
+    name: "بازگشت به میز",
+    exact: true,
+  });
+  if (await leaveReading.isVisible()) await leaveReading.click();
+  await page
+    .getByRole("button", { name: "نمونه‌خوانی دوبرگی", exact: true })
+    .click();
+
+  await expect(
+    page.locator(
+      '[data-workspace-screen="split"] .editor-pane #markdown-editor .cm-content',
+    ),
+  ).toHaveCSS("padding", "36px 48px 80px");
+  await page.screenshot({
+    path: ".artifacts/w07-split-edit-ultrawide.png",
+    fullPage: true,
+  });
 });

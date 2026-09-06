@@ -4,7 +4,7 @@ import {
 } from "../commands/command-palette";
 import type { EditorBlockType } from "./block-types";
 
-export type SlashMenuBlockType = Exclude<EditorBlockType, "code-block">;
+export type SlashMenuBlockType = EditorBlockType;
 
 export type SlashMenuItem = {
   type: SlashMenuBlockType;
@@ -88,6 +88,14 @@ export const SLASH_MENU_ITEMS: readonly SlashMenuItem[] = [
     description: "فهرست شماره‌دار",
     keywords: ["number", "ordered list", "steps", "شماره", "مراحل", "ترتیبی"],
     group: "list",
+  },
+  {
+    type: "code-block",
+    alias: "/code",
+    title: "بلوک کد",
+    description: "کد چندخطی قابل ویرایش",
+    keywords: ["code", "code block", "fence", "بلوک کد", "کد چندخطی"],
+    group: "media",
   },
   {
     type: "quote",

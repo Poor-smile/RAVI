@@ -230,7 +230,7 @@ test("R09 keeps Inline Mermaid expansive and legible in Reading", async ({
     size: "12px",
     weight: "700",
     line: "18px",
-    focus: "none",
+    focus: "rgb(159, 181, 255) 0px 0px 0px 2px inset",
   });
   expect(contract.meta).toEqual({
     titleSize: "12px",
@@ -322,6 +322,14 @@ test("R09 opens the same rendered SVG in Graph Viewer and restores its Reading a
       ),
     )
     .toBeLessThanOrEqual(2);
+
+  // Cover the interval where the viewer is visible but focus is still outside.
+  await action.evaluate((button: HTMLButtonElement) => button.click());
+  await expect(diagram).toHaveAttribute("data-mermaid-view", "graph-viewer");
+  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+  await page.keyboard.press("Escape");
+  await expect(diagram).toHaveAttribute("data-mermaid-view", "inline");
+  await expect(page.locator(".app-shell")).toHaveClass(/is-reading/);
 });
 
 test("R09 stacks its touch-safe action without horizontal overflow on mobile", async ({

@@ -22,7 +22,7 @@ const READING_FIXTURE = [
   "```",
 ].join("\n");
 
-test("R01 assembles the closed 760px reading surface and four-item rail", async ({
+test("R01 assembles the closed 760px reading surface and reading rail with local search and assistance", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1180, height: 858 });
@@ -74,7 +74,7 @@ test("R01 assembles the closed 760px reading surface and four-item rail", async 
     "راهنمای نگارش.md",
   );
   await expect(page.locator(".reading-local-note")).toHaveText(
-    "●فقط روی این دستگاه",
+    "●مخزن · ذخیرهٔ محلی",
   );
   await expect(
     header.getByRole("button", { name: "بازگشت به میز", exact: true }),
@@ -85,14 +85,16 @@ test("R01 assembles the closed 760px reading surface and four-item rail", async 
   await expect(header.locator(".reading-header-outline-toggle--mobile")).toBeHidden();
 
   const railButtons = rail.getByRole("button");
-  await expect(railButtons).toHaveCount(4);
-  await expect(railButtons.nth(0)).toHaveAttribute(
+  const readingButtons = rail.locator("button:not(.is-magic)");
+  await expect(railButtons).toHaveCount(5);
+  await expect(rail.getByRole("button", { name: "راوی هوشمند", exact: true })).toBeVisible();
+  await expect(readingButtons.nth(0)).toHaveAttribute(
     "aria-label",
     "جست‌وجو در متن",
   );
-  await expect(railButtons.nth(1)).toHaveAttribute("aria-label", "فهرست سند");
-  await expect(railButtons.nth(2)).toHaveAttribute("aria-label", "هایلایت‌ها");
-  await expect(railButtons.nth(3)).toHaveAttribute("aria-label", "نظرات");
+  await expect(readingButtons.nth(1)).toHaveAttribute("aria-label", "فهرست سند");
+  await expect(readingButtons.nth(2)).toHaveAttribute("aria-label", "هایلایت‌ها");
+  await expect(readingButtons.nth(3)).toHaveAttribute("aria-label", "نظرات");
   await expect(rail.locator('[aria-current="page"]')).toHaveCount(0);
   await expect(page.locator("#library-panel")).toHaveClass(/is-collapsed/);
   await expect(page.locator("#library-panel")).not.toHaveAttribute("role", "dialog");
@@ -140,7 +142,7 @@ test("R01 assembles the closed 760px reading surface and four-item rail", async 
         header: rect(".reading-header-document"),
         workspace: rect('[data-workspace-screen="reading"]'),
         rail: rect(".sidebar-rail"),
-        firstRailItem: rect(".sidebar-rail > button:first-child"),
+        firstRailItem: rect('.sidebar-rail > button[data-sidebar-destination="search"]'),
         sheet: rect('[data-workspace-screen="reading"] .preview-pane'),
         status: rect(".reading-document-status"),
         diagram: rect(".mermaid-diagram.is-reading"),
@@ -149,7 +151,7 @@ test("R01 assembles the closed 760px reading surface and four-item rail", async 
         shellRadius: style(".app-shell").borderRadius,
         headerRadius: style(".reading-header-document").borderRadius,
         headerBorder: style(".reading-header-document").borderWidth,
-        railBorder: style(".sidebar-rail > button:first-child").borderWidth,
+        railBorder: style('.sidebar-rail > button[data-sidebar-destination="search"]').borderWidth,
         sheetRadius: style(
           '[data-workspace-screen="reading"] .preview-pane',
         ).borderRadius,
@@ -182,15 +184,17 @@ test("R01 assembles the closed 760px reading surface and four-item rail", async 
     };
   });
 
+  expect(contract.geometry.diagram.height).toBeGreaterThanOrEqual(380);
+  expect(contract.geometry.sheet.y + contract.geometry.sheet.height).toBeGreaterThan(contract.geometry.diagram.y + contract.geometry.diagram.height);
   expect(contract.geometry).toEqual({
     titlebar: { x: 0, y: 0, width: 1180, height: 36 },
     header: { x: 0, y: 36, width: 1124, height: 64 },
     workspace: { x: 0, y: 36, width: 1124, height: 822 },
     rail: { x: 1124, y: 36, width: 56, height: 822 },
     firstRailItem: { x: 1134, y: 48, width: 36, height: 36 },
-    sheet: { x: 182, y: 120, width: 760, height: 680 },
-    status: { x: 394, y: 756, width: 336, height: 28 },
-    diagram: { x: 230, y: contract.geometry.diagram.y, width: 664, height: 172 },
+    sheet: { x: 182, y: 120, width: 760, height: contract.geometry.sheet.height },
+    status: { x: 394, y: contract.geometry.sheet.y + contract.geometry.sheet.height - 44, width: 336, height: 28 },
+    diagram: { x: 230, y: contract.geometry.diagram.y, width: 664, height: contract.geometry.diagram.height },
   });
   expect(contract.geometry.diagram.y).toBe(472);
   expect(contract.surfaces).toEqual({
@@ -204,7 +208,7 @@ test("R01 assembles the closed 760px reading surface and four-item rail", async 
     quoteBorder: "0px",
     quoteRadius: "6px",
     diagramBorder: "0px",
-    diagramSurfaceRadius: "6px",
+    diagramSurfaceRadius: "0px",
     diagramActionRadius: "6px",
     returnBackground: "rgb(232, 235, 226)",
     returnRadius: "6px",

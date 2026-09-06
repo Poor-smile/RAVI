@@ -119,7 +119,11 @@ test("P18 external image asks before any network request and external links warn
 
   await page.getByRole("button", { name: "بازگشت به میز", exact: true }).click();
   await expect(page.locator('.cm-rich-image img[src="https://assets.example.test/image.svg"]')).toBeVisible();
-  expect(imageRequests).toBe(2);
+  // The approved image remains decoded when switching back to the desk.
+  await expect.poll(() => page.locator('.cm-rich-image img[src="https://assets.example.test/image.svg"]').evaluate(
+    (image: HTMLImageElement) => image.complete && image.naturalWidth > 0,
+  )).toBe(true);
+  expect(imageRequests).toBe(1);
 });
 
 test("P18 remains touch-safe and reset preserves the document snapshot", async ({ page }) => {

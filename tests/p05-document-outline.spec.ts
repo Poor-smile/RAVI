@@ -173,7 +173,12 @@ test("P05 assembles the hierarchical Document Outline panel from Figma", async (
   await expect(searchInput).toBeHidden();
 
   const editor = page.locator("#markdown-editor .cm-content");
-  await editor.fill("متن بدون تیتر");
+  await page.locator('[data-command-id="view.editor.source"]').click();
+  await editor.press("ControlOrMeta+A");
+  await page.keyboard.insertText("متن بدون تیتر");
+  await expect.poll(() => page.evaluate(() => JSON.parse(
+    localStorage.getItem("raavi:document:v1") ?? "{}",
+  ).content)).toBe("متن بدون تیتر");
   await expect(panel.locator(".reading-document-outline-summary")).toHaveText(
     "ساختار سند · ۰ بخش",
   );

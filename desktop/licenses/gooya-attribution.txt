@@ -1,0 +1,16 @@
+Gooya V1 and Negara G2P
+========================
+
+Gooya V1 and the Negara G2P assets are distributed in Raavi under a
+separately acquired license held by Ava Saba Melal (آوا صبای ملل), according
+to the license confirmation supplied by the product owner.
+
+Upstream projects:
+- https://huggingface.co/Reza2kn/gooya-v1
+- https://huggingface.co/Reza2kn/negara-g2p-clean-v7.1
+
+MOSS-TTS-Nano and MOSS Audio Tokenizer components are provided under the
+Apache License 2.0. Their notices and source information remain applicable.
+
+This notice records package provenance and does not replace the private
+license agreement held by Ava Saba Melal.

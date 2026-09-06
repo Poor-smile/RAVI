@@ -7,11 +7,15 @@ const projectRoot = path.resolve(
 );
 
 export function playwrightWorkerServer(port: number, logPath: string) {
+  const serverEnvironment = { ...process.env };
+  if (serverEnvironment.FORCE_COLOR !== undefined) {
+    delete serverEnvironment.NO_COLOR;
+  }
   return {
     command: `node scripts/start-playwright-worker.mjs --port ${port}`,
     cwd: projectRoot,
     env: {
-      ...process.env,
+      ...serverEnvironment,
       WRANGLER_LOG_PATH: logPath,
     },
     url: `http://127.0.0.1:${port}`,

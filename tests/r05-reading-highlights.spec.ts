@@ -157,7 +157,7 @@ test("R05 renders real local highlights in the docked Reading pane", async ({
   await expect(sidebar).toHaveAttribute("role", "complementary");
   await expect(sidebar).not.toHaveAttribute("aria-modal");
   await expect(trigger).toHaveAttribute("aria-current", "page");
-  await expect(rail.getByRole("button")).toHaveCount(4);
+  await expect(rail.getByRole("button")).toHaveCount(5);
 
   await expect(pane.locator("#sidebar-pane-title")).toHaveText("هایلایت‌ها");
   await expect(pane.locator(".sidebar-pane-heading > span")).toHaveCount(0);
@@ -183,7 +183,7 @@ test("R05 renders real local highlights in the docked Reading pane", async ({
   await expect(rowActions.nth(0)).toHaveAttribute("aria-current", "location");
   await expect(page.locator(".library-privacy")).toBeHidden();
   await expect(page.locator(".library-footer")).toHaveText(
-    "محلی · همراه فایل .ravi",
+    "Markdown · محلی و قابل‌حمل",
   );
 
   const contract = await page.evaluate(() => {

@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import worker from "../dist/server/index.js";
@@ -438,38 +438,32 @@ export async function readMarkdownPath(filePath) {
   return readFile(resolvedFile, "utf8");
 }
 
-export async function readMarkdownFile(filePath, allowedRoots) {
-  const resolvedFile = path.resolve(filePath);
-  const insideAllowedRoot = [...allowedRoots].some((rootPath) => {
-    const relativePath = path.relative(rootPath, resolvedFile);
-    return (
-      relativePath &&
-      !relativePath.startsWith("..") &&
-      !path.isAbsolute(relativePath)
-    );
-  });
-
-  if (!insideAllowedRoot) {
-    throw new Error("File access is outside the selected library.");
+export async function resolveLibraryDocumentPath(filePath, allowedRoots) {
+  const resolvedFile = await realpath(path.resolve(filePath));
+  for (const rootPath of allowedRoots) {
+    let resolvedRoot;
+    try {
+      resolvedRoot = await realpath(rootPath);
+    } catch {
+      // One unavailable library does not revoke access to another selected root.
+      continue;
+    }
+    const relativePath = path.relative(resolvedRoot, resolvedFile);
+    if (relativePath && relativePath !== ".." &&
+        !relativePath.startsWith(`..${path.sep}`) && !path.isAbsolute(relativePath)) {
+      return resolvedFile;
+    }
   }
+  throw new Error("File access is outside the selected library.");
+}
 
-  return readMarkdownPath(resolvedFile);
+export async function readMarkdownFile(filePath, allowedRoots) {
+  return readMarkdownPath(await resolveLibraryDocumentPath(filePath, allowedRoots));
 }
 
 export async function readLibraryDocument(filePath, allowedRoots) {
-  const resolvedFile = path.resolve(filePath);
-  const insideAllowedRoot = [...allowedRoots].some((rootPath) => {
-    const relativePath = path.relative(rootPath, resolvedFile);
-    return (
-      relativePath &&
-      !relativePath.startsWith("..") &&
-      !path.isAbsolute(relativePath)
-    );
-  });
-
-  if (!insideAllowedRoot) {
-    throw new Error("File access is outside the selected library.");
-  }
-
-  return readDocumentPath(resolvedFile);
+  const document = await readDocumentPath(await resolveLibraryDocumentPath(filePath, allowedRoots));
+  // Validate/read the physical target, but retain the path authorized by the
+  // picker. Changing it breaks save access when a selected root is a junction.
+  return { ...document, path: path.resolve(filePath) };
 }

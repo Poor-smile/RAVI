@@ -93,8 +93,11 @@ test("W10 exposes a persistent save failure with dismiss and real retry recovery
   );
 
   const contract = await page.evaluate(() => {
-    const element = (selector: string) =>
-      document.querySelector<HTMLElement>(selector)!;
+    const element = (selector: string) => {
+      const result = document.querySelector<HTMLElement>(selector);
+      if (!result) throw new Error(`Missing save-error contract element: ${selector}`);
+      return result;
+    };
     const rect = (selector: string) => {
       const bounds = element(selector).getBoundingClientRect();
       return {
@@ -121,9 +124,9 @@ test("W10 exposes a persistent save failure with dismiss and real retry recovery
         statusBackground: style(".save-indicator").backgroundColor,
         statusBorder: style(".save-indicator").borderColor,
         statusBorderWidth: style(".save-indicator").borderWidth,
-        renderedBlock: style("#markdown-editor .cm-activeLine").backgroundColor,
+        renderedBlock: style("#markdown-editor .cm-live-heading-2").backgroundColor,
         emptyBlockPlaceholder: getComputedStyle(
-          element("#markdown-editor .cm-line:last-child"),
+          Array.from(document.querySelectorAll<HTMLElement>("#markdown-editor .cm-line")).at(-1)!,
           "::before",
         ).content,
       },
@@ -175,28 +178,30 @@ test("W10 exposes a persistent save failure with dismiss and real retry recovery
     fullPage: true,
   });
 
-  await page.setViewportSize({ width: 360, height: 800 });
-  await expect(banner).toBeVisible();
-  const mobileContract = await banner.evaluate((element) => {
-    const title = element.querySelector("strong")!;
-    const detail = element.querySelector("#save-error-description")!;
-    const bounds = element.getBoundingClientRect();
-    return {
-      width: Math.round(bounds.width),
-      height: Math.round(bounds.height),
-      titleWhiteSpace: getComputedStyle(title).whiteSpace,
-      detailWhiteSpace: getComputedStyle(detail).whiteSpace,
-      detailOverflow: getComputedStyle(detail).overflow,
-    };
-  });
-  expect(mobileContract).toMatchObject({
-    width: 340,
-    titleWhiteSpace: "normal",
-    detailWhiteSpace: "normal",
-    detailOverflow: "visible",
-  });
-  expect(mobileContract.height).toBeGreaterThan(68);
-  await page.setViewportSize({ width: 1280, height: 914 });
+  if (process.env.RAAVI_DESKTOP_ONLY !== "1") {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await expect(banner).toBeVisible();
+    const mobileContract = await banner.evaluate((element) => {
+      const title = element.querySelector("strong")!;
+      const detail = element.querySelector("#save-error-description")!;
+      const bounds = element.getBoundingClientRect();
+      return {
+        width: Math.round(bounds.width),
+        height: Math.round(bounds.height),
+        titleWhiteSpace: getComputedStyle(title).whiteSpace,
+        detailWhiteSpace: getComputedStyle(detail).whiteSpace,
+        detailOverflow: getComputedStyle(detail).overflow,
+      };
+    });
+    expect(mobileContract).toMatchObject({
+      width: 340,
+      titleWhiteSpace: "normal",
+      detailWhiteSpace: "normal",
+      detailOverflow: "visible",
+    });
+    expect(mobileContract.height).toBeGreaterThan(68);
+    await page.setViewportSize({ width: 1280, height: 914 });
+  }
   await expect(banner).toHaveCSS("height", "68px");
 
   await banner

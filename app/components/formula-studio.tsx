@@ -1123,6 +1123,7 @@ export function FormulaStudio({
     label: string,
     mutate: Parameters<typeof commitFormulaTransaction>[2],
     message?: string,
+    focusActiveNode = true,
   ) => {
     let nextActiveNodeId = formula.activeNodeId;
     setFormula((current) => {
@@ -1137,7 +1138,9 @@ export function FormulaStudio({
     setApplyError("");
     setSelectedNodeId(null);
     if (message) setAnnouncement(message);
-    requestAnimationFrame(() => leafRefs.current.get(nextActiveNodeId)?.focus());
+    if (focusActiveNode) {
+      requestAnimationFrame(() => leafRefs.current.get(nextActiveNodeId)?.focus());
+    }
   };
 
   const commitRaw = (value: string, message?: string) => {
@@ -1199,12 +1202,14 @@ export function FormulaStudio({
     node: Extract<FormulaExpressionNode, { kind: "slot" | "atom" }>,
     value: string,
   ) => {
+    // Editing preserves the existing input. A delayed focus here would steal
+    // focus back from a subsequent Tab or pointer navigation.
     commitMutation(`edit ${node.id}`, (root) => {
       const replacement = value.length > 0
         ? formulaAtom(value, atomKindForValue(value), node.id)
         : formulaSlot(node.kind === "slot" ? node.name : "expression", true, node.id);
       return { root: replaceFormulaNode(root, node.id, replacement), activeNodeId: node.id };
-    });
+    }, undefined, false);
   };
 
   const moveLeafFocus = (delta: number) => {

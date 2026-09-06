@@ -1,5 +1,6 @@
+import { releaseElectron as electron } from "./helpers/release-electron";
 import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
-import { _electron as electron } from "playwright";
+
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";

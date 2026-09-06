@@ -51,6 +51,16 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    build: {
+      // The app shell is intentionally broad; feature chunks have stricter,
+      // release-blocking budgets in app/release/client-chunk-budgets.json.
+      chunkSizeWarningLimit: 700,
+      rolldownOptions: {
+        // vinext's required transform plugins can dominate tiny build phases;
+        // their timing report is tooling noise, while chunk budgets remain fatal.
+        checks: { pluginTimings: false },
+      },
+    },
     server: {
       watch: {
         ignored: [

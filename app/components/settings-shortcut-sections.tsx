@@ -174,7 +174,7 @@ export function SettingsShortcutSections({
   const normalizedQuery = normalizeCommandQuery(query);
   const catalog = useMemo(
     () => buildCatalog(environment),
-    [environment.platform, environment.surface],
+    [environment],
   );
   const totalCount = catalog.reduce(
     (sum, section) => sum + section.items.length,

@@ -11,6 +11,7 @@ import {
   RefreshCw,
 } from "@/app/icons/material-symbols";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import Image from "next/image";
 import {
   useEffect,
   useMemo,
@@ -120,10 +121,13 @@ function FirstRunProgress({ step }: { step: FirstRunStep }) {
 
 function RaaviLogo({ className = "" }: { className?: string }) {
   return (
-    <img
+    <Image
       className={className}
       src="/brand/raavi-logo-transparent-128.png"
       alt=""
+      width={128}
+      height={128}
+      unoptimized
       draggable={false}
     />
   );
@@ -131,10 +135,13 @@ function RaaviLogo({ className = "" }: { className?: string }) {
 
 function MarkdownIcon({ className = "" }: { className?: string }) {
   return (
-    <img
+    <Image
       className={className}
       src="/brand/raavi-markdown-transparent-128.png"
       alt=""
+      width={128}
+      height={128}
+      unoptimized
       draggable={false}
     />
   );
@@ -143,10 +150,14 @@ function MarkdownIcon({ className = "" }: { className?: string }) {
 function VaultArt({ resume }: { resume: boolean }) {
   return (
     <div className={`first-run-art first-run-art--vault${resume ? " is-resume" : ""}`} aria-hidden="true">
-      <img
+      <Image
         className="first-run-vault-wallpaper"
         src="/brand/onboarding-desktop-wallpaper.jpg"
         alt=""
+        width={2780}
+        height={1680}
+        unoptimized
+        priority
       />
       <div className="first-run-dock">
         {["a", "b", "c"].map((key) => <i key={key} />)}
@@ -213,8 +224,8 @@ function BackupArt({ resume }: { resume: boolean }) {
         <RaaviLogo className="first-run-cloud-raavi" />
         <div className="first-run-cloud-services">
           <span className="first-run-cloud-chatgpt"><ChatGPTIcon /></span>
-          <img src="/brands/google/google-drive-2026.svg" alt="" />
-          <img src="/brands/proton/proton-drive.svg" alt="" />
+          <Image src="/brands/google/google-drive-2026.svg" alt="" width={64} height={64} unoptimized />
+          <Image src="/brands/proton/proton-drive.svg" alt="" width={64} height={64} unoptimized />
         </div>
       </div>
     </div>
@@ -431,7 +442,14 @@ function BackupProviderCard({
           {providerStateLabel(state)}
         </span>
       ) : null}
-      <img className="first-run-provider__logo" src={provider.logo} alt="" />
+      <Image
+        className="first-run-provider__logo"
+        src={provider.logo}
+        alt=""
+        width={64}
+        height={64}
+        unoptimized
+      />
     </button>
   );
 }

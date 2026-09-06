@@ -62,6 +62,7 @@ test("W09 opens the exact compact overflow menu with real commands and keyboard 
   await expect(items.first()).toBeFocused();
   await expect(page.locator(".writing-block-gutter")).toBeHidden();
 
+  await expect(trigger).toHaveCSS("background-color", "rgb(20, 26, 22)");
   const contract = await page.evaluate(() => {
     const element = (selector: string) =>
       document.querySelector<HTMLElement>(selector)!;

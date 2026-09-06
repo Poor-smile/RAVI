@@ -173,7 +173,7 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(page, /addAnnotation/);
   assert.match(page, /findAnnotationAtPoint/);
   assert.match(page, /onPointerMove=\{handleAnnotationPointerMove\}/);
-  assert.match(page, /onClick=\{handleAnnotationClick\}/);
+  assert.ok(/onClick=\{\(event\) => \{[\s\S]*?handleAnnotationClick\(event\);/.test(page), "Annotation clicks must remain wired to the preview");
   assert.match(page, /annotation-hover-preview/);
   assert.match(page, /background: var\(--highlight-bg\)/);
   assert.match(page, /نظر یا بازخورد خود را بنویسید/);
@@ -393,7 +393,10 @@ test("ships the secure Mermaid Studio and standard-fence workflow", async () => 
     css,
     /@media print[\s\S]*?\.mermaid-svg\s*\{[\s\S]*?max-height:\s*210mm;/u,
   );
-  assert.match(packageJson, /"mermaid": "11\.16\.0"/);
+  const mermaidVersion = JSON.parse(packageJson).devDependencies.mermaid;
+  assert.match(mermaidVersion, /^\d+\.\d+\.\d+$/u, "Pin a stable Mermaid release");
+  const [major, minor, patch] = mermaidVersion.split(".").map(Number);
+  assert.ok(major > 11 || (major === 11 && (minor > 16 || (minor === 16 && patch >= 1))), "Mermaid must include the 11.16.1 security fixes");
   assert.match(registry, /id: "diagram\.mermaid"/);
   assert.match(registry, /code: "KeyM", alt: true/);
 });

@@ -1,764 +1,237 @@
 <!--
-THESIS: خودِ معرفی راوی یک سند Markdown زنده است؛ صفحه از هیروی عمومی نرم‌افزار و ردیف کارت‌های تکراری دوری می‌کند.
-OWN-WORLD: کاغذ سرد، مرکب زغالی، آبی نمونه‌خوان، خط صحافی و کنترل‌های کم‌گردِ میز راوی.
-STORY: بازدیدکننده در چند ثانیه می‌فهمد راوی چیست، همان‌جا Markdown را تغییر می‌دهد، شواهد واقعی را می‌بیند و برای استفاده یا حمایت تصمیم می‌گیرد.
-FIRST VIEWPORT: پیام اصلی و تصویر واقعی محصول روبه‌روی هم‌اند؛ CTA نسخهٔ وب و دریافت دسکتاپ بدون جست‌وجو دیده می‌شوند.
-FORM: متن و نتیجه در دو برگ موازی، با اتصال مستقیم هر ادعا به نمای واقعی محصول؛ ساختار منتخب «سند زنده» با staging متن/ساخت کنار هم.
+THESIS: تمام سایت یک سطح زنده است؛ راوی به‌جای توضیح‌دادن قابلیت‌ها، آن‌ها را از دل لوگو روی آب رها می‌کند.
+OWN-WORLD: موج‌های برند راوی، شیشهٔ مایع، پنجرهٔ دقیق ویندوز و تایپوگرافی فارسی ایران‌سنس.
+STORY: معرفی را می‌خوانید، پنجره را جمع می‌کنید، با لوگو بازی می‌کنید و هر قابلیت را در نمای واقعی محصول می‌بینید.
+FIRST VIEWPORT: لوگوی بزرگ در چپ، پنجرهٔ معرفی در راست و پس‌زمینهٔ WebGL در تمام قاب؛ CTA داخل همان پنجره است.
+FORM: صحنهٔ تعاملی تک‌صفحه‌ای با پنجرهٔ جمع‌شونده، فیزیک شناور و جزئیات مبتنی بر دارایی واقعی محصول.
 -->
 <!doctype html>
 <html lang="fa" dir="rtl">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="راوی؛ ابزار رایگان خواندن، ویرایش و مدیریت فایل‌های Markdown فارسی در مرورگر و دسکتاپ، مناسب کار با محتوای هوش مصنوعی."
-    />
-    <meta name="theme-color" content="#171b18" />
-    <meta name="color-scheme" content="light" />
-    <title>راوی — Markdown فارسی، خوانا و مرتب</title>
-    <link
-      rel="preload"
-      href="./assets/fonts/IRANSansX-Regular.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      href="./assets/fonts/IRANSansX-Bold.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      href="./assets/screens/raavi-workspace.webp"
-      as="image"
-      type="image/webp"
-      fetchpriority="high"
-    />
-    <link rel="stylesheet" href="./style.css?v=2.2.1-1" />
-    <script src="./app.js?v=2.2.1-1" defer></script>
+    <meta name="description" content="راوی ۲.۲.۱؛ فضای شخصی نوشتن و مطالعه برای فارسی در Windows، macOS و وب، با ChatGPT، نمودار، فرمول، خروجی Word و PDF و پشتیبان‌گیری انتخابی." />
+    <meta name="theme-color" content="#dbe7ff" />
+    <meta name="color-scheme" content="light dark" />
+    <title>راوی ۲.۲.۱؛ فضای شخصی نوشتن و مطالعه برای فارسی</title>
+    <link rel="preload" href="./assets/fonts/IRANSansX-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="./assets/fonts/IRANSansX-Bold.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="./style.css?v=2.2.1-20260901" />
+    <script src="./app.js?v=2.2.1-20260901" defer></script>
   </head>
   <body>
-    <a class="skip-link" href="#main-content">رفتن به محتوای اصلی</a>
+    <a class="skip-link" href="#info-window">رفتن به معرفی راوی</a>
 
-    <header class="site-header">
-      <a class="brand" href="#top" aria-label="راوی؛ بازگشت به ابتدای صفحه">
-        <span class="brand-mark" aria-hidden="true">ر</span>
-        <span class="brand-copy">
-          <strong>راوی</strong>
-          <small>میز Markdown فارسی</small>
-        </span>
-      </a>
+    <main class="experience" id="top" data-experience>
+      <canvas class="ocean-canvas" id="raavi-ocean" aria-hidden="true"></canvas>
+      <div class="light-wash" aria-hidden="true"></div>
+      <div class="dark-wash" aria-hidden="true"></div>
+      <div class="feature-arena" data-feature-arena aria-live="polite"></div>
 
-      <nav class="site-nav" aria-label="راهنمای صفحه">
-        <a href="#what-is-markdown">Markdown چیست؟</a>
-        <a href="#live-demo">تجربهٔ زنده</a>
-        <a href="#features">ویژگی‌ها</a>
-      </nav>
+      <section class="logo-stage" data-logo-stage aria-label="آیکن تعاملی راوی">
+        <button
+          class="raavi-logo"
+          type="button"
+          data-raavi-logo
+          aria-label="برای جمع‌کردن معرفی و ورود به فضای قابلیت‌های راوی کلیک کنید"
+        >
+          <span class="raavi-logo__shadow" aria-hidden="true"></span>
+          <span class="raavi-logo__surface" aria-hidden="true">
+            <svg class="raavi-logo__svg" viewBox="0 0 1024 1024" role="presentation">
+              <defs>
+                <linearGradient id="line-glass" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#dff6ff" stop-opacity="0.56" />
+                  <stop offset="0.52" stop-color="#d6e5ff" stop-opacity="0.18" />
+                  <stop offset="1" stop-color="#f5ddff" stop-opacity="0.42" />
+                </linearGradient>
+                <linearGradient id="glyph-glass" x1="0.15" y1="0" x2="0.85" y2="1">
+                  <stop offset="0" stop-color="#d8f4ff" stop-opacity="0.6" />
+                  <stop offset="0.48" stop-color="#bfd9ff" stop-opacity="0.16" />
+                  <stop offset="1" stop-color="#ead7ff" stop-opacity="0.42" />
+                </linearGradient>
+                <filter id="glass-shadow" x="-35%" y="-35%" width="170%" height="180%">
+                  <feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#173b8d" flood-opacity="0.23" />
+                </filter>
+              </defs>
+              <g class="raavi-logo__lines">
+                <rect x="144" y="233" width="736" height="36" rx="18" />
+                <rect x="144" y="403" width="736" height="36" rx="18" />
+                <rect x="144" y="573" width="736" height="36" rx="18" />
+                <rect x="144" y="743" width="736" height="36" rx="18" />
+              </g>
+              <path
+                class="raavi-logo__glyph"
+                d="M305 663.473C347.272 644.552 386.073 623.74 421.405 601.035C457.367 578.961 485.759 558.148 506.579 538.597C528.03 519.046 538.756 503.594 538.756 492.241C538.756 478.997 533.078 451.247 521.721 408.99C510.365 366.734 496.484 319.433 480.08 267.086L607.842 216C623.615 259.517 635.918 305.873 644.751 355.067C653.584 403.63 658 449.354 658 492.241C658 536.389 646.643 578.015 623.93 617.117C601.217 656.851 569.04 692.8 527.399 724.965C485.759 757.761 436.547 786.772 379.764 812L305 663.473Z"
+              />
+            </svg>
+          </span>
+        </button>
+        <p class="logo-prompt" data-logo-prompt>
+          <span aria-hidden="true">＋</span>
+          روی من کلیک کنید
+          <small>هر کلیک، یک قابلیت را روی آب رها می‌کند.</small>
+        </p>
+      </section>
 
-      <a
-        class="header-action"
-        href="https://raviweb.poorsmile.ir/"
-        target="_blank"
-        rel="noopener noreferrer"
-      >باز کردن نسخهٔ وب</a>
-    </header>
+      <div class="app-card-fan" data-card-fan aria-label="تصاویر واقعی راوی؛ برای بازکردن گالری یکی را انتخاب کنید">
+        <button class="gallery-card gallery-card--writing" type="button" data-gallery-card="0" aria-label="بازکردن گالری تصاویر راوی">
+          <img src="./assets/screens/gallery-01-writing-light.png?v=2.2.1-20260901" alt="" decoding="async" />
+        </button>
+        <button class="gallery-card gallery-card--ai" type="button" data-gallery-card="1" aria-label="بازکردن گالری تصاویر راوی">
+          <img src="./assets/screens/gallery-02-writing-dark.png?v=2.2.1-20260901" alt="" decoding="async" />
+        </button>
+        <button class="gallery-card gallery-card--diagram" type="button" data-gallery-card="2" aria-label="بازکردن گالری تصاویر راوی">
+          <img src="./assets/screens/gallery-03-ai-table.png?v=2.2.1-20260901" alt="" decoding="async" />
+        </button>
+        <button class="gallery-card gallery-card--reading" type="button" data-gallery-card="3" aria-label="بازکردن گالری تصاویر راوی">
+          <img src="./assets/screens/gallery-04-reading-report.png?v=2.2.1-20260901" alt="" decoding="async" />
+        </button>
+      </div>
 
-    <main id="main-content">
-      <section class="hero" id="top" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <p class="hero-kicker">
+      <article class="info-window" id="info-window" data-info-window>
+        <header class="window-bar">
+          <div class="window-identity">
+            <span class="window-app-mark window-app-mark--real" aria-hidden="true"><img src="./assets/raavi-logo-transparent-128.png?v=2.2.1-20260901" alt="" /></span>
+            <span><strong>راوی ۲.۲.۱</strong></span>
+            <button
+              class="theme-switch"
+              type="button"
+              role="switch"
+              aria-checked="false"
+              aria-label="فعال‌کردن حالت تاریک"
+              data-theme-switch
+            >
+              <span class="theme-switch__icon" aria-hidden="true">☼</span>
+              <span class="theme-switch__track" aria-hidden="true"><span></span></span>
+            </button>
+          </div>
+          <button class="window-minimize" type="button" data-minimize aria-label="جمع‌کردن پنجرهٔ معرفی" aria-controls="info-window" aria-expanded="true">
             <span aria-hidden="true"></span>
-            نسخهٔ وب؛ بدون نصب
-          </p>
-          <h1 id="hero-title">
-            <span>Markdown فارسی؛</span>
-            <span>خوانا و مرتب.</span>
-          </h1>
-          <p class="hero-lead">
-            فایل‌های <code>md</code> همان متن‌های ساده‌ای هستند که ابزارهای هوش
-            مصنوعی زیاد تولید می‌کنند؛ اما فارسی و انگلیسی در بسیاری از برنامه‌ها
-            کنار هم درست نمایش داده نمی‌شوند. <strong>راوی</strong> کمک می‌کند
-            فایل‌های Markdown فارسی را در مرورگر یا روی دسکتاپ، مرتب و خوانا
-            ببینید و ویرایش کنید.
-          </p>
-          <div class="hero-actions">
-            <a
-              class="button button-primary"
-              href="https://raviweb.poorsmile.ir/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              باز کردن نسخهٔ وب
-              <span aria-hidden="true">↗</span>
-            </a>
-            <a class="button button-secondary" href="#download">
-              دانلود نسخهٔ دسکتاپ
-            </a>
-          </div>
-          <ul class="hero-trust" aria-label="ویژگی‌های اصلی">
-            <li><span aria-hidden="true">✓</span> فارسی و انگلیسی بدون به‌هم‌ریختگی</li>
-            <li><span aria-hidden="true">✓</span> فایل‌ها روی دستگاه شما</li>
-            <li><span aria-hidden="true">✓</span> نسخهٔ وب و دسکتاپ، رایگان</li>
-          </ul>
-        </div>
-
-        <figure class="hero-visual">
-          <div class="proof-corner" aria-hidden="true"></div>
-          <img
-            src="./assets/screens/raavi-workspace.webp"
-            alt="نمای اصلی راوی با ویرایشگر مارک‌دان، پیش‌نمایش زنده و کتابخانهٔ محلی"
-            width="1207"
-            height="699"
-            fetchpriority="high"
-          />
-          <figcaption>
-            <span>میز مارک‌دان راوی</span>
-            ویرایش، پیش‌نمایش و کتابخانه در یک قاب
-          </figcaption>
-        </figure>
-      </section>
-
-      <section
-        class="markdown-primer"
-        id="what-is-markdown"
-        aria-labelledby="markdown-primer-title"
-      >
-        <div class="markdown-primer-heading">
-          <p class="section-kicker">پیش از راوی</p>
-          <h2 id="markdown-primer-title">مارک‌دان چیست؟</h2>
-          <p>
-            فایل‌های <code>md</code> متن‌های ساده‌ای هستند که می‌توانند
-            <strong>عنوان، فهرست، پیوند و متن پررنگ</strong> داشته باشند و بسیاری
-            از ابزارهای هوش مصنوعی هم با همین ساختار کار می‌کنند. وقتی فارسی و
-            انگلیسی کنار هم قرار می‌گیرند، جهت متن ممکن است به‌هم بریزد.
-            <strong>راوی</strong> جهت هر بخش را درست تشخیص می‌دهد تا فایل را مرتب،
-            خوانا و راحت‌تر ویرایش کنید.
-          </p>
-        </div>
-
-        <div class="markdown-primer-body">
-          <ol class="markdown-benefits">
-            <li>
-              <strong>فایل سبک و ماندگار</strong>
-              <span>فایل <code>.md</code> متن ساده است و در ابزارهای مختلف باز می‌شود.</span>
-            </li>
-            <li>
-              <strong>مناسب کار با هوش مصنوعی</strong>
-              <span>بسیاری از ابزارهای هوش مصنوعی پاسخ‌ها و مستندات را با همین ساختار می‌سازند.</span>
-            </li>
-          </ol>
-        </div>
-
-        <aside class="markdown-bridge">
-          <strong>پس راوی چه کاری انجام می‌دهد؟</strong>
-          <p>
-            راوی فایل را با جهت درست فارسی و پیش‌نمایش زنده نشان می‌دهد. بدون
-            نصب در نسخهٔ وب شروع کنید؛ برای اتصال پوشه‌ها و باز کردن مستقیم فایل‌ها
-            از سیستم‌عامل، نسخهٔ دسکتاپ را بگیرید.
-          </p>
-        </aside>
-      </section>
-
-      <section
-        class="live-section"
-        id="live-demo"
-        aria-labelledby="live-title"
-      >
-        <div class="section-heading live-heading">
-          <div>
-            <p class="section-kicker">تجربهٔ زنده</p>
-            <h2 id="live-title">Markdown فارسی را همین‌جا امتحان کنید.</h2>
-          </div>
-          <p>
-            متن این معرفی را تغییر دهید. منبع این بخش یک فایل
-            <code>landing.md</code> است؛ هر تغییری فقط در همین مرورگر پیش‌نمایش
-            می‌شود و به جایی فرستاده نمی‌شود.
-          </p>
-        </div>
-
-        <div class="workbench" data-view="source">
-          <header class="workbench-header">
-            <div class="workbench-title">
-              <span class="sheet-mark" aria-hidden="true">ر</span>
-              <span>
-                <strong>برگهٔ زنده</strong>
-                <small id="editor-stats">در حال بارگذاری متن…</small>
-              </span>
-            </div>
-
-            <div class="mobile-tabs" role="tablist" aria-label="نمای نمونه">
-              <button
-                id="source-tab"
-                type="button"
-                role="tab"
-                aria-selected="true"
-                aria-controls="source-pane"
-              >
-                متن Markdown
-              </button>
-              <button
-                id="preview-tab"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="preview-pane"
-              >
-                پیش‌نمایش
-              </button>
-            </div>
-
-            <button
-              class="reset-button"
-              id="reset-content"
-              type="button"
-              disabled
-            >
-              بازگرداندن متن اصلی
-            </button>
-          </header>
-
-          <div class="workbench-body">
-            <section
-              class="editor-pane is-active"
-              id="source-pane"
-              role="tabpanel"
-              aria-labelledby="source-tab"
-              tabindex="-1"
-            >
-              <header class="pane-heading">
-                <span>برگهٔ ۱</span>
-                <strong>متن Markdown</strong>
-              </header>
-              <label class="visually-hidden" for="markdown-source">
-                متن Markdown قابل ویرایش
-              </label>
-              <textarea
-                id="markdown-source"
-                dir="auto"
-                spellcheck="false"
-                autocomplete="off"
-                aria-describedby="editor-privacy"
-              ></textarea>
-              <p id="editor-privacy">
-                ویرایش محلی است؛ محتوای این کادر ارسال یا ذخیره نمی‌شود.
-              </p>
-            </section>
-
-            <div class="registration-spine" aria-hidden="true">
-              <span></span>
-              <small>متن / نتیجه</small>
-              <span></span>
-            </div>
-
-            <section
-              class="preview-pane"
-              id="preview-pane"
-              role="tabpanel"
-              aria-labelledby="preview-tab"
-              tabindex="-1"
-            >
-              <header class="pane-heading">
-                <span>برگهٔ ۲</span>
-                <strong>پیش‌نمایش زنده</strong>
-              </header>
-              <article
-                class="markdown-preview"
-                id="markdown-preview"
-              >
-                <p class="loading-copy">در حال آماده‌کردن فایل معرفی…</p>
-              </article>
-            </section>
-          </div>
-
-          <p class="workbench-status" id="editor-status" aria-live="polite">
-            متن اصلی بدون تغییر است.
-          </p>
-        </div>
-      </section>
-
-      <section class="proof-section" id="features" aria-labelledby="proof-title">
-        <div class="section-heading proof-heading">
-          <div>
-            <p class="section-kicker">از شروع سریع تا کار عمیق</p>
-            <h2 id="proof-title">در مرورگر شروع کنید؛ روی دسکتاپ ادامه دهید.</h2>
-          </div>
-          <p>
-            نسخهٔ وب برای باز کردن، ویرایش و مطالعه آماده است؛ نسخهٔ دسکتاپ
-            اتصال پوشه‌ها و کار مستقیم با فایل‌های سیستم را هم اضافه می‌کند.
-          </p>
-        </div>
-
-        <article class="feature-band feature-library">
-          <div class="feature-copy">
-            <span class="feature-index" aria-hidden="true">قفسه</span>
-            <h3>کتابخانه‌ای که روی دستگاه می‌ماند</h3>
-            <p>
-              در نسخهٔ وب، فایل‌هایی که باز می‌کنید در کتابخانهٔ همان مرورگر
-              می‌مانند. در نسخهٔ دسکتاپ می‌توانید پوشه‌ها و زیرپوشه‌ها را هم با
-              اجازهٔ خودتان متصل کنید. مسیر و محتوای فایل به اینترنت فرستاده
-              نمی‌شود.
-            </p>
-            <ul>
-              <li>فایل‌های اخیر در نسخهٔ وب</li>
-              <li>اتصال پوشه و زیرپوشه در نسخهٔ دسکتاپ</li>
-              <li>جست‌وجو و سنجاق فایل‌های پراستفاده</li>
-            </ul>
-          </div>
-          <figure>
-            <img
-              src="./assets/screens/raavi-library.webp"
-              alt="نمای کتابخانهٔ محلی راوی با جست‌وجو، پوشه‌ها و سنجاق‌شده‌ها"
-              width="600"
-              height="600"
-              loading="lazy"
-            />
-          </figure>
-        </article>
-
-        <article class="feature-band feature-reading">
-          <figure>
-            <img
-              src="./assets/screens/raavi-reading.webp"
-              alt="نمای آرام حالت مطالعهٔ راوی برای خواندن یک فایل Markdown فارسی"
-              width="1207"
-              height="699"
-              loading="lazy"
-            />
-          </figure>
-          <div class="feature-copy">
-            <span class="feature-index" aria-hidden="true">مطالعه</span>
-            <h3>متن، وقتی باید فقط خوانده شود</h3>
-            <p>
-              حالت مطالعه ابزارهای اضافی را کنار می‌زند، نوشته را روی یک برگهٔ
-              خوانا می‌نشاند و فهرست فصل‌ها را از تیترهای Markdown می‌سازد.
-            </p>
-            <ul>
-              <li>فهرست خودکار فصل‌ها</li>
-              <li>تنظیم اندازهٔ نوشته</li>
-              <li>نمای مناسب متن‌های طولانی</li>
-            </ul>
-          </div>
-        </article>
-
-        <article class="feature-band feature-mermaid">
-          <div class="feature-copy">
-            <span class="feature-index" aria-hidden="true">نمودار</span>
-            <h3>Mermaid، بخشی از خود سند</h3>
-            <p>
-              نمودار را به‌صورت بلوک استاندارد Mermaid نگه دارید و در
-              استودیوی فارسی با پیش‌نمایش زنده، بزرگ‌نمایی، جابه‌جایی و نمونه‌های
-              آماده ویرایش کنید.
-            </p>
-            <ul>
-              <li>منبع استاندارد و قابل‌حمل</li>
-              <li>نمایش امن و محلی</li>
-              <li>نمای تمام‌صفحه برای بررسی جزئیات</li>
-            </ul>
-          </div>
-          <figure>
-            <img
-              src="./assets/screens/raavi-mermaid.webp"
-              alt="استودیوی Mermaid راوی با کد نمودار و پیش‌نمایش زندهٔ فارسی"
-              width="1207"
-              height="699"
-              loading="lazy"
-            />
-          </figure>
-        </article>
-
-        <aside class="ravi-explainer" aria-labelledby="ravi-format-title">
-          <div>
-            <p class="section-kicker">برای کار روی نوشته‌های مشترک</p>
-            <h3 id="ravi-format-title">یادداشت‌ها را همراه خود فایل بفرستید.</h3>
-          </div>
-          <div>
-            <p>
-              می‌توانید روی فایل یکدیگر یادداشت بگذارید، بخش‌های مهم را برجسته
-              کنید یا حاشیه بنویسید و سپس آن را با پسوند <code>.ravi</code>
-              برای هم بفرستید.
-            </p>
-            <p>
-              فایل <code>.ravi</code> علاوه بر متن اصلی، تصویرهای استفاده‌شده،
-              یادداشت‌ها، برجسته‌سازی‌ها و حاشیه‌نویسی‌ها را نیز همراه خود نگه
-              می‌دارد. این قالب اختصاصی راوی است و فقط با راوی باز
-              می‌شود؛ برای نوشته‌های معمولی همچنان می‌توانید از <code>.md</code>
-              استفاده کنید.
-            </p>
-          </div>
-        </aside>
-      </section>
-
-      <section class="local-first" aria-labelledby="local-title">
-        <div class="local-mark" aria-hidden="true">✓</div>
-        <div>
-          <p class="section-kicker">حریم خصوصی، نه یک گزینهٔ اضافه</p>
-          <h2 id="local-title">فایل روی همان دستگاه می‌ماند.</h2>
-        </div>
-        <ul>
-          <li>بدون حساب کاربری</li>
-          <li>بدون آپلود محتوای سند</li>
-          <li>اتصال پوشه در دسکتاپ، فقط با اجازهٔ شما</li>
-          <li>تنظیمات و آخرین نوشته روی همان دستگاه</li>
-        </ul>
-      </section>
-
-      <section class="download-section" id="download" aria-labelledby="download-title">
-        <div class="section-heading download-heading">
-          <div>
-            <p class="section-kicker">راه‌های استفاده</p>
-            <h2 id="download-title">در مرورگر یا روی دسکتاپ.</h2>
-          </div>
-          <div class="download-heading-copy">
-            <p>
-              نسخهٔ وب بدون نصب آماده است. برای اتصال پوشه‌ها و باز کردن مستقیم
-              فایل‌ها از سیستم‌عامل، نسخهٔ مناسب Windows، macOS یا Linux را
-              دریافت کنید.
-            </p>
-            <button
-              class="button button-secondary changelog-trigger"
-              id="open-changelog"
-              type="button"
-              aria-haspopup="dialog"
-              aria-controls="changelog-dialog"
-            >
-              <span aria-hidden="true">☷</span>
-              دفتر تغییرات
-            </button>
-          </div>
-        </div>
-
-        <div class="download-ledger" aria-label="راه‌های استفاده و نسخه‌های قابل دریافت">
-          <article class="download-row download-web">
-            <div class="platform-mark" aria-hidden="true">Web</div>
-            <div>
-              <h3>نسخهٔ وب</h3>
-              <p>بدون نصب · آماده در مرورگر</p>
-            </div>
-            <span class="release-state state-ready">آمادهٔ استفاده</span>
-            <a
-              class="button button-primary"
-              href="https://raviweb.poorsmile.ir/"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="باز کردن نسخهٔ وب راوی"
-            >
-              باز کردن نسخهٔ وب
-            </a>
-          </article>
-
-          <article class="download-row download-windows">
-            <div class="platform-mark" aria-hidden="true">Win</div>
-            <div class="release-copy">
-              <h3>Windows</h3>
-              <p>نصب آسان · نسخهٔ <bdi dir="ltr">2.2.1</bdi> · ۱۰۱٫۶۸ مگابایت</p>
-              <details class="release-details">
-                <summary>جزئیات و بررسی اصالت فایل</summary>
-                <div class="release-details-body">
-                  <dl>
-                    <div><dt>معماری</dt><dd><bdi dir="ltr">x64</bdi></dd></div>
-                    <div><dt>نوع فایل</dt><dd><bdi dir="ltr">EXE</bdi></dd></div>
-                  </dl>
-                  <p>
-                    x64 برای بیشتر رایانه‌های امروزی است. کد SHA256 کمک می‌کند
-                    مطمئن شوید فایل دانلودشده دقیقاً همان نسخهٔ رسمی است.
-                  </p>
-                  <div class="release-hash-row">
-                    <code class="release-hash" dir="ltr">E9B1D515AC9E3D5986E5ADA4E711605E4D0330C9C7296C4E034AFC380F0B4EF3</code>
-                    <button
-                      class="hash-copy-button"
-                      type="button"
-                      data-copy-hash="E9B1D515AC9E3D5986E5ADA4E711605E4D0330C9C7296C4E034AFC380F0B4EF3"
-                      aria-label="کپی‌کردن کد بررسی فایل Windows"
-                    >کپی کد</button>
-                  </div>
-                </div>
-              </details>
-            </div>
-            <span class="release-state state-ready">آمادهٔ دانلود</span>
-            <a
-              class="button button-primary"
-              href="https://dl2.gptt.ir/raavi/stable/2.2.1/Raavi-Setup-2.2.1-x64.exe"
-              aria-label="دانلود راوی 2.2.1 برای Windows، حجم ۱۰۱٫۶۸ مگابایت"
-            >
-              دانلود Windows
-            </a>
-          </article>
-
-          <article class="download-row download-macos">
-            <div class="platform-mark" aria-hidden="true">mac</div>
-            <div class="release-copy">
-              <h3>macOS</h3>
-              <p>
-                نسخهٔ <bdi dir="ltr">2.2.1</bdi> · ساخت جداگانه برای Apple
-                Silicon و Intel
-              </p>
-              <details class="release-details">
-                <summary>انتخاب معماری و بررسی اصالت فایل</summary>
-                <div class="release-details-body mac-release-details">
-                  <p class="mac-architecture-help">
-                    اگر در بخش «دربارهٔ این Mac» نام M1، M2، M3 یا M4 را
-                    می‌بینید، نسخهٔ Apple Silicon را بگیرید؛ در غیر این صورت
-                    نسخهٔ Intel مناسب است.
-                  </p>
-                  <div class="mac-build-list">
-                    <section class="mac-build" aria-labelledby="mac-arm-title">
-                      <div class="mac-build-heading">
-                        <h4 id="mac-arm-title">Apple Silicon</h4>
-                        <span><bdi dir="ltr">arm64 · DMG · 134.41 MB</bdi></span>
-                      </div>
-                      <div class="release-hash-row">
-                        <code class="release-hash" dir="ltr">06CF8C7422D86006527AB1FD6D3CB7F028EC4398C51AA7975ACB432033AE47B3</code>
-                        <button
-                          class="hash-copy-button"
-                          type="button"
-                          data-copy-hash="06CF8C7422D86006527AB1FD6D3CB7F028EC4398C51AA7975ACB432033AE47B3"
-                          aria-label="کپی‌کردن کد بررسی فایل macOS برای Apple Silicon"
-                        >کپی کد</button>
-                      </div>
-                      <a
-                        class="release-alt-link"
-                        href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-arm64-unsigned.zip"
-                      >دریافت فایل ZIP برای Apple Silicon</a>
-                    </section>
-
-                    <section class="mac-build" aria-labelledby="mac-intel-title">
-                      <div class="mac-build-heading">
-                        <h4 id="mac-intel-title">Intel</h4>
-                        <span><bdi dir="ltr">x64 · DMG · 136.16 MB</bdi></span>
-                      </div>
-                      <div class="release-hash-row">
-                        <code class="release-hash" dir="ltr">4CA5305B1EFE4ABCB3FE29900A928761DBFDE7945F4B934920D8FD901467D4E8</code>
-                        <button
-                          class="hash-copy-button"
-                          type="button"
-                          data-copy-hash="4CA5305B1EFE4ABCB3FE29900A928761DBFDE7945F4B934920D8FD901467D4E8"
-                          aria-label="کپی‌کردن کد بررسی فایل macOS برای Intel"
-                        >کپی کد</button>
-                      </div>
-                      <a
-                        class="release-alt-link"
-                        href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-x64-unsigned.zip"
-                      >دریافت فایل ZIP برای Intel</a>
-                    </section>
-                  </div>
-                  <p class="mac-signing-note">
-                    این خروجی‌ها فعلاً بدون امضای Developer ID اپل منتشر
-                    شده‌اند؛ بنابراین macOS ممکن است در نخستین اجرا هشدار
-                    امنیتی نشان دهد. فایل رسمی را فقط از GitHub Release راوی
-                    دریافت کنید.
-                  </p>
-                  <a
-                    class="release-alt-link"
-                    href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-SHA256SUMS.txt"
-                  >فهرست کامل SHA-256 فایل‌های macOS</a>
-                </div>
-              </details>
-            </div>
-            <span class="release-state state-unsigned">بدون امضای اپل</span>
-            <div class="release-actions" aria-label="دانلود macOS بر اساس معماری">
-              <a
-                class="button button-primary"
-                href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-arm64-unsigned.dmg"
-                aria-label="دانلود راوی 2.2.1 برای macOS Apple Silicon، حجم ۱۳۴٫۴۱ مگابایت"
-              >Apple Silicon</a>
-              <a
-                class="button button-secondary"
-                href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-x64-unsigned.dmg"
-                aria-label="دانلود راوی 2.2.1 برای macOS Intel، حجم ۱۳۶٫۱۶ مگابایت"
-              >Intel</a>
-            </div>
-          </article>
-
-          <article class="download-row download-linux">
-            <div class="platform-mark" aria-hidden="true">Linux</div>
-            <div class="release-copy">
-              <h3>Linux</h3>
-              <p>بستهٔ قابل‌حمل · نسخهٔ <bdi dir="ltr">1.0.0</bdi> · ۲۳۳٫۶۲ مگابایت</p>
-              <details class="release-details">
-                <summary>جزئیات و بررسی اصالت فایل</summary>
-                <div class="release-details-body">
-                  <dl>
-                    <div><dt>معماری</dt><dd><bdi dir="ltr">x64</bdi></dd></div>
-                    <div><dt>نوع فایل</dt><dd><bdi dir="ltr">tar.gz</bdi></dd></div>
-                  </dl>
-                  <p>
-                    x64 برای بیشتر رایانه‌های امروزی است. کد SHA256 کمک می‌کند
-                    مطمئن شوید فایل دانلودشده دقیقاً همان نسخهٔ رسمی است.
-                  </p>
-                  <div class="release-hash-row">
-                    <code class="release-hash" dir="ltr">0C363E8F39D479F4B983A7C5DFA8B43D40DE3039B8F0FA98FBF7D168AA59BCA2</code>
-                    <button
-                      class="hash-copy-button"
-                      type="button"
-                      data-copy-hash="0C363E8F39D479F4B983A7C5DFA8B43D40DE3039B8F0FA98FBF7D168AA59BCA2"
-                      aria-label="کپی‌کردن کد بررسی فایل Linux"
-                    >کپی کد</button>
-                  </div>
-                </div>
-              </details>
-            </div>
-            <span class="release-state state-ready">آمادهٔ دانلود</span>
-            <a
-              class="button button-primary"
-              href="./downloads/Raavi-1.0.0-linux-x64-portable.tar.gz"
-              download
-              aria-label="دانلود راوی 1.0.0 برای Linux، حجم ۲۳۳٫۶۲ مگابایت"
-            >
-              دانلود Linux
-            </a>
-          </article>
-        </div>
-        <aside class="release-path" aria-labelledby="release-path-title">
-          <div class="release-path-heading">
-            <span class="release-path-mark" aria-hidden="true">✓</span>
-            <div>
-              <strong id="release-path-title">انتشار قابل بررسی، پیش از اعلام عمومی</strong>
-              <p>
-                هر نسخه از یک tag مشترک ساخته می‌شود؛ Windows روی هاست دانلود
-                و GitHub ثبت می‌شود و ساخت‌های بومی macOS روی GitHub Actions
-                آماده می‌شوند.
-              </p>
-            </div>
-          </div>
-          <ol class="release-path-steps">
-            <li><span>آزمون و ثبت نسخه</span><small>کد، دفتر تغییرات و tag یکسان</small></li>
-            <li><span>ساخت بومی</span><small>Windows x64، Apple Silicon و Intel</small></li>
-            <li><span>کنترل اصالت</span><small>معماری، سلامت بسته و checksum</small></li>
-            <li><span>انتشار نهایی</span><small>سایت فقط پس از کامل‌شدن همهٔ خروجی‌ها</small></li>
-          </ol>
-          <p class="release-channel-note">
-            آپدیتر امن Windows و macOS از یک manifest مشترک، بستهٔ متناسب با
-            سیستم‌عامل و معماری دستگاه را انتخاب، دانلود و پیش از نصب با
-            SHA-512 و امضای Ed25519 اعتبارسنجی می‌کند. GitHub Release مسیر
-            دریافت دستی جایگزین است. از نسخهٔ 2.2.1، همین مسیر امن بروزرسانی
-            داخلی برای Windows، Apple Silicon و Intel فعال است.
-          </p>
-        </aside>
-        <p class="visually-hidden" id="hash-copy-status" aria-live="polite"></p>
-      </section>
-
-      <section class="support-section" id="support" aria-labelledby="support-title">
-        <div class="support-copy">
-          <p class="section-kicker">توسعهٔ مستقل</p>
-          <h2 id="support-title">راوی رایگان می‌ماند.</h2>
-          <p>
-            حمایت داوطلبانهٔ شما برای نگه‌داری نسخهٔ وب، توسعهٔ راوی، ساخت
-            نسخه‌های دسکتاپ و هزینه‌های زیرساخت پروژه صرف می‌شود. مبلغ و متن
-            پیام را خودتان در صفحهٔ امن دارمت انتخاب می‌کنید.
-          </p>
-          <div class="support-actions">
-            <a
-              class="button button-support"
-              href="https://daramet.com/poorsmile"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <span aria-hidden="true">♥</span>
-              حمایت در دارمت
-            </a>
-            <a
-              class="text-link"
-              href="https://t.me/poorsmile_crafts"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              کانال به‌روزرسانی‌ها
-              <span aria-hidden="true">↗</span>
-            </a>
-          </div>
-        </div>
-
-        <aside class="support-note" aria-label="یادداشت حمایت">
-          <span class="note-pin" aria-hidden="true"></span>
-          <strong>نامتان کنار راوی می‌ماند</strong>
-          <p>
-            اگر دوست دارید نامتان در شناسنامهٔ داخل برنامه و بخش «حامیان راوی»
-            نمایش داده شود، نام دلخواه را در پیام حمایت بنویسید.
-          </p>
-        </aside>
-      </section>
-    </main>
-
-    <dialog
-      class="changelog-dialog"
-      id="changelog-dialog"
-      aria-labelledby="changelog-title"
-      aria-describedby="changelog-source-note"
-    >
-      <div class="changelog-sheet">
-        <header class="changelog-header">
-          <div class="changelog-heading">
-            <span class="sheet-mark" aria-hidden="true">ر</span>
-            <div>
-              <p>سند انتشار راوی</p>
-              <h1 id="changelog-title">دفتر تغییرات</h1>
-            </div>
-          </div>
-          <button
-            class="changelog-close"
-            id="close-changelog"
-            type="button"
-            aria-label="بستن دفتر تغییرات"
-          >
-            ×
           </button>
         </header>
 
-        <div class="changelog-source" id="changelog-source-note">
-          <span>منبع به‌روز این دفتر</span>
-          <code>CHANGELOG.md</code>
+        <div class="window-body">
+          <p class="version-label">راوی ۲.۲.۱ برای Windows و macOS منتشر شد</p>
+          <h1><span>هر فکر،</span> یک جای آرام برای شکل‌گرفتن.</h1>
+          <p class="window-lead">راوی فضای شخصی نوشتن و مطالعه برای فارسی است. در مخزن خودتان بنویسید، با ChatGPT بازبینی کنید، نمودار و فرمول بسازید و خروجی Word یا PDF بگیرید.</p>
+          <div class="window-actions">
+            <a class="action action-primary" href="https://raviweb.poorsmile.ir/" target="_blank" rel="noopener noreferrer">باز کردن نسخهٔ وب <span aria-hidden="true">↗</span></a>
+            <button class="action action-secondary" type="button" data-download-open>دریافت راوی</button>
+            <button class="action action-secondary action-gallery" type="button" data-gallery-launch>تصاویر راوی</button>
+          </div>
+          <ul class="window-trust" aria-label="ویژگی‌های کلیدی راوی">
+            <li><span aria-hidden="true">✓</span> بازبینی، اصلاح و ترجمهٔ هوشمند</li>
+            <li><span aria-hidden="true">✓</span> فرمول، نمودار و خروجی Word و PDF</li>
+            <li><span aria-hidden="true">✓</span> ویندوز، مک و وب؛ رایگان</li>
+          </ul>
+          <footer class="window-legal">
+            <a href="./privacy/" lang="en" dir="ltr">Privacy Policy</a>
+            <span aria-hidden="true">·</span>
+            <a href="./terms/" lang="en" dir="ltr">Terms of Use</a>
+          </footer>
         </div>
 
-        <div
-          class="changelog-content"
-          id="changelog-content"
-          tabindex="0"
-        >
-          <p class="changelog-loading" role="status">
-            در حال خواندن دفتر تغییرات…
-          </p>
-        </div>
-
-        <footer class="changelog-footer">
-          <span>هر بار که دفتر باز می‌شود، فایل منبع دوباره خوانده می‌شود.</span>
-          <button
-            class="button button-secondary"
-            id="dismiss-changelog"
-            type="button"
-          >
-            بستن
+        <div class="window-dock" aria-hidden="true">
+          <button class="dock-restore" type="button" data-restore>
+            <span class="dock-mark dock-mark--real" aria-hidden="true"><img src="./assets/raavi-logo-transparent-128.png?v=2.2.1-20260901" alt="" /></span>
+            <span class="dock-copy"><strong>راوی ۲.۲.۱</strong><small>نوشتن و مطالعه برای فارسی</small></span>
           </button>
-        </footer>
-      </div>
-    </dialog>
+          <button class="dock-download" type="button" data-download-open>دریافت راوی</button>
+        </div>
+      </article>
 
-    <footer class="site-footer">
-      <div class="footer-brand">
-        <span class="brand-mark" aria-hidden="true">ر</span>
-        <span>
-          <strong>راوی</strong>
-          <small>ساخته‌شده برای متن فارسی</small>
-        </span>
-      </div>
-      <div class="footer-links">
-        <a href="#top">ابتدای صفحه</a>
-        <a href="https://raviweb.poorsmile.ir/">نسخهٔ وب</a>
-        <a href="./privacy/" lang="en" dir="ltr">Privacy Policy</a>
-        <a href="./terms/" lang="en" dir="ltr">Terms of Use</a>
-        <a href="https://ravi.poorsmile.ir">ravi.poorsmile.ir</a>
-      </div>
-    </footer>
+      <dialog class="gallery-sandbox" data-gallery-dialog aria-labelledby="gallery-title">
+        <div class="gallery-shell">
+          <header class="gallery-bar">
+            <div>
+              <span>تصاویر واقعی نسخهٔ ۲.۲.۱</span>
+              <h2 id="gallery-title" data-gallery-title>نوشتن در راوی</h2>
+            </div>
+            <button class="dialog-close" type="button" data-gallery-close aria-label="بستن گالری">×</button>
+          </header>
+          <div class="gallery-stage">
+            <button class="gallery-arrow gallery-arrow--previous" type="button" data-gallery-previous aria-label="تصویر قبلی">‹</button>
+            <figure class="gallery-frame">
+              <img data-gallery-image src="./assets/screens/gallery-01-writing-light.png?v=2.2.1-20260901" alt="نمای واقعی یک سند ذخیره‌شده در راوی با تیتر، فرمول و جدول در حالت روشن" />
+              <figcaption class="gallery-copy">
+                <strong data-gallery-caption>سند ذخیره‌شده · حالت روشن</strong>
+                <span data-gallery-description>یک سند ذخیره‌شده با تیتر، فرمول پیچیده و جدول در فضای روشن راوی.</span>
+              </figcaption>
+            </figure>
+            <button class="gallery-arrow gallery-arrow--next" type="button" data-gallery-next aria-label="تصویر بعدی">›</button>
+          </div>
+          <nav class="gallery-strip" aria-label="انتخاب تصویر گالری">
+            <button type="button" data-gallery-thumbnail="0" aria-label="سند ذخیره‌شده در حالت روشن"><img src="./assets/screens/gallery-01-writing-light.png?v=2.2.1-20260901" alt="" loading="lazy" /></button>
+            <button type="button" data-gallery-thumbnail="1" aria-label="سند ذخیره‌شده در حالت تاریک"><img src="./assets/screens/gallery-02-writing-dark.png?v=2.2.1-20260901" alt="" loading="lazy" /></button>
+            <button type="button" data-gallery-thumbnail="2" aria-label="تبدیل متن به جدول با راوی هوشمند"><img src="./assets/screens/gallery-03-ai-table.png?v=2.2.1-20260901" alt="" loading="lazy" /></button>
+            <button type="button" data-gallery-thumbnail="3" aria-label="گزارش مدیریتی در نمای مطالعه"><img src="./assets/screens/gallery-04-reading-report.png?v=2.2.1-20260901" alt="" loading="lazy" /></button>
+            <button type="button" data-gallery-thumbnail="4" aria-label="نمای دوبرگی کد و نوشتار"><img src="./assets/screens/gallery-05-split-view.png?v=2.2.1-20260901" alt="" loading="lazy" /></button>
+            <button type="button" data-gallery-thumbnail="5" aria-label="تنظیمات پشتیبان‌گیری"><img src="./assets/screens/gallery-06-backup-settings.png?v=2.2.1-20260901" alt="" loading="lazy" /></button>
+            <button type="button" data-gallery-thumbnail="6" aria-label="تبدیل صوت به نوشتار"><img src="./assets/screens/gallery-07-audio-transcription.png?v=2.2.1-20260901" alt="" loading="lazy" /></button>
+            <button type="button" data-gallery-thumbnail="7" aria-label="مرکز فرمان راوی"><img src="./assets/screens/gallery-08-command-center.png?v=2.2.1-20260901" alt="" loading="lazy" /></button>
+          </nav>
+        </div>
+      </dialog>
 
-    <noscript>
-      <p class="noscript-note">
-        برای استفاده از پیش‌نمایش زندهٔ Markdown، جاوااسکریپت مرورگر را فعال
-        کنید. معرفی، تصاویر، لینک نسخهٔ وب و دانلودها بدون آن نیز در دسترس‌اند.
-      </p>
-    </noscript>
-    <script id="initial-markdown" type="application/json">null</script>
+      <dialog class="download-dialog" data-download-dialog aria-labelledby="download-title">
+        <div class="download-shell">
+          <header class="dialog-bar">
+            <div><span class="dialog-kicker">نسخهٔ ۲.۲.۱</span><h2 id="download-title">راوی را کجا می‌خواهید؟</h2></div>
+            <button class="dialog-close" type="button" data-download-close aria-label="بستن انتخاب نسخه">×</button>
+          </header>
+          <div class="platform-grid" aria-label="نسخه‌های قابل دریافت راوی">
+            <a class="platform-card is-primary" href="https://dl2.gptt.ir/raavi/stable/2.2.1/Raavi-Setup-2.2.1-x64.exe">
+              <span class="platform-icon platform-windows" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+              <strong>Windows</strong><small>64-bit</small>
+            </a>
+            <a class="platform-card" href="https://raviweb.poorsmile.ir/" target="_blank" rel="noopener noreferrer">
+              <span class="platform-icon platform-web" aria-hidden="true">◎</span>
+              <strong>نسخهٔ وب</strong><small>بدون نصب</small>
+            </a>
+            <a class="platform-card" href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-arm64-unsigned.dmg">
+              <span class="platform-icon platform-apple" aria-hidden="true">●</span>
+              <strong>Apple Silicon</strong><small>M1 تا M4</small>
+            </a>
+            <a class="platform-card" href="https://github.com/Poor-smile/RAVI/releases/download/v2.2.1/Raavi-2.2.1-macOS-x64-unsigned.dmg">
+              <span class="platform-icon platform-intel" aria-hidden="true">intel</span>
+              <strong>macOS Intel</strong><small>x64</small>
+            </a>
+            <span class="platform-card is-disabled" aria-disabled="true">
+              <span class="platform-icon platform-linux" aria-hidden="true">&gt;_</span>
+              <strong>Linux</strong><small>به‌زودی</small>
+            </span>
+          </div>
+          <p class="download-note">نسخهٔ macOS فعلاً بدون امضای Developer ID منتشر شده است.</p>
+        </div>
+      </dialog>
+
+      <dialog class="support-dialog" data-support-dialog aria-labelledby="support-title">
+        <div class="support-shell">
+          <header class="dialog-bar">
+            <div><span class="dialog-kicker">حمایت داوطلبانه</span><h2 id="support-title">راوی همیشه زنده و رایگان می‌ماند.</h2></div>
+            <button class="dialog-close" type="button" data-support-close aria-label="بستن پنجرهٔ حمایت">×</button>
+          </header>
+          <div class="support-content">
+            <span class="support-heart" aria-hidden="true">♥</span>
+            <p>استفاده از راوی همیشه رایگان می‌ماند. اگر این نرم‌افزار به نوشتن و فکرکردن شما کمک کرده، می‌توانید برای ادامهٔ توسعه، نگهداری و انتشار نسخه‌های بعدی به‌اندازهٔ دلخواه حمایت کنید.</p>
+            <a class="action action-primary support-action" href="https://daramet.com/poorsmile" target="_blank" rel="noopener noreferrer">حمایت از راوی <span aria-hidden="true">↗</span></a>
+            <small>حمایت کاملاً اختیاری است و هیچ قابلیتی پشت پرداخت قرار نمی‌گیرد.</small>
+          </div>
+        </div>
+      </dialog>
+
+      <dialog class="feature-dialog" data-feature-dialog aria-labelledby="feature-title">
+        <div class="dialog-shell">
+          <header class="dialog-bar">
+            <div><span class="dialog-kicker" data-feature-tag></span><h2 id="feature-title" data-feature-title></h2></div>
+            <button class="dialog-close" type="button" data-dialog-close aria-label="بستن توضیح قابلیت">×</button>
+          </header>
+          <div class="dialog-content">
+            <figure class="dialog-media"><img data-feature-image src="" alt="" /></figure>
+            <div class="dialog-copy"><p data-feature-description></p><small>نمای نمایش‌داده‌شده از رابط واقعی راوی است.</small></div>
+          </div>
+        </div>
+      </dialog>
+    </main>
   </body>
 </html>

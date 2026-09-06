@@ -69,7 +69,8 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
   test("keeps ordinary code inline while rendering specialized blocks without changing source", async ({ page }) => {
     const editor = await openFixture(page);
     await expect(page.locator(".cm-rich-code")).toHaveCount(0);
-    await expect(editor).toContainText("```ts");
+    await expect(editor).not.toContainText("```ts");
+    await expect(editor.locator(".cm-live-code-fence")).toHaveCount(2);
     await expect(
       editor.locator(".cm-line-code").filter({ hasText: "const پیام" }),
     ).toBeVisible();
@@ -249,6 +250,124 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
     await expect.poll(() => copiedMarkdown(page)).toContain(
       "| **فصل** نخست | ۱۲ | آماده |",
     );
+  });
+
+  test("keeps the document viewport stable when a rich table cell receives focus", async ({
+    page,
+  }) => {
+    const before = Array.from(
+      { length: 36 },
+      (_, index) => `پاراگراف پیش از جدول ${index + 1}`,
+    );
+    const after = Array.from(
+      { length: 36 },
+      (_, index) => `پاراگراف پس از جدول ${index + 1}`,
+    );
+    await openFixture(
+      page,
+      [
+        ...before,
+        "",
+        "| فارسیEnglish | مقدار |",
+        "| --- | ---: |",
+        "| متن ترکیبی | ۱۲ |",
+        "",
+        ...after,
+      ].join("\n"),
+    );
+    const scroller = page.locator("#markdown-editor .cm-scroller");
+    await scroller.evaluate((element) => {
+      element.scrollTop = Math.round(
+        (element.scrollHeight - element.clientHeight) / 2,
+      );
+      element.dispatchEvent(new Event("scroll"));
+    });
+    const table = page.locator(".cm-rich-table");
+    const cell = table.locator(
+      'textarea[data-table-row="0"][data-table-column="0"]',
+    );
+
+    await table.scrollIntoViewIfNeeded();
+    await expect(table).toBeVisible();
+    const scrollTopBefore = await scroller.evaluate(
+      (element) => element.scrollTop,
+    );
+    await cell.click();
+    await expect(cell).toBeFocused();
+    await expect.poll(async () =>
+      scroller.evaluate((element) => element.scrollTop),
+    ).toBeGreaterThan(scrollTopBefore - 8);
+    const scrollTopAfter = await scroller.evaluate(
+      (element) => element.scrollTop,
+    );
+    expect(Math.abs(scrollTopAfter - scrollTopBefore)).toBeLessThanOrEqual(8);
+  });
+
+  test("selects mixed-script words and the full table cell without shifting the viewport", async ({
+    page,
+  }) => {
+    await openFixture(
+      page,
+      [
+        "پیش از جدول",
+        "",
+        "| متن | مقدار |",
+        "| --- | ---: |",
+        "| شروع فارسیEnglish پایان | ۱۲ |",
+        "",
+        "پس از جدول",
+      ].join("\n"),
+    );
+    const scroller = page.locator("#markdown-editor .cm-scroller");
+    const cell = page
+      .locator(".cm-rich-table")
+      .locator('textarea[data-table-row="0"][data-table-column="0"]');
+    const cellEditor = cell.locator("..");
+    const formattedPreview = cellEditor.locator(".cm-rich-table-cell-preview");
+    await cell.scrollIntoViewIfNeeded();
+    const scrollBefore = await scroller.evaluate((element) => element.scrollTop);
+
+    await cell.evaluate((element) => {
+      const editor = element as HTMLTextAreaElement;
+      const start = editor.value.indexOf("English") + 2;
+      editor.setSelectionRange(start, start);
+      editor.dispatchEvent(
+        new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2 }),
+      );
+    });
+    await expect
+      .poll(() =>
+        cell.evaluate((element) => {
+          const editor = element as HTMLTextAreaElement;
+          return editor.value.slice(editor.selectionStart, editor.selectionEnd);
+        }),
+      )
+      .toBe("فارسیEnglish");
+    await expect(cellEditor).toHaveAttribute(
+      "data-editing",
+      "preview-selection",
+    );
+    await expect(formattedPreview).toBeVisible();
+    await expect(cell).toHaveCSS("color", "rgba(0, 0, 0, 0)");
+
+    await cell.click({ clickCount: 3, delay: 60 });
+    await expect
+      .poll(() =>
+        cell.evaluate((element) => {
+          const editor = element as HTMLTextAreaElement;
+          return editor.value.slice(editor.selectionStart, editor.selectionEnd);
+        }),
+      )
+      .toBe("شروع فارسیEnglish پایان");
+    await expect(page.locator(".cm-rich-table")).toBeVisible();
+    await expect(cellEditor).toHaveAttribute(
+      "data-editing",
+      "preview-selection",
+    );
+    await expect(formattedPreview).toBeVisible();
+
+    const scrollAfter = await scroller.evaluate((element) => element.scrollTop);
+    expect(Math.abs(scrollAfter - scrollBefore)).toBeLessThanOrEqual(8);
   });
 
   test("shows only table-valid shortcuts below the active rich table", async ({
@@ -460,7 +579,8 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
     await editor.press("Control+Enter");
     await expect(editor).toBeFocused();
     await expect(page.locator(".cm-rich-code")).toHaveCount(0);
-    await expect(editor).toContainText("```ts");
+    await expect(editor).not.toContainText("```ts");
+    await expect(editor.locator(".cm-live-code-fence")).toHaveCount(2);
 
     const firstCell = table.locator("tbody textarea").first();
     await firstCell.focus();
@@ -761,6 +881,46 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
       timeout: 30_000,
     });
     expect(await copiedMarkdown(page)).toBe(invalidRevision);
+  });
+
+  test("keeps Mermaid and formula source boxed while moving between writing blocks", async ({
+    page,
+  }) => {
+    const editor = await openFixture(
+      page,
+      [
+        "متن پیش از بلاک‌های تخصصی",
+        "",
+        "```mermaid",
+        "flowchart RL",
+        "A --> B",
+        "```",
+        "",
+        "$$",
+        "x^2 + y^2 = z^2",
+        "$$",
+        "",
+        "متن پس از بلاک‌های تخصصی",
+      ].join("\n"),
+    );
+    const mermaid = page.locator(".cm-rich-mermaid");
+    const formula = page.locator(".cm-rich-formula");
+
+    await expect(mermaid).toBeVisible();
+    await expect(formula).toBeVisible();
+    await editor.focus();
+    await page.keyboard.press("Control+Home");
+    for (let index = 0; index < 8; index += 1) {
+      await page.keyboard.press("ArrowDown");
+    }
+    await expect(mermaid).toBeVisible();
+    await expect(formula).toBeVisible();
+    await expect(
+      editor.locator(".cm-line").filter({ hasText: "flowchart RL" }),
+    ).toHaveCount(0);
+    await expect(
+      editor.locator(".cm-line").filter({ hasText: "x^2 + y^2 = z^2" }),
+    ).toHaveCount(0);
   });
 
   test("keeps inline code visible at 320px and 200% zoom", async ({ page }) => {

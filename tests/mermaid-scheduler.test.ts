@@ -123,6 +123,22 @@ test("renderer crash restarts the transport and does not poison the queue", asyn
   assert.equal(restarts, 1);
 });
 
+test("restart IPC rejection still settles the timeout and keeps the queue running", async () => {
+  const scheduler = new MermaidRenderScheduler({
+    async render(next) {
+      return next.id === "hung" ? new Promise(() => {}) : success;
+    },
+    async restart() { throw new Error("renderer already destroyed"); },
+  }, 20);
+  const results = await Promise.all([
+    scheduler.schedule(job("hung", "visible"), "hung"),
+    scheduler.schedule(job("healthy", "visible"), "healthy"),
+  ]);
+  assert.equal(results[0].ok, false);
+  if (!results[0].ok) assert.equal(results[0].error.kind, "timeout");
+  assert.equal(results[1].ok, true);
+});
+
 test("queue recovers after ten consecutive renderer timeouts", async () => {
   let restarts = 0;
   const scheduler = new MermaidRenderScheduler(

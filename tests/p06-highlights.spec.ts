@@ -105,7 +105,7 @@ test("P06 assembles the independent local Highlights panel from Figma", async ({
   await expect(rowActions.nth(0)).toContainText("مقدمه");
   await expect(rowActions.nth(2)).toContainText("دیروز");
   await expect(rowActions.nth(0)).toHaveAttribute("aria-current", "location");
-  await expect(sidebar).toContainText("محلی · همراه فایل .ravi");
+  await expect(sidebar).toContainText("Markdown · محلی و قابل‌حمل");
 
   await page.waitForTimeout(260);
   const contract = await page.evaluate(() => {

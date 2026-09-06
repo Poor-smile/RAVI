@@ -82,7 +82,10 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install --global npm@11.16.0
+          npm ci
+          npm run verify:dependencies
 
       - name: Generate native application icons
         shell: bash

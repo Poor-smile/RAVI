@@ -434,7 +434,7 @@ test.describe("ابزارهای contextual ویرایش", () => {
     await trigger.click();
     const blockMenu = page.getByRole("menu", { name: "نوع بلوک" });
     await expect(blockMenu).toBeVisible();
-    await expect(blockMenu.getByRole("menuitemradio")).toHaveCount(14);
+    await expect(blockMenu.getByRole("menuitemradio")).toHaveCount(15);
     await expect(
       blockMenu.getByRole("menuitemradio", { name: "جداکننده" }),
     ).toBeVisible();
@@ -475,8 +475,8 @@ test.describe("ابزارهای contextual ویرایش", () => {
     await page.keyboard.type("/");
     const slash = page.getByRole("menu", { name: "نوع بلوک" });
     await expect(slash).toBeVisible();
-    await expect(slash.getByRole("menuitemradio")).toHaveCount(14);
-    await expect(slash.getByRole("menuitemradio", { name: "کد" })).toHaveCount(0);
+    await expect(slash.getByRole("menuitemradio")).toHaveCount(15);
+    await expect(slash.getByRole("menuitemradio", { name: "بلوک کد" })).toBeVisible();
     await expect(slash.getByRole("menuitemradio", { name: "فرمول" })).toBeVisible();
 
     await page.keyboard.type("tbl");

@@ -67,6 +67,7 @@ test("slash menu exposes the approved structural block aliases", () => {
       "/todo",
       "/bullet",
       "/number",
+      "/code",
       "/quote",
       "/table",
       "/mermaid",
@@ -77,7 +78,7 @@ test("slash menu exposes the approved structural block aliases", () => {
   );
   assert.equal(
     SLASH_MENU_ITEMS.map((item) => String(item.type)).includes("code-block"),
-    false,
+    true,
   );
 });
 

@@ -25,6 +25,7 @@ import {
   Sun,
   type LucideIcon,
 } from "@/app/icons/material-symbols";
+import Image from "next/image";
 import {
   type KeyboardEvent,
   type CSSProperties,
@@ -79,6 +80,7 @@ import {
   type SoftwareUpdateActions,
 } from "./software-update-ui";
 import { SettingsShortcutSections } from "./settings-shortcut-sections";
+import { ReadingTtsSettings } from "./reading-tts-settings";
 import type { SoftwareUpdateState } from "../software-update/types";
 
 export type SettingsCategoryId =
@@ -1209,6 +1211,13 @@ export function ShortcutSettingsDialog({
                   );
                 })}
               </section>
+
+              <ReadingTtsSettings
+                smartNarration={readingPreferences.smartNarration}
+                onSmartNarrationChange={(smartNarration) =>
+                  updateReadingPreference("smartNarration", smartNarration)
+                }
+              />
             </div>
           ) : categoryId === "files" ? (
             <div className="file-library-settings" aria-label="تنظیمات فایل‌ها و کتابخانه">
@@ -1227,11 +1236,12 @@ export function ShortcutSettingsDialog({
                           : "ورود امن Proton در مرورگر انجام می‌شود و رمز عبور وارد راوی نمی‌شود."}
                     </p>
                   </div>
-                  <img
+                  <Image
                     className="backup-drive-brand"
                     src={activeProvider.logo}
                     width="32"
                     height="32"
+                    unoptimized
                     alt={activeProvider.name}
                   />
                 </div>
@@ -1253,10 +1263,11 @@ export function ShortcutSettingsDialog({
                         disabled={backupAction !== null}
                         onClick={() => void selectBackupProvider(provider.id)}
                       >
-                        <img
+                        <Image
                           src={provider.logo}
                           width="28"
                           height="28"
+                          unoptimized
                           alt=""
                           aria-hidden="true"
                         />
@@ -1307,7 +1318,7 @@ export function ShortcutSettingsDialog({
                       disabled={backupAction !== null}
                       onClick={() => void runBackupConnectionAction("connect")}
                     >
-                      <img
+                      <Image
                         src={
                           activeProvider.id === "google-drive"
                             ? "/brands/google/google-sign-in-g.svg"
@@ -1315,6 +1326,7 @@ export function ShortcutSettingsDialog({
                         }
                         width="40"
                         height="40"
+                        unoptimized
                         alt=""
                         aria-hidden="true"
                       />

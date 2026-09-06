@@ -4,6 +4,8 @@ import { openWritingDocument } from "./helpers/open-writing-document";
 const FIXTURE = [
   "واژه فارسی پایدار",
   "",
+  "متن ترکیبی فارسیEnglish پایان",
+  "",
   "English stable word",
   "",
   "https://example.com/path?q=1",
@@ -20,13 +22,39 @@ async function selectedText(page: Page) {
 async function doubleClickFragment(page: Page, fragment: string) {
   const point = await page.locator("#markdown-editor .cm-content").evaluate(
     (content, target) => {
-      const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        const index = node.textContent?.indexOf(target) ?? -1;
+      for (const line of content.querySelectorAll(".cm-line")) {
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+        const nodes: Text[] = [];
+        let text = "";
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          nodes.push(node as Text);
+          text += node.textContent ?? "";
+        }
+        const index = text.indexOf(target);
         if (index < 0) continue;
+        const endIndex = index + target.length;
+        let consumed = 0;
+        let startNode: Text | null = null;
+        let endNode: Text | null = null;
+        let startOffset = 0;
+        let endOffset = 0;
+        for (const node of nodes) {
+          const length = node.data.length;
+          if (!startNode && index <= consumed + length) {
+            startNode = node;
+            startOffset = Math.max(0, index - consumed);
+          }
+          if (endIndex <= consumed + length) {
+            endNode = node;
+            endOffset = Math.max(0, endIndex - consumed);
+            break;
+          }
+          consumed += length;
+        }
+        if (!startNode || !endNode) continue;
         const range = document.createRange();
-        range.setStart(node, index);
-        range.setEnd(node, index + target.length);
+        range.setStart(startNode, startOffset);
+        range.setEnd(endNode, endOffset);
         const rect = range.getBoundingClientRect();
         return {
           x: rect.left + Math.max(2, rect.width / 2),
@@ -59,6 +87,11 @@ test("double-click keeps RTL, LTR, URL and Inline Code selections in their sourc
 
   const cases = [
     { fragment: "فارسی", expected: "فارسی", line: "واژه فارسی پایدار" },
+    {
+      fragment: "فارسیEnglish",
+      expected: "فارسیEnglish",
+      line: "متن ترکیبی فارسیEnglish پایان",
+    },
     { fragment: "stable", expected: "stable", line: "English stable word" },
     {
       fragment: "example",
@@ -70,7 +103,7 @@ test("double-click keeps RTL, LTR, URL and Inline Code selections in their sourc
       expected: "reference",
       line: "[reference](https://docs.example.org/guide)",
     },
-    { fragment: "inlineCode", expected: "inlineCode", line: "پایان `inlineCode` خط" },
+    { fragment: "inlineCode", expected: "inlineCode", line: "پایان inlineCode خط" },
   ];
 
   for (const item of cases) {

@@ -182,7 +182,7 @@ export class MermaidRenderScheduler {
         let cancel: ((reason: "superseded") => void) | undefined;
         const cancelPromise = new Promise<MermaidRendererOutput>((resolve) => {
           cancel = (reason) => {
-            void this.transport.restart(reason).finally(() => {
+            void this.transport.restart(reason).catch(() => {}).finally(() => {
               resolve(
                 controlledError(
                   "cancelled",
@@ -196,7 +196,7 @@ export class MermaidRenderScheduler {
         this.cancelCurrent = cancel ?? null;
         const timeoutPromise = new Promise<MermaidRendererOutput>((resolve) => {
           timeoutHandle = setTimeout(() => {
-            void this.transport.restart("timeout").finally(() => {
+            void this.transport.restart("timeout").catch(() => {}).finally(() => {
               resolve(
                 controlledError(
                   "timeout",
@@ -226,7 +226,7 @@ export class MermaidRenderScheduler {
           this.cancelCurrent = null;
         }
         if (!result.ok && result.error.kind === "renderer-crash") {
-          await this.transport.restart("crash");
+          await this.transport.restart("crash").catch(() => {});
         }
         result.metrics.queueWait = queueWait;
 

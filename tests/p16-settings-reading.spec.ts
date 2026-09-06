@@ -60,7 +60,7 @@ test("P16 Reading matches Figma and drives the real reading surface", async ({
 
   const dialog = page.getByRole("dialog", { name: "مطالعه" });
   const sections = dialog.locator(".reading-settings-section");
-  await expect(sections).toHaveCount(2);
+  await expect(sections).toHaveCount(3);
   await expect(dialog.getByRole("radiogroup")).toHaveCount(3);
   await expect(dialog.getByRole("switch")).toHaveCount(3);
   const switchDirection = await dialog
@@ -110,8 +110,9 @@ test("P16 Reading matches Figma and drives the real reading surface", async ({
           .clientWidth,
     };
   });
-  expect(geometry.sections).toHaveLength(2);
+  expect(geometry.sections).toHaveLength(3);
   expect(geometry.sections[0].width).toBe(geometry.sections[1].width);
+  expect(geometry.sections[2].width).toBeGreaterThan(geometry.sections[1].width * 1.8);
   expect(geometry.sections[0].height).toBeLessThan(320);
   expect(geometry.sections[1].height).toBeLessThan(320);
   expect(geometry.rows.map((row) => row.height)).toEqual(Array(6).fill(64));
@@ -156,6 +157,8 @@ test("P16 Reading matches Figma and drives the real reading surface", async ({
       rememberPosition: true,
       autoHideHeader: false,
       openOutlineOnEnter: true,
+      narrationSpeed: 1,
+      smartNarration: false,
     });
 
   await dialog.getByRole("button", { name: "بازگشت به سند" }).click();

@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { openWritingDocument as openWritingWorkspace } from "./helpers/open-writing-document";
 
 const QUERY = "اعتماد";
@@ -8,8 +8,10 @@ const DOCUMENT = Array.from(
   (_, index) => `بند ${index + 1}: اعتماد پایهٔ همکاری و گفت‌وگو است.`,
 ).join("\n\n");
 
-async function editorSource(editor: Locator) {
-  return (await editor.locator(".cm-line").allTextContents()).join("\n");
+async function editorSource(page: Page) {
+  return page.evaluate(() => JSON.parse(
+    localStorage.getItem("raavi:document:v1") ?? "{}",
+  ).content as string);
 }
 
 function occurrenceCount(source: string, value: string) {
@@ -22,11 +24,10 @@ async function openWritingDocument(page: Page) {
     "data-hydrated",
     "true",
   );
-  await openWritingWorkspace(page);
+  await openWritingWorkspace(page, { content: DOCUMENT });
   const editor = page.locator("#markdown-editor");
   const content = editor.locator(".cm-content");
   await expect(content).toBeVisible();
-  await content.fill(DOCUMENT);
   await content.focus();
   await page.keyboard.press("Control+Home");
   return { editor, content };
@@ -41,7 +42,7 @@ test("P11 matches Replace / Found and replaces locally with one-step undo", asyn
     window.localStorage.clear();
     window.localStorage.setItem("raavi:theme:v1", "dark");
   });
-  const { editor, content } = await openWritingDocument(page);
+  const { content } = await openWritingDocument(page);
 
   await page.keyboard.press("Control+h");
   const panel = page.getByRole("search", {
@@ -126,23 +127,23 @@ test("P11 matches Replace / Found and replaces locally with one-step undo", asyn
 
   await replaceButton.click();
   await expect(count).toHaveText("۱ از ۱۷");
-  expect(occurrenceCount(await editorSource(editor), REPLACEMENT)).toBe(1);
+  await expect.poll(async () => occurrenceCount(await editorSource(page), REPLACEMENT)).toBe(1);
   await page.locator('[data-command-id="edit.undo"]:visible').first().click();
   await expect(count).toHaveText("۱ از ۱۸");
-  expect(occurrenceCount(await editorSource(editor), QUERY)).toBe(18);
+  await expect.poll(async () => occurrenceCount(await editorSource(page), QUERY)).toBe(18);
 
   await replaceAllButton.click();
   await expect(count).toHaveText("۰ از ۰");
-  expect(occurrenceCount(await editorSource(editor), REPLACEMENT)).toBe(18);
-  expect(occurrenceCount(await editorSource(editor), QUERY)).toBe(0);
+  await expect.poll(async () => occurrenceCount(await editorSource(page), REPLACEMENT)).toBe(18);
+  await expect.poll(async () => occurrenceCount(await editorSource(page), QUERY)).toBe(0);
   await page.locator('[data-command-id="edit.undo"]:visible').first().click();
   await expect(count).toHaveText(/از ۱۸$/u);
-  expect(occurrenceCount(await editorSource(editor), QUERY)).toBe(18);
+  await expect.poll(async () => occurrenceCount(await editorSource(page), QUERY)).toBe(18);
 
   await replaceInput.focus();
   await replaceInput.press("Enter");
   await expect(count).toHaveText("۱ از ۱۷");
-  expect(occurrenceCount(await editorSource(editor), REPLACEMENT)).toBe(1);
+  await expect.poll(async () => occurrenceCount(await editorSource(page), REPLACEMENT)).toBe(1);
   await replaceInput.press("Escape");
   await expect(panel).toBeHidden();
   await expect(content).toBeFocused();

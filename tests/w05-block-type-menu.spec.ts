@@ -10,6 +10,7 @@ const BLOCK_TYPE_LABELS = [
   "چک‌لیست\n/todo",
   "فهرست بولت\n/bullet",
   "فهرست مراحل\n/number",
+  "بلوک کد\n/code",
   "نقل‌قول\n/quote",
   "جدول\n/table",
   "Mermaid\n/mermaid",
@@ -38,7 +39,7 @@ test("W05 matches the complete block menu and preserves keyboard editing flow", 
   const menu = page.getByRole("menu", { name: "نوع بلوک" });
   const items = menu.getByRole("menuitemradio");
   await expect(menu).toBeVisible();
-  await expect(items).toHaveCount(14);
+  await expect(items).toHaveCount(15);
   expect(await items.allInnerTexts()).toEqual(BLOCK_TYPE_LABELS);
   await expect(menu.getByRole("separator")).toHaveCount(2);
   await expect(trigger).toHaveAttribute("aria-expanded", "true");
@@ -183,6 +184,29 @@ test("W05 matches the complete block menu and preserves keyboard editing flow", 
     /cm-live-empty-block/,
   );
   await expect(editor).not.toContainText("/zzzzzz");
+
+  await editor.focus();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("/code");
+  await expect(menu).toBeVisible();
+  await expect(items).toHaveCount(1);
+  await page.keyboard.press("Enter");
+  await expect(menu).toBeHidden();
+  await expect(page.locator(".cm-ch")).toContainText("text");
+  // Code styling is applied to every rendered line in the block.
+  await expect(page.locator(".cm-c").first()).toBeVisible();
+  await page.getByRole("button", { name: "متن خام", exact: true }).click();
+  await expect(editor).toContainText("```text");
+  await editor.fill("");
+  await page.getByRole("button", { name: "ویرایش روان", exact: true }).click();
+
+  await editor.focus();
+  await page.keyboard.press("Alt+Shift+C");
+  await expect(page.locator(".cm-ch")).toContainText("text");
+  await expect(page.locator(".cm-c").first()).toBeVisible();
+  await page.getByRole("button", { name: "متن خام", exact: true }).click();
+  await editor.fill("");
+  await page.getByRole("button", { name: "ویرایش روان", exact: true }).click();
 
   await editor.focus();
   await page.keyboard.press("Control+End");

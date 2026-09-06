@@ -178,6 +178,8 @@ test("Arrow navigation traverses every list item before crossing a block boundar
   await secondItem.click();
   await page.keyboard.press("End");
   await page.keyboard.press("ArrowDown");
+  await expect.poll(activeLineText).toContain("سوم");
+  await page.keyboard.press("ArrowDown");
   await expect.poll(activeLineText).toContain("متن پایین");
 });
 

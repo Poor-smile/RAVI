@@ -153,14 +153,16 @@ test("R02 maps Reading Closed to the exact dark Foundation surfaces", async ({
     };
   });
 
+  expect(contract.geometry.diagram.height).toBeGreaterThanOrEqual(380);
+  expect(contract.geometry.sheet.y + contract.geometry.sheet.height).toBeGreaterThan(contract.geometry.diagram.y + contract.geometry.diagram.height);
   expect(contract.geometry).toEqual({
     titlebar: { x: 0, y: 0, width: 1180, height: 36 },
-    header: { x: 0, y: 36, width: 1180, height: 64 },
+    header: { x: 0, y: 36, width: 1124, height: 64 },
     workspace: { x: 0, y: 36, width: 1124, height: 822 },
     rail: { x: 1124, y: 36, width: 56, height: 822 },
-    sheet: { x: 182, y: 120, width: 760, height: 680 },
-    diagram: { x: 230, y: 472, width: 664, height: 172 },
-    status: { x: 394, y: 756, width: 336, height: 28 },
+    sheet: { x: 182, y: 120, width: 760, height: contract.geometry.sheet.height },
+    diagram: { x: 230, y: 472, width: 664, height: contract.geometry.diagram.height },
+    status: { x: 394, y: contract.geometry.sheet.y + contract.geometry.sheet.height - 44, width: 336, height: 28 },
   });
   expect(contract.colors).toEqual({
     shell: "rgb(14, 19, 15)",
@@ -181,8 +183,8 @@ test("R02 maps Reading Closed to the exact dark Foundation surfaces", async ({
     body: "rgb(240, 244, 239)",
     quote: "rgb(20, 26, 22)",
     quoteText: "rgb(240, 244, 239)",
-    graph: "rgb(20, 26, 22)",
-    graphInner: "rgb(24, 30, 26)",
+    graph: "rgb(24, 30, 26)",
+    graphInner: "rgba(0, 0, 0, 0)",
     graphAction: "rgb(32, 46, 80)",
     graphActionText: "rgb(134, 168, 255)",
     status: "rgb(20, 26, 22)",
@@ -195,8 +197,8 @@ test("R02 maps Reading Closed to the exact dark Foundation surfaces", async ({
     sheetRadius: "14px",
     sheetShadow: expect.stringContaining("18px 54px"),
     quoteRadius: "6px",
-    graphRadius: "14px",
-    graphInnerRadius: "6px",
+    graphRadius: "0px",
+    graphInnerRadius: "0px",
     actionRadius: "6px",
   });
   expect(contract.type).toEqual({

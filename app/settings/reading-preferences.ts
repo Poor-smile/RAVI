@@ -1,6 +1,7 @@
 export type ReadingTextSize = "small" | "normal" | "large";
 export type ReadingLineSpacing = "compact" | "normal" | "open";
 export type ReadingTextWidth = "narrow" | "balanced" | "wide";
+export type ReadingNarrationSpeed = 0.75 | 1 | 1.25 | 1.5 | 2;
 
 export type ReadingPreferences = {
   textSize: ReadingTextSize;
@@ -9,6 +10,8 @@ export type ReadingPreferences = {
   rememberPosition: boolean;
   autoHideHeader: boolean;
   openOutlineOnEnter: boolean;
+  narrationSpeed: ReadingNarrationSpeed;
+  smartNarration: boolean;
 };
 
 export const READING_PREFERENCES_STORAGE_KEY =
@@ -21,6 +24,8 @@ export const DEFAULT_READING_PREFERENCES: ReadingPreferences = {
   rememberPosition: true,
   autoHideHeader: true,
   openOutlineOnEnter: false,
+  narrationSpeed: 1,
+  smartNarration: false,
 };
 
 export const READING_TEXT_SIZE_PX: Record<ReadingTextSize, number> = {
@@ -51,6 +56,10 @@ function isLineSpacing(value: unknown): value is ReadingLineSpacing {
 
 function isTextWidth(value: unknown): value is ReadingTextWidth {
   return value === "narrow" || value === "balanced" || value === "wide";
+}
+
+function isNarrationSpeed(value: unknown): value is ReadingNarrationSpeed {
+  return value === 0.75 || value === 1 || value === 1.25 || value === 1.5 || value === 2;
 }
 
 export function parseReadingPreferences(
@@ -84,6 +93,13 @@ export function parseReadingPreferences(
         typeof parsed.openOutlineOnEnter === "boolean"
           ? parsed.openOutlineOnEnter
           : DEFAULT_READING_PREFERENCES.openOutlineOnEnter,
+      narrationSpeed: isNarrationSpeed(parsed.narrationSpeed)
+        ? parsed.narrationSpeed
+        : DEFAULT_READING_PREFERENCES.narrationSpeed,
+      smartNarration:
+        typeof parsed.smartNarration === "boolean"
+          ? parsed.smartNarration
+          : DEFAULT_READING_PREFERENCES.smartNarration,
     };
   } catch {
     return { ...DEFAULT_READING_PREFERENCES };

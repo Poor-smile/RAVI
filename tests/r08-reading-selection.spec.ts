@@ -23,9 +23,11 @@ async function openReadingFixture(
   page: Page,
   {
     theme = "light",
+    content = READING_SELECTION_FIXTURE,
     viewport = { width: 1180, height: 858 },
   }: {
     theme?: "light" | "dark";
+    content?: string;
     viewport?: { width: number; height: number };
   } = {},
 ) {
@@ -33,6 +35,8 @@ async function openReadingFixture(
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(
     ({ content, selectedTheme }) => {
+      if (sessionStorage.getItem("r08-seeded")) return;
+      sessionStorage.setItem("r08-seeded", "true");
       window.localStorage.clear();
       window.localStorage.setItem("raavi:theme:v1", selectedTheme);
       window.localStorage.setItem(
@@ -56,7 +60,7 @@ async function openReadingFixture(
         }),
       );
     },
-    { content: READING_SELECTION_FIXTURE, selectedTheme: theme },
+    { content, selectedTheme: theme },
   );
   await page.goto("/");
   await expect(page.locator(".app-shell")).toHaveAttribute(
@@ -401,4 +405,85 @@ test("R08 keeps both actions touch-safe and inside the mobile Reading workspace"
     { width: 108, height: 44 },
     { width: 108, height: 44 },
   ]);
+});
+
+for (const theme of ["light", "dark"] as const) {
+  test(`comment composer is a centered keyboard modal and retains the reading anchor in ${theme}`, async ({ page }) => {
+    const quote = "این عبارت برای ثبت نظر در میانهٔ سند است.";
+    const content = Array.from({ length: 60 }, (_, index) =>
+      `## بخش ${index + 1}\n\n${index === 30 ? quote : "متن خواندنی برای بررسی حفظ محل مطالعه. ".repeat(8)}\n`,
+    ).join("\n");
+    await openReadingFixture(page, { theme, content });
+    await page.evaluate(() => document.fonts.ready);
+    const paragraph = page.locator(".workspace--reading .markdown-body p").filter({ hasText: quote });
+    await paragraph.scrollIntoViewIfNeeded();
+    await selectFragment(page, quote);
+    const initialY = (await paragraph.boundingBox())!.y;
+    const menu = page.getByRole("toolbar", { name: "ابزار متن انتخاب‌شده" });
+    const comment = menu.getByRole("button", { name: "نظر", exact: true });
+    const dialog = page.getByRole("dialog", { name: "افزودن نظر", exact: true });
+    const field = dialog.getByRole("textbox");
+    const cancel = dialog.getByRole("button", { name: "لغو", exact: true });
+    const submit = dialog.getByRole("button", { name: "ثبت", exact: true });
+    await comment.click();
+    await expect(dialog).toHaveAttribute("aria-modal", "true");
+    await expect(field).toBeFocused();
+    await expect(submit).toBeDisabled();
+    await expect.poll(async () => Math.abs((await paragraph.boundingBox())!.y - initialY)).toBeLessThan(4);
+    for (const width of [1024, 1536, 1180]) {
+      await page.setViewportSize({ width, height: 858 });
+      await expect.poll(() => dialog.evaluate(node => {
+        const rect = node.getBoundingClientRect();
+        return Math.max(Math.abs(rect.x + rect.width / 2 - innerWidth / 2), Math.abs(rect.y + rect.height / 2 - innerHeight / 2));
+      })).toBeLessThan(2);
+    }
+    // Resizing reflows the document independently of opening or closing a modal.
+    const beforeCancelY = (await paragraph.boundingBox())!.y;
+    await field.press("Shift+Tab");
+    await expect(cancel).toBeFocused();
+    await cancel.press("Tab");
+    await expect(field).toBeFocused();
+    await field.fill("نظر آزمایشی با حفظ محل مطالعه");
+    await field.press("Tab");
+    await expect(submit).toBeFocused();
+    await submit.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(comment).toBeFocused();
+    await expect.poll(async () => Math.abs((await paragraph.boundingBox())!.y - beforeCancelY)).toBeLessThan(4);
+    await comment.click();
+    await page.locator(".annotation-composer-backdrop").click({ position: { x: 5, y: 5 } });
+    await expect(dialog).toHaveCount(0);
+    await expect(comment).toBeFocused();
+    await comment.click();
+    const draft = "پیش‌نویس نظر پس از بازخوانی باقی می‌ماند";
+    await field.fill(draft);
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("raavi:document:v1")!).annotationComposer?.text)).toBe(draft);
+    await page.reload();
+    await expect(field).toHaveValue(draft);
+    await expect(field).toBeFocused();
+    await expect(paragraph).toBeInViewport();
+    await page.screenshot({ path: `.artifacts/reading-navigation-fix-2026-09-06/comment-modal-${theme}.png` });
+    await field.press("Control+Enter");
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("raavi:document:v1")!).annotations.map((a: { body: string }) => a.body))).toContain(draft);
+    await expect(page.locator(".workspace--reading .markdown-body")).toBeFocused();
+    await expect(paragraph).toBeInViewport();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("raavi:document:v1")!).content)).toBe(content);
+  });
+}
+
+test("Escape cancels a queued selection frame without reopening the palette", async ({ page }) => {
+  await openReadingFixture(page);
+  await selectFragment(page);
+  await page.locator(".workspace--reading .markdown-body").evaluate(article => {
+    const range = window.getSelection()!.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    article.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: rect.x + rect.width / 2, clientY: rect.y + rect.height / 2 }));
+    article.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+  });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(page.locator(".selection-mini-menu")).toHaveCount(0);
+  await expect(page.locator(".selection-range-feedback")).toHaveCount(0);
+  await expect(page.locator(".app-shell")).toHaveClass(/is-reading/);
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("");
 });

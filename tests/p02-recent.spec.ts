@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { dismissFirstRunIfNeeded } from "./helpers/electron-main-window";
 
 test("P02 assembles the independent compact Recent panel from Figma", async ({
   page,
@@ -104,6 +105,7 @@ test("P02 assembles the independent compact Recent panel from Figma", async ({
     "true",
   );
 
+  await dismissFirstRunIfNeeded(page);
   await page.getByRole("button", { name: "تاریخچه", exact: true }).click();
   const panel = page.locator("#recent-files-panel");
   await expect(panel).toBeVisible();

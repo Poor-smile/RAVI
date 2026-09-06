@@ -28,6 +28,7 @@ import {
   TaskMarkerWidget,
 } from "./live-preview-widgets";
 import {
+  CodeBlockHeaderWidget,
   FootnoteWidget,
   ImageBlockWidget,
   AudioBlockWidget,
@@ -142,7 +143,7 @@ function transactionChangesActiveEditingBlockRange(transaction: {
 }
 
 let cachedActiveBlockDocument: Text | null = null;
-let cachedActiveBlockHead = -1;
+let cachedActiveBlockPosition = -1;
 let cachedActiveBlockRange: ScanRange | null = null;
 
 /**
@@ -164,16 +165,26 @@ export function activeEditingBlockRange(
   const retainedBlock = state.field(activeEditingBlockRangeField, false);
   if (retainedBlock) return retainedBlock;
 
-  const head = state.selection.main.head;
+  const selection = state.selection.main;
+  // While the user extends a text selection, `head` moves across Markdown
+  // blocks. Driving the active editing block from that moving endpoint makes
+  // Live Preview repeatedly collapse one block and expand the next, changing
+  // geometry underneath the pointer. The anchor is stable for the lifetime of
+  // the gesture, so keep the originating block active until the selection is
+  // collapsed again.
+  const activePosition = selection.empty ? selection.head : selection.anchor;
   if (
     cachedActiveBlockDocument === state.doc &&
-    cachedActiveBlockHead === head
+    cachedActiveBlockPosition === activePosition
   ) {
     return cachedActiveBlockRange;
   }
-  const block = resolveMarkdownBlockRange(state.doc.toString(), head);
+  const block = resolveMarkdownBlockRange(
+    state.doc.toString(),
+    activePosition,
+  );
   cachedActiveBlockDocument = state.doc;
-  cachedActiveBlockHead = head;
+  cachedActiveBlockPosition = activePosition;
   cachedActiveBlockRange = { from: block.from, to: block.to };
   return cachedActiveBlockRange;
 }
@@ -418,7 +429,61 @@ export function buildLivePreviewDecorations(view: EditorView) {
       from: range.from,
       to: range.to,
       enter(node) {
-        if (node.name === "FencedCode" || node.name === "Table") return false;
+        if (node.name === "FencedCode") {
+          const source = view.state.sliceDoc(node.from, node.to);
+          const fence = parseFence(source);
+          if (fence && !fence.mermaid) {
+            const openingLine = view.state.doc.lineAt(node.from);
+            const closingLine = view.state.doc.lineAt(
+              Math.max(node.from, node.to - 1),
+            );
+            addLineDecoration(
+              decorations,
+              lineKeys,
+              view.state,
+              openingLine.from,
+              "cm-live-code-fence cm-live-code-fence-start",
+            );
+            addLineDecoration(
+              decorations,
+              lineKeys,
+              view.state,
+              closingLine.from,
+              "cm-live-code-fence cm-live-code-fence-end",
+            );
+            decorations.push(
+              Decoration.replace({
+                inclusive: false,
+                widget: new CodeBlockHeaderWidget(
+                  fence.language,
+                  fence.code,
+                ),
+              }).range(
+                openingLine.from,
+                openingLine.to,
+              ),
+              Decoration.replace({ inclusive: false }).range(
+                closingLine.from,
+                closingLine.to,
+              ),
+            );
+            for (
+              let lineNumber = openingLine.number + 1;
+              lineNumber < closingLine.number;
+              lineNumber += 1
+            ) {
+              addLineDecoration(
+                decorations,
+                lineKeys,
+                view.state,
+                view.state.doc.line(lineNumber).from,
+                "cm-c",
+              );
+            }
+          }
+          return false;
+        }
+        if (node.name === "Table") return false;
         const headingMatch = /^ATXHeading([1-6])$/u.exec(node.name);
         if (headingMatch) {
           addLineDecoration(
@@ -559,16 +624,19 @@ export function buildLivePreviewDecorations(view: EditorView) {
           return false;
         }
 
+        const inlineSyntaxIsVisible =
+          node.name !== "CodeMark" &&
+          selectionTouchesRange(
+            view.state,
+            inlineAncestor((node.node as SyntaxNodeShape).parent) ?? node,
+            view.hasFocus,
+          );
         if (
           (node.name === "EmphasisMark" ||
             node.name === "StrikethroughMark" ||
             node.name === "CodeMark") &&
           node.from < node.to &&
-          !selectionTouchesRange(
-            view.state,
-            inlineAncestor((node.node as SyntaxNodeShape).parent) ?? node,
-            view.hasFocus,
-          )
+          !inlineSyntaxIsVisible
         ) {
           decorations.push(
             Decoration.replace({ inclusive: false }).range(node.from, node.to),
@@ -757,10 +825,7 @@ function buildRichBlockDecorations(
         if (node.name === "FencedCode") {
           const source = view.state.sliceDoc(node.from, node.to);
           const fence = parseFence(source);
-          if (
-            fence?.mermaid
-            && !selectionTouchesRange(view.state, node, view.hasFocus)
-          ) {
+          if (fence?.mermaid) {
             decorations.push(
               Decoration.replace({
                 block: true,

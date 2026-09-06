@@ -22,10 +22,11 @@ test("client chunk budgets cover Markdown, Mermaid and Graph", async () => {
 });
 
 test("chunk inspection rejects an oversized production artifact", async () => {
+  const config = await readClientChunkBudgets();
   const directory = await mkdtemp(path.join(os.tmpdir(), "raavi-chunk-budget-"));
   try {
     await Promise.all([
-      writeFile(path.join(directory, "markdown-code-editor-test.js"), Buffer.alloc(327681)),
+      writeFile(path.join(directory, "markdown-code-editor-test.js"), Buffer.alloc(config.artifacts.markdown.maxBytes + 1)),
       writeFile(path.join(directory, "mermaid-studio-test.js"), Buffer.alloc(1)),
       writeFile(path.join(directory, "cytoscape.esm-test.js"), Buffer.alloc(1)),
     ]);

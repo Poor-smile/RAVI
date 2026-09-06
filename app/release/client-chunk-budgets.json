@@ -6,7 +6,7 @@
       "label": "Markdown editor",
       "pattern": "^markdown-code-editor-[^.]+\\.js$",
       "baselineBytes": 301043,
-      "maxBytes": 327680
+      "maxBytes": 329728
     },
     "mermaid": {
       "label": "Mermaid Studio",

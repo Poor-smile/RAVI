@@ -1,6 +1,11 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { contextBridge, ipcRenderer } = require("electron");
 
+contextBridge.exposeInMainWorld("raaviMermaid", Object.freeze({
+  render: (job) => ipcRenderer.invoke("mermaid:render", job),
+  restart: (reason) => ipcRenderer.invoke("mermaid:restart", reason),
+}));
+
 contextBridge.exposeInMainWorld(
   "raaviDesktop",
   Object.freeze({
@@ -149,6 +154,22 @@ contextBridge.exposeInMainWorld(
       const listener = (_event, payload) => callback(payload);
       ipcRenderer.on("audio:local-event", listener);
       return () => ipcRenderer.removeListener("audio:local-event", listener);
+    },
+    getTtsModelState: () => ipcRenderer.invoke("tts:model-state"),
+    installTtsEngine: (engine) => ipcRenderer.invoke("tts:model-install", engine),
+    pauseTtsEngineInstall: () => ipcRenderer.invoke("tts:model-pause"),
+    resumeTtsEngineInstall: () => ipcRenderer.invoke("tts:model-resume"),
+    selectTtsEngine: (engine) => ipcRenderer.invoke("tts:model-select", engine),
+    deleteTtsEngine: (engine) => ipcRenderer.invoke("tts:model-delete", engine),
+    previewTtsEngine: (engine) => ipcRenderer.invoke("tts:preview", engine),
+    prepareTtsNarration: (payload) =>
+      ipcRenderer.invoke("tts:narration-prepare", payload),
+    synthesizeTts: (payload) => ipcRenderer.invoke("tts:synthesize", payload),
+    cancelTts: () => ipcRenderer.invoke("tts:cancel"),
+    onTtsLocalEvent: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on("tts:local-event", listener);
+      return () => ipcRenderer.removeListener("tts:local-event", listener);
     },
     setWindowTheme: (theme) => ipcRenderer.send("window:set-theme", theme),
     minimizeWindow: async () => {

@@ -36,6 +36,10 @@ test("palette ranks Persian titles and English aliases without hiding disabled c
     rankPaletteCommands(COMMAND_REGISTRY, "جداکننده", {})[0]?.id,
     "edit.divider",
   );
+  assert.equal(
+    rankPaletteCommands(COMMAND_REGISTRY, "بلوک کد", {})[0]?.id,
+    "edit.codeBlock",
+  );
 });
 
 test("recent ranking is local, bounded, and tolerant of corrupt storage", () => {

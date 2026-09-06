@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { dismissFirstRunIfNeeded } from "./helpers/electron-main-window";
 
 test("P03 assembles the independent local Versions panel from Figma", async ({
   page,
@@ -165,6 +166,7 @@ test("P03 assembles the independent local Versions panel from Figma", async ({
     "true",
   );
 
+  await dismissFirstRunIfNeeded(page);
   await page.getByRole("button", { name: "نسخه‌ها", exact: true }).click();
   const panel = page.locator("#library-versions-panel");
   await expect(panel).toBeVisible();

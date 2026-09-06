@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { EditorState } from "@codemirror/state";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { foldable } from "@codemirror/language";
+import { ensureSyntaxTree, foldable } from "@codemirror/language";
 import {
   findHighlightRanges,
   findUnderlineRanges,
@@ -55,6 +55,7 @@ test("heading and nested list folding is editor state, not Markdown data", () =>
     doc: source,
     extensions: [markdown({ base: markdownLanguage })],
   });
+  assert.ok(ensureSyntaxTree(state, state.doc.length, 1_000));
   const heading = state.doc.line(1);
   const list = state.doc.line(6);
   assert.ok(foldable(state, heading.from, heading.to));

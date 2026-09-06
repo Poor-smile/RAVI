@@ -12,6 +12,10 @@ const playwrightCli = path.join(
   "playwright",
   "cli.js",
 );
+const childEnvironment = { ...process.env };
+if (childEnvironment.FORCE_COLOR !== undefined) {
+  delete childEnvironment.NO_COLOR;
+}
 
 const stages = [
   {
@@ -128,7 +132,7 @@ for (const [index, stage] of stages.entries()) {
   console.log(`\n${prefix} ${stage.name}`);
   const result = spawnSync(stage.command, stage.args, {
     cwd: process.cwd(),
-    env: process.env,
+    env: childEnvironment,
     stdio: "inherit",
   });
   if (result.error) {

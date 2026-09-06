@@ -1,5 +1,6 @@
+import { releaseElectron as electron } from "./helpers/release-electron";
 import { expect, Page, test } from "@playwright/test";
-import { _electron as electron } from "playwright";
+
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -128,6 +129,7 @@ test.describe("RAVI identity baseline", () => {
     });
 
     try {
+      expect(await app.evaluate(({ app }) => app.getPath("userData"))).toBe(userDataPath);
       const window = await waitForRaaviWindow(app);
       await window.setViewportSize({ width: 1440, height: 900 });
       await window.emulateMedia({ reducedMotion: "reduce" });
@@ -256,6 +258,7 @@ test.describe("RAVI identity baseline", () => {
         BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
       });
 
+      if (process.env.RAAVI_DESKTOP_ONLY === "1") return;
       await window.setViewportSize({ width: 320, height: 844 });
       await expect(window.locator(".mobile-tabs")).toBeVisible();
       await expect(window.locator(".topbar-action--open")).toBeVisible();

@@ -52,7 +52,9 @@ function flattenCustomProperties(
   value: unknown,
   path: string[],
   output: Array<{ name: string; value: string }>,
+  ancestors = new Set<object>(),
 ) {
+  if (path.length > 64) throw new Error("Frontmatter nesting is too deep.");
   if (value === undefined || value === null) return;
   if (Array.isArray(value)) {
     const text = propertyText(value);
@@ -60,8 +62,14 @@ function flattenCustomProperties(
     return;
   }
   if (typeof value === "object" && !(value instanceof Date)) {
-    for (const [key, child] of Object.entries(value as MetadataRecord)) {
-      flattenCustomProperties(child, [...path, key], output);
+    if (ancestors.has(value)) throw new Error("Frontmatter contains a circular alias.");
+    ancestors.add(value);
+    try {
+      for (const [key, child] of Object.entries(value as MetadataRecord)) {
+        flattenCustomProperties(child, [...path, key], output, ancestors);
+      }
+    } finally {
+      ancestors.delete(value);
     }
     return;
   }
@@ -134,6 +142,13 @@ function parseProperties(raw: string): WordFrontmatterProperties {
       ? scalarText(recordValue(author as MetadataRecord, ["name"]))
       : undefined);
   const tags = recordValue(record, ["tags", "keywords"]);
+  let custom: WordFrontmatterProperties["customProperties"];
+  try {
+    custom = customProperties(record);
+  } catch {
+    // Preserve metadata that cannot be flattened instead of failing Word export.
+    custom = [{ name: "Raavi.Frontmatter", value: raw.slice(0, 32_767) }];
+  }
 
   return {
     title: scalarText(recordValue(record, ["title"])),
@@ -141,7 +156,7 @@ function parseProperties(raw: string): WordFrontmatterProperties {
     creator,
     keywords: propertyText(tags),
     description: scalarText(recordValue(record, ["description"])),
-    customProperties: customProperties(record),
+    customProperties: custom,
   };
 }
 

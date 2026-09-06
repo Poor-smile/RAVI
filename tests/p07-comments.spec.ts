@@ -122,7 +122,7 @@ test("P07 assembles the independent editable Comments panel from Figma", async (
   await expect(bodies.nth(2)).toHaveValue("حداکثر عرض هم ثبت شود.");
   await expect(jumps.nth(0)).toHaveAttribute("aria-current", "location");
   await expect(rows.nth(2).locator("time")).toHaveText("دیروز");
-  await expect(sidebar).toContainText("محلی · همراه فایل .ravi");
+  await expect(sidebar).toContainText("Markdown · محلی و قابل‌حمل");
 
   await page.waitForTimeout(260);
   const contract = await page.evaluate(() => {
@@ -178,9 +178,9 @@ test("P07 assembles the independent editable Comments panel from Figma", async (
     pane: { x: 920, y: 92, width: 304, height: 822 },
     rail: { x: 1224, y: 92, width: 56, height: 822 },
     header: { x: 934, y: 106, width: 276, height: 52 },
-    summary: { x: 934, y: 166, width: 276, height: 18 },
-    row: { x: 934, y: 188, width: 276, height: 64 },
-    footer: { x: 934, y: 883, width: 276, height: 17 },
+    summary: { x: 934, y: 214, width: 276, height: 18 },
+    row: { x: 934, y: 236, width: 276, height: 64 },
+    footer: { x: 934, y: 866, width: 276, height: 34 },
   });
   expect(contract.surface).toEqual({
     panelBackground: "rgb(14, 19, 15)",
@@ -272,7 +272,8 @@ test("P07 assembles the independent editable Comments panel from Figma", async (
     await jumps.first().press("Delete");
     await expect(rows).toHaveCount(remaining);
   }
-  await expect(panel).toContainText("هنوز نظری ندارید");
+  await expect(panel).toContainText("نظرات · ۰ مورد");
+  await expect(panel).toContainText("هنوز نشانهٔ هوشمندی ثبت نشده");
   for (let restored = 1; restored <= 3; restored += 1) {
     await page
       .locator(".annotation-undo-notice")
@@ -287,6 +288,7 @@ test("P07 assembles the independent editable Comments panel from Figma", async (
   await expect(sidebar).toHaveClass(/is-collapsed/);
   await expect(trigger).toBeFocused();
 
+  if (process.env.RAAVI_DESKTOP_ONLY === "1") return;
   await page.setViewportSize({ width: 375, height: 812 });
   const overflow = page.getByRole("button", {
     name: "بازکردن فرمان‌های بیشتر",

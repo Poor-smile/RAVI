@@ -100,7 +100,7 @@ function updateCopy(state: SoftwareUpdateState) {
     case "ready":
       return {
         title: "نسخه آمادهٔ نصب است",
-        body: "دانلود و اعتبارسنجی کامل شد. برنامه برای نصب و راه‌اندازی مجدد آماده است.",
+        body: state.message || "دانلود و اعتبارسنجی کامل شد. برنامه برای نصب و راه‌اندازی مجدد آماده است.",
         meta: `نسخهٔ ${version} · تأییدشده`,
       };
     case "error":
@@ -181,7 +181,7 @@ export function SoftwareUpdateStatusCard({
           {(state.phase === "downloading" || state.phase === "paused") && (
             <button type="button" className="is-secondary" onClick={actions.onCancel}>لغو دانلود</button>
           )}
-          {state.phase === "error" && (
+          {(state.phase === "error" || (state.phase === "ready" && state.message)) && (
             <button type="button" className="is-secondary" onClick={actions.onDirectDownload}>دانلود مستقیم</button>
           )}
           <PrimaryAction state={state} actions={actions} />
@@ -216,7 +216,7 @@ export function SoftwareUpdateBanner({
           <p>{
             state.phase === "available" ? `راوی ${formatVersion(state.version)} برای دریافت آماده است.` :
             state.phase === "downloading" || state.phase === "paused" ? "می‌توانید هم‌زمان به کارتان ادامه دهید." :
-            state.phase === "ready" ? "دانلود و اعتبارسنجی با موفقیت کامل شد." :
+            state.phase === "ready" ? (state.message || "دانلود و اعتبارسنجی با موفقیت کامل شد.") :
             "در حال حاضر مسیر دانلود در دسترس نیست."
           }</p>
         </div>

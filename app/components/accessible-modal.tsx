@@ -13,6 +13,7 @@ import {
 } from "react";
 
 export type ModalLayerId =
+  | "annotationComposer"
   | "about"
   | "aiSetup"
   | "onboarding"
@@ -81,6 +82,7 @@ export function useModalFocus({
   initialFocusRef,
   returnFocusRef,
   trapFocus = true,
+  preventScroll = false,
 }: {
   open: boolean;
   isTopLayer: boolean;
@@ -88,6 +90,7 @@ export function useModalFocus({
   initialFocusRef?: RefObject<HTMLElement | null>;
   returnFocusRef?: RefObject<HTMLElement | null>;
   trapFocus?: boolean;
+  preventScroll?: boolean;
 }) {
   const capturedOpenerRef = useRef<HTMLElement | null>(null);
   const latestReturnFocusRef = useRef(returnFocusRef);
@@ -110,9 +113,9 @@ export function useModalFocus({
         latestReturnFocusRef.current?.current ??
         explicitReturnTarget ??
         capturedOpenerRef.current;
-      if (target?.isConnected) requestAnimationFrame(() => target.focus());
+      if (target?.isConnected) requestAnimationFrame(() => target.focus({ preventScroll }));
     };
-  }, [open, returnFocusRef]);
+  }, [open, preventScroll, returnFocusRef]);
 
   useEffect(() => {
     if (!open || !isTopLayer) return;
@@ -125,28 +128,28 @@ export function useModalFocus({
         preferred && container.contains(preferred)
           ? preferred
           : focusableElements(container)[0] ?? container;
-      target.focus();
+      target.focus({ preventScroll });
     };
-    requestAnimationFrame(focusInitial);
+    const focusFrame = requestAnimationFrame(focusInitial);
 
-    if (!trapFocus) return;
+    if (!trapFocus) return () => cancelAnimationFrame(focusFrame);
 
     const trapTab = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
       const items = focusableElements(container);
       if (!items.length) {
         event.preventDefault();
-        container.focus();
+        container.focus({ preventScroll });
         return;
       }
       const first = items[0];
       const last = items[items.length - 1];
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
-        last.focus();
+        last.focus({ preventScroll });
       } else if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
-        first.focus();
+        first.focus({ preventScroll });
       }
     };
 
@@ -162,10 +165,11 @@ export function useModalFocus({
     document.addEventListener("keydown", trapTab);
     document.addEventListener("focusin", containFocus);
     return () => {
+      cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", trapTab);
       document.removeEventListener("focusin", containFocus);
     };
-  }, [containerRef, initialFocusRef, isTopLayer, open, trapFocus]);
+  }, [containerRef, initialFocusRef, isTopLayer, open, preventScroll, trapFocus]);
 }
 
 export function AccessibleModal({
@@ -183,6 +187,7 @@ export function AccessibleModal({
   containerRole = "dialog",
   ariaModal = true,
   trapFocus = true,
+  preventScroll = false,
   onKeyDown,
   children,
 }: {
@@ -200,6 +205,7 @@ export function AccessibleModal({
   containerRole?: "dialog" | "alertdialog" | "menu";
   ariaModal?: boolean;
   trapFocus?: boolean;
+  preventScroll?: boolean;
   onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
   children: ReactNode;
 }) {
@@ -210,6 +216,7 @@ export function AccessibleModal({
     initialFocusRef,
     returnFocusRef,
     trapFocus,
+    preventScroll,
   });
 
   if (!open) return null;

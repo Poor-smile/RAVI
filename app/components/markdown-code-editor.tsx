@@ -118,6 +118,7 @@ import type { SemanticDocumentAnchor } from "../context/semantic-anchor";
 import type { CommandPlatform } from "../keyboard/command-registry";
 import type { CodeViewLineDirection } from "../editor/code-view-preferences";
 import { contextualShortcutsFor } from "../editor/contextual-shortcuts";
+import { mixedScriptWordRangeAt } from "../editor/text-selection";
 import { GripVertical, Notes } from "../icons/material-symbols";
 import { MATERIAL_SYMBOL_PATHS } from "../icons/material-symbol-paths";
 import { MagicWandTrigger } from "./magic-wand-trigger";
@@ -341,7 +342,7 @@ function contextualShortcutDecorations(
 ): DecorationSet {
   const selection = state.selection.main;
   const structuralSelection = structuralBlockSelection(state);
-  const position = focus.from ?? structuralSelection?.from ?? selection.head;
+  const position = focus.from ?? structuralSelection?.from ?? selection.anchor;
   const block = resolveMarkdownBlockRange(
     state.doc.toString(),
     position,
@@ -352,7 +353,9 @@ function contextualShortcutDecorations(
     platform,
     rendered: focus.rendered,
     structuralSelection: Boolean(structuralSelection),
-    textSelection: !selection.empty,
+    // Keep the in-flow hint geometry identical while a pointer selection is
+    // growing. The formatting toolbar already exposes Alt+F10 for a selection.
+    textSelection: false,
   });
   if (!hints.length) return Decoration.none;
   return Decoration.set([
@@ -493,6 +496,48 @@ function sourcePositionAtMouse(view: EditorView, event: MouseEvent) {
   return view.posAtCoords({ x: event.clientX, y: event.clientY });
 }
 
+function sourceLineRangeAtEventTarget(
+  view: EditorView,
+  event: MouseEvent,
+) {
+  const target = event.target;
+  const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
+  const line = element?.closest<HTMLElement>(".cm-line");
+  if (!line || !view.contentDOM.contains(line)) {
+    const fallback = sourcePositionAtMouse(view, event);
+    return fallback === null ? null : view.state.doc.lineAt(fallback);
+  }
+  try {
+    const mappedPosition = view.posAtDOM(line, 0);
+    const visibleText = line.textContent?.trim() ?? "";
+    if (!visibleText) return view.state.doc.lineAt(mappedPosition);
+    const mappedLine = view.state.doc.lineAt(mappedPosition);
+    for (let distance = 0; distance <= 3; distance += 1) {
+      for (const direction of distance === 0 ? [0] : [-1, 1]) {
+        const lineNumber = mappedLine.number + distance * direction;
+        if (lineNumber < 1 || lineNumber > view.state.doc.lines) continue;
+        const candidate = view.state.doc.line(lineNumber);
+        if (candidate.text.trim() === visibleText) return candidate;
+      }
+    }
+    return mappedLine;
+  } catch {
+    const fallback = sourcePositionAtMouse(view, event);
+    return fallback === null ? null : view.state.doc.lineAt(fallback);
+  }
+}
+
+function pinEditorScroll(view: EditorView, top: number, frames = 3) {
+  const apply = (remaining: number) => {
+    if (!view.dom.isConnected) return;
+    view.scrollDOM.scrollTop = top;
+    if (remaining > 0) {
+      requestAnimationFrame(() => apply(remaining - 1));
+    }
+  };
+  apply(frames);
+}
+
 type PointerBlockDropPlacement = "before" | "after";
 
 type PointerBlockDragState = {
@@ -560,6 +605,38 @@ function structuralBlockOperations(view: EditorView) {
 
 function structuralOperationPosition(view: EditorView) {
   return structuralBlockSelection(view.state)?.from ?? view.state.selection.main.head;
+}
+
+function moveOneVisibleSourceLine(
+  view: EditorView,
+  direction: "up" | "down",
+) {
+  const selection = view.state.selection.main;
+  if (!selection.empty) return false;
+  const current = view.state.doc.lineAt(selection.head);
+  const step = direction === "up" ? -1 : 1;
+  const preferredColumn = selection.head - current.from;
+
+  for (
+    let lineNumber = current.number + step;
+    lineNumber >= 1 && lineNumber <= view.state.doc.lines;
+    lineNumber += step
+  ) {
+    const target = view.state.doc.line(lineNumber);
+    if (view.lineBlockAt(target.from).height < 1) continue;
+    const lastInteriorPosition = target.length > 0 ? target.to - 1 : target.from;
+    const head = Math.min(
+      lastInteriorPosition,
+      target.from + preferredColumn,
+    );
+    view.dispatch({
+      selection: { anchor: head },
+      annotations: Transaction.userEvent.of("select.keyboard"),
+      effects: EditorView.scrollIntoView(head, { y: "nearest" }),
+    });
+    return true;
+  }
+  return false;
 }
 
 function editorBlockVerticalBounds(
@@ -1857,6 +1934,31 @@ export const MarkdownCodeEditor = forwardRef<
   const suppressDragHandleClickRef = useRef(false);
   const imeCompositionActiveRef = useRef(false);
   const doubleClickAnchorRef = useRef<DoubleClickAnchor | null>(null);
+  const multiClickLineRef = useRef<{
+    from: number;
+    to: number;
+    clientX: number;
+    clientY: number;
+    scrollTop: number;
+    capturedAt: number;
+  } | null>(null);
+  const pointerTextSelectionRef = useRef<{
+    anchor: number;
+    lineFrom: number;
+    lineTo: number;
+    startX: number;
+    startY: number;
+    scrollTop: number;
+    dragging: boolean;
+  } | null>(null);
+  const singleClickCorrectionTimerRef = useRef<number | null>(null);
+  const pendingSingleClickCorrectionRef = useRef<{
+    anchor: number;
+    lineFrom: number;
+    lineTo: number;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
   const handledDoubleClickRef = useRef<{
     from: number;
     to: number;
@@ -2205,7 +2307,9 @@ export const MarkdownCodeEditor = forwardRef<
           keymap.of([
             {
               key: "Mod-a",
-              run: (view) => selectActiveBlockContents(view),
+              run: (view) =>
+                currentModeRef.current !== "source" &&
+                selectActiveBlockContents(view),
             },
             {
               key: "Escape",
@@ -2281,20 +2385,24 @@ export const MarkdownCodeEditor = forwardRef<
             {
               key: "ArrowUp",
               run: (view) =>
-                currentModeRef.current === "source" ||
                 view.composing || imeCompositionActiveRef.current
                   ? false
+                  : currentModeRef.current === "source"
+                    ? moveOneVisibleSourceLine(view, "up")
                   : focusAdjacentRichTable(view, "up") ||
-                    moveWithinOrAcrossListBlock(view, "up"),
+                    moveWithinOrAcrossListBlock(view, "up") ||
+                    moveOneVisibleSourceLine(view, "up"),
             },
             {
               key: "ArrowDown",
               run: (view) =>
-                currentModeRef.current === "source" ||
                 view.composing || imeCompositionActiveRef.current
                   ? false
+                  : currentModeRef.current === "source"
+                    ? moveOneVisibleSourceLine(view, "down")
                   : focusAdjacentRichTable(view, "down") ||
-                    moveWithinOrAcrossListBlock(view, "down"),
+                    moveWithinOrAcrossListBlock(view, "down") ||
+                    moveOneVisibleSourceLine(view, "down"),
             },
             {
               key: "Backspace",
@@ -2373,7 +2481,14 @@ export const MarkdownCodeEditor = forwardRef<
             if (hostRef.current) {
               delete hostRef.current.dataset.tableBlockActive;
             }
-            onSelectionChangeRef.current();
+            // Pointer drags dispatch many intermediate selections. Publishing
+            // each one mounts/unmounts the floating toolbar and re-renders the
+            // page while the pointer is still down. Defer that work until the
+            // gesture ends; keyboard and multi-click selections still publish
+            // immediately.
+            if (!pointerTextSelectionRef.current?.dragging) {
+              onSelectionChangeRef.current();
+            }
             if (keyboardNavigationPending) {
               scheduleKeyboardReadingBandReveal(update.view);
             }
@@ -2421,6 +2536,7 @@ export const MarkdownCodeEditor = forwardRef<
             ) {
               doubleClickAnchorRef.current = null;
               handledDoubleClickRef.current = null;
+              multiClickLineRef.current = null;
               return false;
             }
 
@@ -2436,6 +2552,17 @@ export const MarkdownCodeEditor = forwardRef<
             if (!repeatedClick) {
               const position = sourcePositionAtMouse(view, event);
               if (position === null) return false;
+              const line = sourceLineRangeAtEventTarget(view, event);
+              multiClickLineRef.current = line
+                ? {
+                    from: line.from,
+                    to: line.to,
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    scrollTop: view.scrollDOM.scrollTop,
+                    capturedAt: performance.now(),
+                  }
+                : null;
               const block = resolveMarkdownBlockRange(
                 view.state.doc.toString(),
                 position,
@@ -2470,6 +2597,12 @@ export const MarkdownCodeEditor = forwardRef<
             }
 
             const word =
+              mixedScriptWordRangeAt(
+                view.state.doc.toString(),
+                anchor.position,
+                currentBlock.from,
+                currentBlock.to,
+              ) ??
               view.state.wordAt(anchor.position) ??
               (anchor.position > currentBlock.from
                 ? view.state.wordAt(anchor.position - 1)
@@ -2491,6 +2624,10 @@ export const MarkdownCodeEditor = forwardRef<
               selection: { anchor: from, head: to },
               annotations: Transaction.userEvent.of("select.pointer.word"),
             });
+            const pinnedScrollTop = multiClickLineRef.current?.scrollTop;
+            if (pinnedScrollTop !== undefined) {
+              pinEditorScroll(view, pinnedScrollTop);
+            }
             view.focus();
             syncWritingBlockGutter(view);
             onSelectionChangeRef.current({
@@ -2514,6 +2651,10 @@ export const MarkdownCodeEditor = forwardRef<
                 },
                 annotations: Transaction.userEvent.of("select.pointer.word"),
               });
+              const pinnedScrollTop = multiClickLineRef.current?.scrollTop;
+              if (pinnedScrollTop !== undefined) {
+                pinEditorScroll(view, pinnedScrollTop);
+              }
               view.focus();
               syncWritingBlockGutter(view);
               onSelectionChangeRef.current({
@@ -2524,6 +2665,29 @@ export const MarkdownCodeEditor = forwardRef<
             return true;
           },
           keydown: (event, view) => {
+            if (singleClickCorrectionTimerRef.current !== null) {
+              window.clearTimeout(singleClickCorrectionTimerRef.current);
+              singleClickCorrectionTimerRef.current = null;
+            }
+            const pendingCorrection = pendingSingleClickCorrectionRef.current;
+            pendingSingleClickCorrectionRef.current = null;
+            if (pendingCorrection) {
+              const head = view.state.selection.main.head;
+              if (
+                head < pendingCorrection.lineFrom ||
+                head > pendingCorrection.lineTo
+              ) {
+                view.dispatch({
+                  selection: { anchor: pendingCorrection.anchor },
+                  annotations: Transaction.userEvent.of("select.pointer"),
+                });
+                syncWritingBlockGutter(view);
+                onSelectionChangeRef.current({
+                  clientX: pendingCorrection.clientX,
+                  clientY: pendingCorrection.clientY,
+                });
+              }
+            }
             if (
               !event.altKey &&
               !event.isComposing &&
@@ -2693,6 +2857,14 @@ export const MarkdownCodeEditor = forwardRef<
       });
     };
     const handleEditorPointerDown = (event: PointerEvent) => {
+      // A new pointer interaction supersedes the delayed correction from the
+      // previous text click. This also covers gutter controls that prevent the
+      // compatibility `mousedown` event from firing.
+      if (singleClickCorrectionTimerRef.current !== null) {
+        window.clearTimeout(singleClickCorrectionTimerRef.current);
+        singleClickCorrectionTimerRef.current = null;
+      }
+      pendingSingleClickCorrectionRef.current = null;
       const current = tableCellSelectionRef.current;
       const activeCell = activeTableCellRef.current;
       if (
@@ -2708,7 +2880,193 @@ export const MarkdownCodeEditor = forwardRef<
       onSelectionChangeRef.current();
       syncWritingBlockGutter(view);
     };
+    const handleEditorMultiClick = (event: MouseEvent) => {
+      const target =
+        event.target instanceof Element
+          ? event.target
+          : event.target instanceof Node
+            ? event.target.parentElement
+            : null;
+      if (target?.closest(".cm-rich-table-cell-editor")) {
+        multiClickLineRef.current = null;
+        return;
+      }
+      if (
+        event.detail !== 3 ||
+        event.button !== 0 ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+      const remembered = multiClickLineRef.current;
+      const line =
+        remembered &&
+        performance.now() - remembered.capturedAt <= 900 &&
+        Math.hypot(
+          event.clientX - remembered.clientX,
+          event.clientY - remembered.clientY,
+        ) <= 8
+          ? remembered
+          : sourceLineRangeAtEventTarget(view, event);
+      if (!line || line.from >= line.to) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      doubleClickAnchorRef.current = null;
+      handledDoubleClickRef.current = null;
+      multiClickLineRef.current = null;
+      view.dispatch({
+        selection: { anchor: line.from, head: line.to },
+        annotations: Transaction.userEvent.of("select.pointer.block"),
+      });
+      if (remembered) pinEditorScroll(view, remembered.scrollTop);
+      view.focus();
+      syncWritingBlockGutter(view);
+      onSelectionChangeRef.current({
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
+    };
+    const handleTextSelectionStart = (event: MouseEvent) => {
+      if (singleClickCorrectionTimerRef.current !== null) {
+        window.clearTimeout(singleClickCorrectionTimerRef.current);
+        singleClickCorrectionTimerRef.current = null;
+      }
+      pendingSingleClickCorrectionRef.current = null;
+      if (
+        event.detail !== 1 ||
+        event.button !== 0 ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        pointerTextSelectionRef.current = null;
+        return;
+      }
+      const target = event.target;
+      const element =
+        target instanceof Element
+          ? target
+          : target instanceof Node
+            ? target.parentElement
+            : null;
+      if (
+        !element?.closest(".cm-line") ||
+        element.closest(
+          "textarea,input,button,.cm-rich-block",
+        )
+      ) {
+        pointerTextSelectionRef.current = null;
+        return;
+      }
+      const clickedLine = sourceLineRangeAtEventTarget(view, event);
+      const pointerPosition = sourcePositionAtMouse(view, event);
+      const anchor = clickedLine
+          ? pointerPosition !== null &&
+          pointerPosition >= clickedLine.from &&
+          pointerPosition < clickedLine.to
+          ? pointerPosition
+          : clickedLine.from
+        : pointerPosition;
+      pointerTextSelectionRef.current =
+        anchor === null || !clickedLine
+          ? null
+          : {
+              anchor,
+              lineFrom: clickedLine.from,
+              lineTo: clickedLine.to,
+              startX: event.clientX,
+              startY: event.clientY,
+              scrollTop: view.scrollDOM.scrollTop,
+              dragging: false,
+            };
+    };
+    const handleTextSelectionMove = (event: MouseEvent) => {
+      const gesture = pointerTextSelectionRef.current;
+      if (!gesture || (event.buttons & 1) !== 1) return;
+      if (
+        !gesture.dragging &&
+        Math.hypot(
+          event.clientX - gesture.startX,
+          event.clientY - gesture.startY,
+        ) < 3
+      ) {
+        return;
+      }
+      const head = sourcePositionAtMouse(view, event);
+      if (head === null) return;
+      gesture.dragging = true;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      view.dispatch({
+        selection: { anchor: gesture.anchor, head },
+        annotations: Transaction.userEvent.of("select.pointer"),
+      });
+      pinEditorScroll(view, gesture.scrollTop, 1);
+      view.focus();
+      syncWritingBlockGutter(view);
+    };
+    const handleTextSelectionEnd = (event: MouseEvent) => {
+      const gesture = pointerTextSelectionRef.current;
+      if (!gesture) return;
+      if (!gesture.dragging) {
+        pointerTextSelectionRef.current = null;
+        const pendingCorrection = {
+          anchor: gesture.anchor,
+          lineFrom: gesture.lineFrom,
+          lineTo: gesture.lineTo,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        };
+        pendingSingleClickCorrectionRef.current = pendingCorrection;
+        singleClickCorrectionTimerRef.current = window.setTimeout(() => {
+          singleClickCorrectionTimerRef.current = null;
+          if (pendingSingleClickCorrectionRef.current !== pendingCorrection) {
+            return;
+          }
+          pendingSingleClickCorrectionRef.current = null;
+          if (!view.dom.isConnected) return;
+          const head = view.state.selection.main.head;
+          if (head >= gesture.lineFrom && head <= gesture.lineTo) return;
+          view.dispatch({
+            selection: { anchor: gesture.anchor },
+            annotations: Transaction.userEvent.of("select.pointer"),
+          });
+          view.focus();
+          syncWritingBlockGutter(view);
+          onSelectionChangeRef.current({
+            clientX: event.clientX,
+            clientY: event.clientY,
+          });
+        }, 180);
+        return;
+      }
+      const head = sourcePositionAtMouse(view, event);
+      if (head !== null) {
+        view.dispatch({
+          selection: { anchor: gesture.anchor, head },
+          annotations: Transaction.userEvent.of("select.pointer"),
+        });
+      }
+      pointerTextSelectionRef.current = null;
+      pinEditorScroll(view, gesture.scrollTop);
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      view.focus();
+      syncWritingBlockGutter(view);
+      onSelectionChangeRef.current({
+        clientX: event.clientX,
+        clientY: event.clientY,
+      });
+    };
     view.scrollDOM.addEventListener("scroll", handleScroll, { passive: true });
+    host.addEventListener("mousedown", handleTextSelectionStart, true);
+    host.addEventListener("mousedown", handleEditorMultiClick, true);
+    window.addEventListener("mousemove", handleTextSelectionMove, true);
+    window.addEventListener("mouseup", handleTextSelectionEnd, true);
     host.addEventListener("select", handleTableCellSelect, true);
     host.addEventListener("keyup", handleTableCellKeyUp, true);
     host.addEventListener("pointerup", handleTableCellPointerUp, true);
@@ -2720,10 +3078,19 @@ export const MarkdownCodeEditor = forwardRef<
       }
       readingBandResizeObserver?.disconnect();
       view.scrollDOM.removeEventListener("scroll", handleScroll);
+      host.removeEventListener("mousedown", handleTextSelectionStart, true);
+      host.removeEventListener("mousedown", handleEditorMultiClick, true);
+      window.removeEventListener("mousemove", handleTextSelectionMove, true);
+      window.removeEventListener("mouseup", handleTextSelectionEnd, true);
       host.removeEventListener("select", handleTableCellSelect, true);
       host.removeEventListener("keyup", handleTableCellKeyUp, true);
       host.removeEventListener("pointerup", handleTableCellPointerUp, true);
       host.removeEventListener("pointerdown", handleEditorPointerDown, true);
+      if (singleClickCorrectionTimerRef.current !== null) {
+        window.clearTimeout(singleClickCorrectionTimerRef.current);
+        singleClickCorrectionTimerRef.current = null;
+      }
+      pendingSingleClickCorrectionRef.current = null;
       tableCellSelectionRef.current = null;
       activeTableCellRef.current = null;
       delete host.dataset.tableBlockActive;

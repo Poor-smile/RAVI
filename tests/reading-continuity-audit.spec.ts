@@ -1,5 +1,6 @@
+import { releaseElectron as electron } from "./helpers/release-electron";
 import { expect, test, type Page } from "@playwright/test";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { type ElectronApplication } from "playwright";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import os from "node:os";
@@ -399,12 +400,14 @@ async function ensureAuditChaptersRendered(page: Page) {
     return root === document.scrollingElement ? window.scrollY : root.scrollTop;
   });
 
+  let scrolledToRender = false;
   for (let index = 0; index < AUDIT_CHAPTER_COUNT; index += 1) {
     if ((await page.locator(".markdown-body h2").count()) >= AUDIT_CHAPTER_COUNT) {
       break;
     }
     const status = page.locator(".progressive-render-status");
     if ((await status.count()) === 0) break;
+    scrolledToRender = true;
     await status.scrollIntoViewIfNeeded();
     await page.waitForTimeout(420);
   }
@@ -413,6 +416,9 @@ async function ensureAuditChaptersRendered(page: Page) {
     AUDIT_CHAPTER_COUNT,
     { timeout: 20_000 },
   );
+  // Restored documents already render all chunks. Replaying the scroll value
+  // sampled during startup would cancel the product's in-flight restoration.
+  if (!scrolledToRender) return;
   await page.evaluate((top) => {
     const reading = document
       .querySelector(".app-shell")
@@ -543,13 +549,20 @@ async function launchAuditApp(
   userDataPath: string,
   documentPath?: string,
 ): Promise<{ app: ElectronApplication; page: Page }> {
+  const executablePath = process.env.RAAVI_AUDIT_EXECUTABLE;
   const args = [
-    path.join(projectRoot, "desktop", "main.mjs"),
+    ...(executablePath ? [] : [path.join(projectRoot, "desktop", "main.mjs")]),
     `--user-data-dir=${userDataPath}`,
   ];
   if (documentPath) args.push(documentPath);
-  const app = await electron.launch({ cwd: projectRoot, args, timeout: 20_000 });
-  return { app, page: await waitForRaaviWindow(app) };
+  const app = await electron.launch({ cwd: projectRoot, executablePath, args, timeout: 20_000 });
+  try {
+    expect(await app.evaluate(({ app }) => app.getPath("userData"))).toBe(userDataPath);
+    return { app, page: await waitForRaaviWindow(app) };
+  } catch (error) {
+    await app.close();
+    throw error;
+  }
 }
 
 test.describe("reading continuity audit", () => {
@@ -912,14 +925,25 @@ test.describe("reading continuity audit", () => {
         .click();
       await page.waitForTimeout(700);
       const afterIntentionalNavigation = await readingMetric(page);
-      const chapterTwelveInViewport = await page
+      const chapterTwelveGeometry = await page
         .locator(".markdown-body h2", {
           hasText: "فصل ۱۲: پیوستگی مطالعه",
         })
         .evaluate((heading) => {
           const rect = heading.getBoundingClientRect();
-          return rect.bottom > 0 && rect.top < window.innerHeight;
+          const workspace = document.querySelector(".workspace")!;
+          const active = document.activeElement as HTMLElement | null;
+          return {
+            inViewport: rect.bottom > 0 && rect.top < window.innerHeight,
+            top: rect.top, bottom: rect.bottom,
+            sourceOffset: heading.getAttribute("data-source-offset"),
+            focusedText: active?.textContent?.slice(0, 80),
+            workspaceTop: workspace.getBoundingClientRect().top,
+            workspaceScroll: workspace.scrollTop,
+            documentScroll: window.scrollY,
+          };
         });
+      const chapterTwelveInViewport = chapterTwelveGeometry.inViewport;
       expect
         .soft(
           chapterTwelveInViewport,
@@ -943,6 +967,7 @@ test.describe("reading continuity audit", () => {
         details: {
           intentionalNavigation: true,
           targetReached: chapterTwelveInViewport,
+          targetGeometry: JSON.stringify(chapterTwelveGeometry),
         },
       });
 
@@ -1019,6 +1044,7 @@ test.describe("reading continuity audit", () => {
       const beforeSelectionEscape = await readingMetric(page);
       await page.keyboard.press("Escape");
       await expect(page.locator(".selection-mini-menu")).toHaveCount(0);
+      await expect(page.locator(".selection-range-feedback")).toHaveCount(0);
       await expect(page.locator(".app-shell")).toHaveClass(/is-reading/);
       const afterSelectionEscape = await readingMetric(page);
       expect(afterSelectionEscape.selectionFeedbackCount).toBe(0);
@@ -1076,6 +1102,10 @@ test.describe("reading continuity audit", () => {
       const beforeCommentCancel = await readingMetric(page);
       await page.getByRole("button", { name: "لغو", exact: true }).click();
       await expect(page.locator(".annotation-toolbar.is-composing")).toHaveCount(0);
+      // Let cancellation finish restoring the selected text before navigating
+      // to a different chapter to open its graph. Otherwise click() scrolls
+      // after the baseline metric and the audit attributes that move to exit.
+      await page.waitForTimeout(500);
       const afterCommentCancel = await readingMetric(page);
       results.push(
         compareScenario(
@@ -1155,7 +1185,8 @@ test.describe("reading continuity audit", () => {
 
       await setReadingProgress(page, 0.52);
       const beforeNarrowViewport = await readingMetric(page);
-      await page.setViewportSize({ width: 780, height: 820 });
+      const desktopOnly = process.env.RAAVI_DESKTOP_ONLY === "1";
+      await page.setViewportSize({ width: desktopOnly ? 1024 : 780, height: 820 });
       await page.waitForTimeout(480);
       results.push(
         compareScenario(
@@ -1165,27 +1196,29 @@ test.describe("reading continuity audit", () => {
         ),
       );
 
-      const beforePortraitViewport = await readingMetric(page);
-      await page.setViewportSize({ width: 390, height: 844 });
-      await page.waitForTimeout(520);
-      results.push(
-        compareScenario(
-          "تغییر به نمای موبایل عمودی",
-          beforePortraitViewport,
-          await readingMetric(page),
-        ),
-      );
+      if (!desktopOnly) {
+        const beforePortraitViewport = await readingMetric(page);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.waitForTimeout(520);
+        results.push(
+          compareScenario(
+            "تغییر به نمای موبایل عمودی",
+            beforePortraitViewport,
+            await readingMetric(page),
+          ),
+        );
 
-      const beforeLandscapeViewport = await readingMetric(page);
-      await page.setViewportSize({ width: 844, height: 390 });
-      await page.waitForTimeout(520);
-      results.push(
-        compareScenario(
-          "چرخش شبیه‌سازی‌شده به نمای افقی",
-          beforeLandscapeViewport,
-          await readingMetric(page),
-        ),
-      );
+        const beforeLandscapeViewport = await readingMetric(page);
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.waitForTimeout(520);
+        results.push(
+          compareScenario(
+            "چرخش شبیه‌سازی‌شده به نمای افقی",
+            beforeLandscapeViewport,
+            await readingMetric(page),
+          ),
+        );
+      }
 
       const beforeWideViewport = await readingMetric(page);
       await page.setViewportSize({ width: 1368, height: 820 });
@@ -1640,8 +1673,8 @@ test.describe("reading continuity audit", () => {
       const replacedBPosition = await readingMetric(replacedB.page);
       expect
         .soft(
-          Math.abs(replacedBPosition.progress - documentBPosition.progress),
-          "large content replacement should use a safe progress fallback",
+          Math.abs(replacedBPosition.progress - changedBPosition.progress),
+          "large content replacement should use the latest reading progress after the preceding semantic restore",
         )
         .toBeLessThanOrEqual(0.03);
       expect.soft(replacedBPosition.horizontalOverflow).toBe(0);

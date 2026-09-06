@@ -9,7 +9,7 @@ async function openFormulaStudio(
   await page.addInitScript(() => {
     localStorage.clear();
     localStorage.setItem("raavi:theme:v1", "light");
-    const content = "# سند جدید\n\n";
+    const content = "";
     localStorage.setItem(
       "raavi:document:v1",
       JSON.stringify({
@@ -33,7 +33,6 @@ async function openFormulaStudio(
   await page.goto("/");
   await expect(page.locator(".app-shell")).toHaveAttribute("data-hydrated", "true");
   const editor = page.locator("#markdown-editor .cm-content");
-  await editor.fill("");
   await editor.focus();
   await page.keyboard.type("/");
   const menu = page.getByRole("menu", { name: "نوع بلوک" });
@@ -43,6 +42,22 @@ async function openFormulaStudio(
   await expect(studio).toBeVisible();
   return { studio, editor };
 }
+
+test("typing then Tab before the next frame preserves the next formula slot focus", async ({ page }) => {
+  const { studio } = await openFormulaStudio(page);
+  await studio.getByRole("button", { name: "کسر", exact: true }).click();
+  const slots = studio.locator(".formula-slot");
+  await expect(slots.nth(0)).toBeFocused();
+  await slots.nth(0).evaluate(async (element: HTMLInputElement) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(element, "x");
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    await Promise.resolve();
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+  });
+  await expect(slots.nth(0)).toHaveValue("x");
+  await expect(slots.nth(1)).toBeFocused();
+});
 
 test("P27 builds a nested Expression Tree and inserts one formula block", async ({
   page,
@@ -487,9 +502,12 @@ test("P27 release gate completes Copy, Paste, Undo, Redo and Apply with keyboard
 
   const slots = studio.locator(".formula-slot");
   await expect(slots).toHaveCount(2);
+  await expect(slots.nth(0)).toBeFocused();
   await page.keyboard.type("x");
   await page.keyboard.press("Tab");
+  await expect(slots.nth(1)).toBeFocused();
   await page.keyboard.type("y");
+  await expect(slots.nth(1)).toHaveValue("y");
 
   await page.keyboard.press("Control+z");
   await expect(slots.nth(1)).toHaveValue("");

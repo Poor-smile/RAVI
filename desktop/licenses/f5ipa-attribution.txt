@@ -1,0 +1,28 @@
+Persian IPA F5-TTS local engine for Raavi
+=========================================
+
+Speech checkpoint: KiaBush/Persian-IPA-to-Speech-F5
+Revision: 245cc858a17f37fd1c808cb4ec87b866cbff72b3
+License: Creative Commons Attribution-NonCommercial 4.0 International
+Source: https://huggingface.co/KiaBush/Persian-IPA-to-Speech-F5
+
+Persian text-to-IPA checkpoint: KiaBush/persian-text-to-ipa-byt5
+Revision: f83588b7c97d3a85a07b7843dd9e1eeb43bf976e
+License: Apache-2.0
+Source: https://huggingface.co/KiaBush/persian-text-to-ipa-byt5
+
+Inference framework: F5-TTS 1.1.22
+License: MIT
+Source: https://github.com/SWivid/F5-TTS
+
+Vocoder: charactr/vocos-mel-24khz
+Revision: 0feb3fdd929bcd6649e0e7c5a688cf7dd012ef21
+License: MIT
+Source: https://huggingface.co/charactr/vocos-mel-24khz
+
+The bundled reference sample is the model repository's generated example
+"گل رز.wav" and is redistributed under the speech checkpoint's terms.
+
+This engine is offered only for personal, educational, and research use that
+complies with CC BY-NC 4.0. Generated speech must not be presented as a real
+person's recording and should be disclosed as synthetic audio.

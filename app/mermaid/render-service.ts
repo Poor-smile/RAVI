@@ -71,6 +71,11 @@ class RuntimeMermaidRendererTransport implements MermaidRendererTransport {
 
   private async getTransport() {
     if (this.transport) return this.transport;
+    if (typeof window !== "undefined" && window.raaviMermaid) {
+      const { ElectronMermaidRendererTransport } = await import("./electron-renderer-transport");
+      this.transport = new ElectronMermaidRendererTransport(window.raaviMermaid);
+      return this.transport;
+    }
     const isTauri =
       typeof window !== "undefined" &&
       "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>);

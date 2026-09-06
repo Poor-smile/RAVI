@@ -20,6 +20,8 @@ test("reading preferences use safe local defaults", () => {
         rememberPosition: false,
         autoHideHeader: false,
         openOutlineOnEnter: true,
+        narrationSpeed: 1.25,
+        smartNarration: true,
       }),
     ),
     {
@@ -29,6 +31,8 @@ test("reading preferences use safe local defaults", () => {
       rememberPosition: false,
       autoHideHeader: false,
       openOutlineOnEnter: true,
+      narrationSpeed: 1.25,
+      smartNarration: true,
     },
   );
 });
@@ -43,6 +47,7 @@ test("reading preferences reject unknown values without discarding valid ones", 
         rememberPosition: "yes",
         autoHideHeader: false,
         openOutlineOnEnter: true,
+        narrationSpeed: 9,
       }),
     ),
     {

@@ -118,6 +118,10 @@ import type { SearchPaneState } from "./components/library-search-pane";
 import type { ReadingDocumentSearchResult } from "./components/reading-document-search-pane";
 import { ReadingToolsMenu } from "./components/reading-tools-menu";
 import { ReadingSelectionMenu } from "./components/reading-selection-menu";
+import {
+  ReadingListenToolbar,
+  SpeakerIcon,
+} from "./components/reading-listen-toolbar";
 import { TableSizePicker } from "./components/table-size-picker";
 import { CodeViewToolbar } from "./components/code-view-toolbar";
 import { AiChatPanel } from "./components/ai-chat-panel";
@@ -221,6 +225,15 @@ import {
   type AudioTranscriptSegment,
   type AudioTranscriptionJob,
 } from "./audio/types";
+import type {
+  TtsEngineId,
+  TtsLocalEvent,
+  TtsModelState,
+  TtsNarrationPreparationResult,
+  TtsNarrationSegmentInput,
+  TtsSynthesisResult,
+} from "./tts/types";
+import { useReadingNarration } from "./tts/use-reading-narration";
 import {
   normalizeSmartAnnotationResult,
   type SmartAnnotationRawResult,
@@ -272,6 +285,7 @@ import {
   READING_TEXT_SIZE_PX,
   READING_TEXT_WIDTH_PX,
   parseReadingPreferences,
+  type ReadingNarrationSpeed,
   type ReadingPreferences,
 } from "./settings/reading-preferences";
 import {
@@ -442,6 +456,7 @@ import {
 } from "./reading-position";
 import {
   capturePreviewSemanticAnchor,
+  findPreviewHeading,
   restorePreviewSemanticAnchor,
   type SemanticDocumentAnchor,
 } from "./context/semantic-anchor";
@@ -497,6 +512,7 @@ const EDITOR_BLOCK_TYPE_ICONS: Record<SlashMenuBlockType, LucideIcon> = {
   task: ListTodo,
   "bullet-list": ListIcon,
   "ordered-list": ListOrdered,
+  "code-block": Braces,
   quote: Quote,
   table: Table2,
   mermaid: Network,
@@ -1043,7 +1059,10 @@ export type RaaviDesktopAPI = {
   pauseSoftwareUpdate?: () => Promise<SoftwareUpdateState>;
   resumeSoftwareUpdate?: () => Promise<SoftwareUpdateState>;
   cancelSoftwareUpdate?: () => Promise<SoftwareUpdateState>;
-  installSoftwareUpdate?: () => Promise<{ started: boolean }>;
+  installSoftwareUpdate?: () => Promise<{
+    started: boolean;
+    error?: string;
+  }>;
   openSoftwareUpdateNotes?: () => Promise<{ opened: boolean }>;
   openSoftwareUpdateDirectDownload?: () => Promise<{ opened: boolean }>;
   onSoftwareUpdateStatusChanged?: (
@@ -1119,6 +1138,25 @@ export type RaaviDesktopAPI = {
   onAudioLocalEvent?: (
     callback: (event: AudioLocalEvent) => void,
   ) => () => void;
+  getTtsModelState?: () => Promise<TtsModelState>;
+  installTtsEngine?: (engine: TtsEngineId) => Promise<TtsModelState>;
+  pauseTtsEngineInstall?: () => Promise<TtsModelState>;
+  resumeTtsEngineInstall?: () => Promise<TtsModelState>;
+  selectTtsEngine?: (engine: TtsEngineId) => Promise<TtsModelState>;
+  deleteTtsEngine?: (engine: TtsEngineId) => Promise<TtsModelState>;
+  previewTtsEngine?: (engine: TtsEngineId) => Promise<TtsSynthesisResult>;
+  prepareTtsNarration?: (payload: {
+    model?: string;
+    segments: TtsNarrationSegmentInput[];
+  }) => Promise<TtsNarrationPreparationResult>;
+  synthesizeTts?: (payload: {
+    engine?: TtsEngineId;
+    text: string;
+    speed: ReadingNarrationSpeed;
+    pauseAfterMs?: number;
+  }) => Promise<TtsSynthesisResult>;
+  cancelTts?: () => Promise<{ cancelled: boolean }>;
+  onTtsLocalEvent?: (callback: (event: TtsLocalEvent) => void) => () => void;
   setWindowTheme?: (theme: ThemeMode) => void;
   minimizeWindow?: () => Promise<void>;
   toggleMaximizeWindow?: () => Promise<void>;
@@ -1270,7 +1308,8 @@ function markdownFrontmatterEndLine(lines: readonly string[]) {
 
 function editorHeadings(markdown: string) {
   const headings: Array<{ level: number; offset: number; text: string }> = [];
-  const lines = markdown.split(/\r?\n/u);
+  const sourceLines = markdown.split("\n");
+  const lines = sourceLines.map((line) => line.replace(/\r$/u, ""));
   const frontmatterEndLine = markdownFrontmatterEndLine(lines);
   let offset = 0;
   let fenceMarker = "";
@@ -1278,7 +1317,7 @@ function editorHeadings(markdown: string) {
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
     if (frontmatterEndLine >= 0 && lineIndex <= frontmatterEndLine) {
-      offset += line.length + 1;
+      offset += sourceLines[lineIndex].length + 1;
       continue;
     }
     const fence = line.match(/^ {0,3}(`{3,}|~{3,})/u);
@@ -1304,7 +1343,7 @@ function editorHeadings(markdown: string) {
         }
       }
     }
-    offset += line.length + 1;
+    offset += sourceLines[lineIndex].length + 1;
   }
 
   return headings;
@@ -1449,11 +1488,12 @@ function applyPersianReviewIssue(
 
 function extractReadingHeadings(markdown: string): ReadingHeading[] {
   const headings: ReadingHeading[] = [];
-  const lines = markdown.split(/\r?\n/u);
+  const sourceLines = markdown.split("\n");
+  const lines = sourceLines.map((line) => line.replace(/\r$/u, ""));
   const frontmatterEndLine = markdownFrontmatterEndLine(lines);
   const lineOffsets: number[] = [];
   let offset = 0;
-  for (const line of lines) {
+  for (const line of sourceLines) {
     lineOffsets.push(offset);
     offset += line.length + 1;
   }
@@ -1510,9 +1550,7 @@ function extractReadingHeadings(markdown: string): ReadingHeading[] {
 }
 
 function renderedReadingHeading(article: HTMLElement, heading: ReadingHeading) {
-  return article.querySelector<HTMLElement>(
-    `h${heading.level}[data-source-offset="${heading.offset}"]`,
-  );
+  return findPreviewHeading(article, heading);
 }
 
 const ANNOTATION_LABELS: Record<AnnotationKind, string> = {
@@ -2495,6 +2533,10 @@ export default function Home() {
     [paneCollapseCandidate, setPaneCollapseCandidate],
     [modeSwipeTarget, setModeSwipeTarget],
   ] = useWorkspaceLayoutState(LIVE_EDIT_FEATURE_ENABLED);
+  const singleEditorModeRef = useRef(singleEditorMode);
+  useLayoutEffect(() => {
+    singleEditorModeRef.current = singleEditorMode;
+  }, [singleEditorMode]);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -2748,6 +2790,9 @@ export default function Home() {
   const libraryReturnFocusRef = useRef<HTMLElement>(null);
   const selectionMenuRef = useRef<HTMLDivElement>(null);
   const commentButtonRef = useRef<HTMLButtonElement>(null);
+  const selectionCaptureRequestRef = useRef(0);
+  const composerDialogRef = useRef<HTMLDivElement>(null);
+  const composerReturnFocusRef = useRef<HTMLElement | null>(null);
   const composerTextAreaRef = useRef<HTMLTextAreaElement>(null);
   const composerOriginRef = useRef<HTMLButtonElement | null>(null);
   const readingReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -3334,7 +3379,14 @@ export default function Home() {
         });
       },
       onInstall: () => {
-        void window.raaviDesktop?.installSoftwareUpdate?.();
+        void window.raaviDesktop?.installSoftwareUpdate?.().catch(() => {
+          setSoftwareUpdateState((current) => ({
+            ...current,
+            phase: "ready",
+            message:
+              "نصب‌کننده باز نشد. دوباره تلاش کنید یا فایل نصب را مستقیم دریافت کنید.",
+          }));
+        });
       },
       onOpenNotes: () => {
         void window.raaviDesktop?.openSoftwareUpdateNotes?.();
@@ -3711,11 +3763,11 @@ export default function Home() {
         alignScrollPanes(lastScrolledPaneRef.current);
       });
     }
-  }, [alignScrollPanes, scrollSyncEnabled]);
+  }, [alignScrollPanes, scrollSyncEnabled, setScrollSyncEnabled]);
 
   const setPaneCandidate = useCallback((pane: ScrollPane | null) => {
     setPaneCollapseCandidate(pane);
-  }, []);
+  }, [setPaneCollapseCandidate]);
 
   const focusDesktopPane = useCallback((pane: ScrollPane) => {
     window.requestAnimationFrame(() => {
@@ -3769,7 +3821,19 @@ export default function Home() {
         editorRef.current?.focus();
       });
     },
-    [clearPaneTransientUi, setPaneCandidate],
+    [
+      clearPaneTransientUi,
+      lastExpandedPreviewPercentRef,
+      setActiveSplitPane,
+      setDesktopPaneMode,
+      setMobilePane,
+      setModeSwipeTarget,
+      setPaneCandidate,
+      setPaneDragging,
+      setPreviewPanePercent,
+      setSingleEditorMode,
+      setSplitWorkspaceActive,
+    ],
   );
 
   const restoreDesktopPanes = useCallback(
@@ -3787,7 +3851,18 @@ export default function Home() {
         }
       });
     },
-    [alignScrollPanes, focusDesktopPane, scrollSyncEnabled, setPaneCandidate],
+    [
+      alignScrollPanes,
+      focusDesktopPane,
+      lastExpandedPreviewPercentRef,
+      scrollSyncEnabled,
+      setActiveSplitPane,
+      setDesktopPaneMode,
+      setPaneCandidate,
+      setPaneDragging,
+      setPreviewPanePercent,
+      setSplitWorkspaceActive,
+    ],
   );
 
   const paneMetricsFromClientX = useCallback((clientX: number) => {
@@ -3828,7 +3903,12 @@ export default function Home() {
       setPreviewPanePercent(nextPercent);
       return candidate;
     },
-    [paneMetricsFromClientX, setPaneCandidate],
+    [
+      lastExpandedPreviewPercentRef,
+      paneMetricsFromClientX,
+      setPaneCandidate,
+      setPreviewPanePercent,
+    ],
   );
 
   const handlePaneResizePointerDown = useCallback(
@@ -3910,9 +3990,13 @@ export default function Home() {
       clearPaneTransientUi,
       collapseDesktopPane,
       desktopPaneMode,
+      lastExpandedPreviewPercentRef,
       previewPanePercent,
       readingMode,
+      setDesktopPaneMode,
       setPaneCandidate,
+      setPaneDragging,
+      setPreviewPanePercent,
       updatePaneSplitFromPointer,
     ],
   );
@@ -3966,7 +4050,13 @@ export default function Home() {
       setPreviewPanePercent(clampedPercent);
       setPaneCandidate(null);
     },
-    [collapseDesktopPane, previewPanePercent, setPaneCandidate],
+    [
+      collapseDesktopPane,
+      lastExpandedPreviewPercentRef,
+      previewPanePercent,
+      setPaneCandidate,
+      setPreviewPanePercent,
+    ],
   );
 
   useEffect(
@@ -4015,6 +4105,9 @@ export default function Home() {
         event.target instanceof Element &&
         event.target.closest(".markdown-body")
       ) {
+        event.target
+          .closest<HTMLElement>(".markdown-body")
+          ?.setAttribute("data-native-selection-active", "true");
         selectionStartScrollRef.current = {
           documentKey: readingDocumentStateRef.current.documentKey,
           root: scrollRoot,
@@ -4070,6 +4163,11 @@ export default function Home() {
       }
       markUserScrollIntent(event);
     };
+    const finishPointerSelection = () => {
+      previewArticleRef.current?.removeAttribute(
+        "data-native-selection-active",
+      );
+    };
 
     scrollRoot.addEventListener("wheel", markUserScrollIntent, {
       capture: true,
@@ -4080,12 +4178,20 @@ export default function Home() {
       passive: true,
     });
     scrollRoot.addEventListener("pointerdown", markUserScrollIntent, true);
+    document.addEventListener("pointerup", finishPointerSelection, true);
+    document.addEventListener("pointercancel", finishPointerSelection, true);
     document.addEventListener("keydown", handleReadingKey, true);
 
     return () => {
       scrollRoot.removeEventListener("wheel", markUserScrollIntent, true);
       scrollRoot.removeEventListener("touchstart", markUserScrollIntent, true);
       scrollRoot.removeEventListener("pointerdown", markUserScrollIntent, true);
+      document.removeEventListener("pointerup", finishPointerSelection, true);
+      document.removeEventListener(
+        "pointercancel",
+        finishPointerSelection,
+        true,
+      );
       document.removeEventListener("keydown", handleReadingKey, true);
     };
   }, [cancelReadingRestoreWork, readingMode]);
@@ -4503,7 +4609,7 @@ export default function Home() {
       readingIntentionalNavigationRef.current = true;
       readingNavigationTargetRef.current = {
         element: heading,
-        placement: "center",
+        placement: "start",
       };
       setActiveReadingHeadingIndex(documentIndex);
       heading.setAttribute("tabindex", "-1");
@@ -4513,7 +4619,7 @@ export default function Home() {
         if (!currentHeading) return;
         readingNavigationTargetRef.current = {
           element: currentHeading,
-          placement: "center",
+          placement: "start",
         };
         currentHeading.setAttribute("tabindex", "-1");
         currentHeading.focus({ preventScroll: true });
@@ -4534,7 +4640,14 @@ export default function Home() {
               element: currentHeading,
               placement: "start",
             };
-            scrollReadingElement(currentHeading, "auto", "start");
+            // Cancel the animation before measuring the final destination. A
+            // pending smooth-scroll frame can otherwise move past this heading.
+            scrollReadingElement(currentHeading, "instant", "start");
+            window.requestAnimationFrame(() => {
+              if (readingNavigationTargetRef.current?.element === currentHeading) {
+                scrollReadingElement(currentHeading, "instant", "start");
+              }
+            });
           }
           readingNavigationReleaseTimerRef.current = window.setTimeout(() => {
             readingNavigationReleaseTimerRef.current = null;
@@ -6026,6 +6139,10 @@ export default function Home() {
       commitReadingPosition,
       readerSize,
       scheduleReadingRestore,
+      setLibraryOpen,
+      setMobileEditorToolsExpanded,
+      setMobilePane,
+      setSidebarCollapsedPreference,
       showNotice,
     ],
   );
@@ -6576,7 +6693,7 @@ export default function Home() {
       window.getSelection()?.removeAllRanges();
     };
     const dismissSelectionMenuWithEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || document.querySelector('[aria-modal="true"]')) return;
       event.preventDefault();
       event.stopPropagation();
       setSelectionDraft(null);
@@ -6665,7 +6782,7 @@ export default function Home() {
       if (event.key !== "Escape") return;
       if (
         event.target instanceof Element &&
-        event.target.closest('[aria-modal="true"]')
+        event.target.closest('[aria-modal="true"], .raavi-find-panel, .sidebar-shell')
       ) {
         return;
       }
@@ -6859,6 +6976,7 @@ export default function Home() {
     editorHelper,
     editorToolMenuOpen,
     restoreEditorHelperFocus,
+    setEditorToolMenuOpen,
   ]);
 
   useEffect(() => {
@@ -6966,7 +7084,14 @@ export default function Home() {
         handleLibraryModeChange,
       );
     };
-  }, [readingMode]);
+  }, [
+    readingMode,
+    setIsCompactLayout,
+    setLibraryIsModal,
+    setLibraryOpen,
+    setMobileEditorToolsExpanded,
+    setMobileHeaderMenuOpen,
+  ]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -7016,7 +7141,7 @@ export default function Home() {
     };
     document.addEventListener("pointerdown", closeFromOutside);
     return () => document.removeEventListener("pointerdown", closeFromOutside);
-  }, [documentMenuOpen]);
+  }, [documentMenuOpen, setDocumentMenuOpen]);
 
   useEffect(() => {
     syncLayer("save", saveModalOpen);
@@ -7074,6 +7199,10 @@ export default function Home() {
   useEffect(() => {
     syncLayer("fileOperation", Boolean(fileOperation));
   }, [fileOperation, syncLayer]);
+
+  useEffect(() => {
+    syncLayer("annotationComposer", Boolean(composerKind && selectionDraft));
+  }, [composerKind, selectionDraft, syncLayer]);
 
   useModalFocus({
     open: libraryOpen && libraryIsModal,
@@ -7363,6 +7492,8 @@ export default function Home() {
     clientX: number;
     clientY: number;
   }) => {
+    const captureRequest = ++selectionCaptureRequestRef.current;
+    const captureDocumentKey = readingDocumentStateRef.current.documentKey;
     const article = previewArticleRef.current;
     const previewScroll = previewScrollRef.current;
     const selection = window.getSelection();
@@ -7400,7 +7531,21 @@ export default function Home() {
     selectionReadingAnchorRef.current = null;
 
     requestAnimationFrame(() => {
-      if (!article.isConnected || !previewScroll.isConnected) return;
+      // Escape, a newer selection, or opening a composer can invalidate the
+      // cloned range before this frame runs. Never resurrect that old selection.
+      if (
+        captureRequest !== selectionCaptureRequestRef.current ||
+        captureDocumentKey !== readingDocumentStateRef.current.documentKey ||
+        !article.isConnected || !previewScroll.isConnected ||
+        !selection || selection.rangeCount !== 1 || selection.isCollapsed
+      ) return;
+      const currentRange = selection.getRangeAt(0);
+      if (
+        currentRange.startContainer !== range.startContainer ||
+        currentRange.startOffset !== range.startOffset ||
+        currentRange.endContainer !== range.endContainer ||
+        currentRange.endOffset !== range.endOffset
+      ) return;
       const selectionStartScroll = selectionStartScrollRef.current;
       selectionStartScrollRef.current = null;
       const restorePointerScroll = () => {
@@ -7486,9 +7631,18 @@ export default function Home() {
       const start = beforeText.length + leadingWhitespace;
       const end = start + quote.length;
       const fullText = article.textContent ?? "";
-      const rangeRect = range.getBoundingClientRect();
+      const normalizedRange =
+        leadingWhitespace > 0 || rawQuote.length !== quote.length
+          ? rangeFromTextOffsets(article, start, end)
+          : range;
+      const visibleRange = normalizedRange ?? range;
+      if (selection && normalizedRange && normalizedRange !== range) {
+        selection.removeAllRanges();
+        selection.addRange(normalizedRange.cloneRange());
+      }
+      const rangeRect = visibleRange.getBoundingClientRect();
       const scrollRect = previewScroll.getBoundingClientRect();
-      const highlightRects = Array.from(range.getClientRects())
+      const highlightRects = Array.from(visibleRange.getClientRects())
         .filter((rect) => rect.width > 0 && rect.height > 0)
         .map((rect) => ({
           left: rect.left - scrollRect.left + previewScroll.scrollLeft,
@@ -7590,7 +7744,9 @@ export default function Home() {
     }
     preserveReadingViewport(
       () => {
+        selectionCaptureRequestRef.current += 1;
         composerOriginRef.current = origin ?? null;
+        composerReturnFocusRef.current = origin ?? previewArticleRef.current;
         setSelectionDraft(selection);
         setComposerKind(kind);
         setComposerText("");
@@ -7606,17 +7762,24 @@ export default function Home() {
 
   const submitAnnotationComposer = () => {
     if (!composerKind || !composerText.trim()) return;
+    composerReturnFocusRef.current = previewArticleRef.current;
     addAnnotation(composerKind, composerText);
   };
 
   const cancelAnnotationComposer = () => {
     const origin = composerOriginRef.current;
+    composerReturnFocusRef.current = origin?.isConnected ? origin : null;
     preserveReadingViewport(() => {
       setComposerKind(null);
       setComposerText("");
     });
     requestAnimationFrame(() => {
-      const target = origin?.isConnected ? origin : commentButtonRef.current;
+      // The selection palette remounts after the dialog closes. Resolve its
+      // button here instead of returning focus to the detached opener.
+      const target = origin?.isConnected
+        ? origin
+        : commentButtonRef.current ?? previewArticleRef.current;
+      composerReturnFocusRef.current = target;
       target?.focus({ preventScroll: true });
     });
   };
@@ -8057,7 +8220,7 @@ export default function Home() {
   );
 
   const openSaveFileModal = useCallback(
-    (_preferredType: SaveFileType = "markdown") => {
+    () => {
       saveModalReturnFocusRef.current =
         document.activeElement instanceof HTMLElement
           ? document.activeElement
@@ -8153,11 +8316,9 @@ export default function Home() {
     [
       buildNextSave,
       commitSavedVersion,
-      content,
       effectiveSaveState,
       libraryFolders,
       saveFileName,
-      saveFileType,
     ],
   );
 
@@ -8188,7 +8349,7 @@ export default function Home() {
       return;
     }
     if (!desktop || !activeDocumentPath) {
-      openSaveFileModal(documentType);
+      openSaveFileModal();
       return;
     }
 
@@ -8278,7 +8439,7 @@ export default function Home() {
     setPdfExportActive(false);
     setMobileHeaderMenuOpen(false);
     setExportModalOpen(true);
-  }, []);
+  }, [setMobileHeaderMenuOpen]);
 
   const commitPreparedExport = useCallback(async () => {
     const pending = pendingExportRef.current;
@@ -8608,7 +8769,7 @@ export default function Home() {
         setNewDocumentCreating(false);
       }
     },
-    [applyOpenedDocument],
+    [applyOpenedDocument, setMobileEditorToolsExpanded, setMobilePane],
   );
 
   const saveBeforeCreatingNew = useCallback(() => {
@@ -8902,7 +9063,7 @@ export default function Home() {
     setLibraryOpen(false);
     setDocumentMenuOpen(false);
     setMobileHeaderMenuOpen(false);
-  }, []);
+  }, [setDocumentMenuOpen, setLibraryOpen, setMobileHeaderMenuOpen]);
 
   const selectDocumentTab = useCallback(
     (tabId: string) => {
@@ -9218,6 +9379,10 @@ export default function Home() {
       fileLibraryPreferences.activeWorkspaceRootId,
       libraryFolders,
       scanConnectedDirectory,
+      setDesktopPaneMode,
+      setMobilePane,
+      setSingleEditorMode,
+      setSplitWorkspaceActive,
     ],
   );
 
@@ -10120,6 +10285,29 @@ export default function Home() {
       words: countDocumentWords(selectedText),
       characters: Array.from(selectedText).length,
     });
+
+    // Code blocks already provide their own copy affordance and native text
+    // editing. The prose-formatting toolbar obscures the selected code and its
+    // commands are invalid for a fenced-code range, so keep code selection
+    // native and uninterrupted.
+    if (!tableSelection) {
+      const source = editor.value;
+      const startBlock = resolveMarkdownBlockRange(source, selectionStart);
+      const endBlock = resolveMarkdownBlockRange(
+        source,
+        Math.max(selectionStart, selectionEnd - 1),
+      );
+      if (
+        startBlock.kind === "code" &&
+        endBlock.kind === "code" &&
+        startBlock.from === endBlock.from &&
+        startBlock.to === endBlock.to
+      ) {
+        dismissedEditorSelectionRef.current = null;
+        return;
+      }
+    }
+
     const dismissedSelection = dismissedEditorSelectionRef.current;
     if (
       !focusToolbar &&
@@ -10199,7 +10387,7 @@ export default function Home() {
       document.querySelector<HTMLDivElement>(".editor-selection-mini-menu");
     if (mountedSelectionToolbar) {
       editorSelectionFocusRequestedRef.current = false;
-      requestAnimationFrame(() => {
+      const focusFirstAction = () => {
         const action =
           editorSelectionActionRefs.current[editorSelectionActionIndex] ??
           mountedSelectionToolbar.querySelector<HTMLButtonElement>(
@@ -10207,6 +10395,15 @@ export default function Home() {
           ) ??
           mountedSelectionToolbar.querySelector<HTMLButtonElement>("button");
         action?.focus({ preventScroll: true });
+      };
+      // Focus during the keyboard event so the browser cannot move focus to
+      // its own chrome; repeat on the next frame to survive a concurrent menu
+      // position update under heavier documents.
+      focusFirstAction();
+      requestAnimationFrame(() => {
+        if (!mountedSelectionToolbar.contains(document.activeElement)) {
+          focusFirstAction();
+        }
       });
       return;
     }
@@ -10616,10 +10813,9 @@ export default function Home() {
     const start = editor.selectionStart;
     const end = editor.selectionEnd;
     const editorContent = editor.value;
-    const selected =
-      editorContent.slice(start, end) ||
-      'const direction = isCode ? "ltr" : "rtl";\nconsole.log("راوی آماده است");';
-    const block = `\`\`\`js\n${selected}\n\`\`\``;
+    const selected = editorContent.slice(start, end);
+    const opening = "```text\n";
+    const block = `${opening}${selected}\n\`\`\``;
     const prefix =
       start > 0 && !editorContent.slice(0, start).endsWith("\n\n")
         ? "\n\n"
@@ -10629,14 +10825,15 @@ export default function Home() {
         ? "\n\n"
         : "";
     const inserted = `${prefix}${block}${suffix}`;
+    const contentStart = start + prefix.length + opening.length;
 
     editor.replaceRange({
       from: start,
       to: end,
       insert: inserted,
-      selectionFrom: start + prefix.length + 6,
-      selectionTo: start + prefix.length + 6 + selected.length,
-      announcement: "قطعه‌کد درج شد",
+      selectionFrom: contentStart,
+      selectionTo: contentStart + selected.length,
+      announcement: "بلوک کد درج شد",
     });
   };
 
@@ -11369,18 +11566,6 @@ export default function Home() {
   };
 
   const commitReadingPreferences = (nextPreferences: ReadingPreferences) => {
-    const root = document.documentElement;
-    root.dataset.readingTextSize = nextPreferences.textSize;
-    root.dataset.readingLineSpacing = nextPreferences.lineSpacing;
-    root.dataset.readingTextWidth = nextPreferences.textWidth;
-    root.style.setProperty(
-      "--reading-line-height",
-      String(READING_LINE_HEIGHT[nextPreferences.lineSpacing]),
-    );
-    root.style.setProperty(
-      "--reading-document-width",
-      `${READING_TEXT_WIDTH_PX[nextPreferences.textWidth]}px`,
-    );
     const applyPreferences = () => {
       readingPreferencesRef.current = nextPreferences;
       setReadingPreferences(nextPreferences);
@@ -11536,6 +11721,25 @@ export default function Home() {
       { retries: 2 },
     );
   };
+
+  const readingNarration = useReadingNarration({
+    active: readingMode,
+    documentKey: currentDocumentKey,
+    articleRef: previewArticleRef,
+    scrollRef: previewScrollRef,
+    speed: readingPreferences.narrationSpeed,
+    smartNarration: readingPreferences.smartNarration,
+    onSpeedChange: (narrationSpeed) =>
+      commitReadingPreferences({
+        ...readingPreferencesRef.current,
+        narrationSpeed,
+      }),
+    onNeedsEngine: () => {
+      showNotice("برای شنیدن متن، ابتدا یکی از موتورهای محلی را دریافت کنید.");
+      openShortcutSettings(undefined, "reading");
+    },
+    onNotice: showNotice,
+  });
 
   const beginReadingLayoutTransition = () => {
     document.documentElement.classList.add("reading-layout-is-changing");
@@ -12209,7 +12413,7 @@ export default function Home() {
       });
       openSidebarViewRef.current("ai", "ai", "ensure");
     },
-    [activeDocumentPath, content],
+    [activeDocumentPath, content, showNotice],
   );
 
   const activeChatGPTModel = useCallback(
@@ -12310,7 +12514,13 @@ export default function Home() {
       showNotice("رونوشت به چند بلاک واقعی زیر صوت افزوده شد");
       return true;
     },
-    [activeDocumentPath, annotations, audioTranscriptionSession, revision],
+    [
+      activeDocumentPath,
+      annotations,
+      audioTranscriptionSession,
+      revision,
+      showNotice,
+    ],
   );
 
   const openAiForDocument = () => {
@@ -13189,15 +13399,21 @@ export default function Home() {
     if (mode === "live" && !LIVE_EDIT_FEATURE_ENABLED) return;
     const currentScrollTop = editorRef.current?.scrollTop ?? 0;
     if (!splitWorkspaceActive) {
-      editorModeScrollPositionsRef.current[singleEditorMode] = currentScrollTop;
+      editorModeScrollPositionsRef.current[singleEditorModeRef.current] =
+        currentScrollTop;
     }
-    const targetModeScrollTop = editorModeScrollPositionsRef.current[mode];
     const existingScrollHold = editorModeScrollHoldRef.current;
-    const preservedScrollTop =
-      targetModeScrollTop ?? existingScrollHold?.top ?? currentScrollTop;
+    // Source and Live are two renderings of the same document position. Carry
+    // the viewport that is visible at the moment of the switch instead of
+    // restoring an older, mode-specific offset (which can visibly jump under
+    // rapid consecutive switches).
+    const preservedScrollTop = existingScrollHold?.top ?? currentScrollTop;
     editorModeScrollPositionsRef.current[mode] = preservedScrollTop;
     const scrollHold = { top: preservedScrollTop };
     editorModeScrollHoldRef.current = scrollHold;
+    // Keep consecutive mode commands coherent even when the second command is
+    // issued before React has committed the first state update.
+    singleEditorModeRef.current = mode;
     setSplitWorkspaceActive(false);
     setSingleEditorMode(mode);
     setDesktopPaneMode("editor");
@@ -13233,7 +13449,7 @@ export default function Home() {
       if (topLayer === "save") void saveAsFile();
       else void saveCurrentFile();
     },
-    "file.saveAs": () => openSaveFileModal(documentType),
+    "file.saveAs": () => openSaveFileModal(),
     "file.new": openNewTabWorkspace,
     "file.closeTab": () => {
       if (newTabWorkspaceOpen) {
@@ -13536,7 +13752,7 @@ export default function Home() {
           ? { enabled: true }
           : unavailable("پس از انتخاب متن فعال می‌شود.");
       case "annotation.submit":
-        return !blockedByModal && Boolean(composerKind && composerText.trim())
+        return (!blockedByModal || topLayer === "annotationComposer") && Boolean(composerKind && composerText.trim())
           ? { enabled: true }
           : unavailable("پس از نوشتن متن یادداشت فعال می‌شود.");
       default:
@@ -13712,7 +13928,15 @@ export default function Home() {
       setMobilePane("editor");
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [activeSplitPane, isCompactLayout, splitWorkspaceActive]);
+  }, [
+    activeSplitPane,
+    isCompactLayout,
+    setDesktopPaneMode,
+    setMobilePane,
+    setSingleEditorMode,
+    setSplitWorkspaceActive,
+    splitWorkspaceActive,
+  ]);
 
   const prepareEditorBlockInsertion = () => {
     const menu = editorBlockMenu;
@@ -13992,7 +14216,12 @@ export default function Home() {
         ? triggerEditor.getSelectionAnchor()
         : null;
     const menuWidth = 320;
-    const menuHeight = source === "toolbar" ? 474 : 378;
+    const menuHeight =
+      source === "toolbar"
+        ? 474
+        : source === "slash"
+          ? Math.min(506, Math.max(0, window.innerHeight - 32))
+          : 378;
     const maximumX = Math.max(12, window.innerWidth - menuWidth - 12);
     const x = Math.max(
       12,
@@ -14066,7 +14295,10 @@ export default function Home() {
   const handleAppKeyDownCapture = (
     event: ReactKeyboardEvent<HTMLDivElement>,
   ) => {
-    if (event.key === "Escape" && selectionDraft && !composerKind) {
+    if (
+      event.key === "Escape" && selectionDraft && !composerKind &&
+      !document.querySelector('[aria-modal="true"]')
+    ) {
       event.preventDefault();
       event.stopPropagation();
       setSelectionDraft(null);
@@ -14739,9 +14971,6 @@ export default function Home() {
   const workspaceFrameStyle = {
     "--sidebar-pane-width": `${effectiveSidebarWidth}px`,
   } as React.CSSProperties;
-  const annotationComposerFloats =
-    previewPaneCollapsed ||
-    (!readingMode && isCompactLayout && mobilePane !== "preview");
   const activeWorkspaceFolder =
     libraryFolders.find(
       (folder) =>
@@ -14786,21 +15015,23 @@ export default function Home() {
     isInitialWorkspace &&
     Boolean(activeWorkspaceFolder) &&
     launchRecentFiles.length > 0;
-  const renderAnnotationComposer = (floating = false) => (
-    <div
-      className={`annotation-toolbar has-selection is-composing ${
-        floating ? "editor-annotation-composer-floating" : ""
-      }`}
-      role="dialog"
-      aria-modal={floating || undefined}
-      aria-label={
-        composerKind ? `افزودن ${ANNOTATION_LABELS[composerKind]}` : undefined
-      }
+  const renderAnnotationComposer = () => (
+    <AccessibleModal
+      open={Boolean(composerKind && selectionDraft)}
+      isTopLayer={topLayer === "annotationComposer"}
+      onClose={cancelAnnotationComposer}
+      dialogRef={composerDialogRef}
+      initialFocusRef={composerTextAreaRef}
+      returnFocusRef={composerReturnFocusRef}
+      preventScroll
+      backdropClassName="annotation-composer-backdrop"
+      dialogClassName="annotation-toolbar has-selection is-composing annotation-composer-modal"
+      labelledBy="annotation-composer-title"
     >
       {composerKind && selectionDraft && (
         <>
           <div className="annotation-composer-copy">
-            <span>{ANNOTATION_LABELS[composerKind]}</span>
+            <span id="annotation-composer-title">افزودن {ANNOTATION_LABELS[composerKind]}</span>
             <q dir="auto">{selectionDraft.quote}</q>
           </div>
           <label className="annotation-composer-field">
@@ -14844,7 +15075,7 @@ export default function Home() {
           </div>
         </>
       )}
-    </div>
+    </AccessibleModal>
   );
   return (
     <div
@@ -14874,9 +15105,7 @@ export default function Home() {
       style={workspaceFrameStyle}
       onKeyDownCapture={handleAppKeyDownCapture}
     >
-      {composerKind && selectionDraft && annotationComposerFloats
-        ? renderAnnotationComposer(true)
-        : null}
+      {renderAnnotationComposer()}
       <header
         className={`topbar ${
           readingMode
@@ -15029,6 +15258,62 @@ export default function Home() {
                   <span>انتقال به مخزن</span>
                 </button>
               )}
+              <button
+                className={`reading-listen-trigger ${
+                  [
+                    "directing",
+                    "buffering",
+                    "ready",
+                    "preparing",
+                    "playing",
+                    "paused",
+                  ].includes(
+                    readingNarration.status,
+                  )
+                    ? "is-active"
+                    : ""
+                }`}
+                type="button"
+                onClick={() => {
+                  if (
+                    readingNarration.status === "idle" ||
+                    readingNarration.status === "error"
+                  ) {
+                    void readingNarration.start();
+                  } else {
+                    readingNarration.pauseOrResume();
+                  }
+                }}
+                aria-label={
+                  readingNarration.status === "playing"
+                    ? "مکث در شنیدن متن"
+                    : readingNarration.status === "paused"
+                      ? "ادامهٔ شنیدن متن"
+                      : readingNarration.status === "ready"
+                        ? "شروع خواندن متن"
+                        : ["directing", "buffering", "preparing"].includes(
+                              readingNarration.status,
+                            )
+                          ? "در حال آماده‌سازی خوانش"
+                          : "شنیدن متن از ابتدا"
+                }
+                aria-pressed={
+                  [
+                    "directing",
+                    "buffering",
+                    "ready",
+                    "preparing",
+                    "playing",
+                    "paused",
+                  ].includes(
+                    readingNarration.status,
+                  )
+                }
+                title="شنیدن متن از ابتدا"
+              >
+                <SpeakerIcon size={18} />
+                <span>شنیدن</span>
+              </button>
               <button
                 className="reading-return-to-desk"
                 type="button"
@@ -15752,6 +16037,7 @@ export default function Home() {
         <main
           id="raavi-document-stage"
           ref={workspaceRef}
+          tabIndex={readingMode ? 0 : undefined}
           className={`workspace ${readingMode ? "workspace--reading" : ""} ${
             readingMode
               ? readingOutlineOpen
@@ -16096,7 +16382,7 @@ export default function Home() {
                         onClick={() => runEditorToolCommand("edit.codeBlock")}
                       >
                         <Braces size={16} aria-hidden="true" />
-                        <span>قطعه‌کد</span>
+                        <span>بلوک کد</span>
                       </button>
                       <button
                         type="button"
@@ -16987,10 +17273,6 @@ export default function Home() {
               </div>
             ) : (
               <>
-                {composerKind && selectionDraft && !annotationComposerFloats
-                  ? renderAnnotationComposer()
-                  : null}
-
                 <div className="preview-stage">
                   <div
                     ref={previewScrollRef}
@@ -17011,6 +17293,21 @@ export default function Home() {
                           <span
                             className="selection-range-feedback"
                             key={`${rect.left}-${rect.top}-${index}`}
+                            style={
+                              {
+                                left: rect.left,
+                                top: rect.top,
+                                width: rect.width,
+                                height: rect.height,
+                              } as React.CSSProperties
+                            }
+                          />
+                        ))}
+                      {readingNarration.status !== "idle" &&
+                        readingNarration.highlightRects.map((rect, index) => (
+                          <span
+                            className="reading-narration-highlight"
+                            key={`narration-${rect.left}-${rect.top}-${index}`}
                             style={
                               {
                                 left: rect.left,
@@ -17101,7 +17398,36 @@ export default function Home() {
                           onKeyUp={() => capturePreviewSelection()}
                           onPointerMove={handleAnnotationPointerMove}
                           onPointerLeave={clearAnnotationHover}
-                          onClick={handleAnnotationClick}
+                          onClick={(event) => {
+                            if (event.detail >= 3) {
+                              const target = event.target;
+                              const element =
+                                target instanceof Element
+                                  ? target
+                                  : target instanceof Node
+                                    ? target.parentElement
+                                    : null;
+                              const block = element?.closest<HTMLElement>(
+                                "p, li, blockquote, figcaption, td, th, pre",
+                              );
+                              const article = previewArticleRef.current;
+                              if (block && article?.contains(block)) {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                const range = document.createRange();
+                                range.selectNodeContents(block);
+                                const selection = window.getSelection();
+                                selection?.removeAllRanges();
+                                selection?.addRange(range);
+                                capturePreviewSelection({
+                                  clientX: event.clientX,
+                                  clientY: event.clientY,
+                                });
+                                return;
+                              }
+                            }
+                            handleAnnotationClick(event);
+                          }}
                         >
                           {readingMode && (
                             <p className="reading-document-kicker">
@@ -17851,7 +18177,7 @@ export default function Home() {
                         effectiveSaveState === "dirty") && (
                         <button
                           type="button"
-                          onClick={() => openSaveFileModal(documentType)}
+                          onClick={() => openSaveFileModal()}
                         >
                           ذخیره با نام تازه
                         </button>
@@ -18387,7 +18713,7 @@ export default function Home() {
         onClose={() => setLegacyMigrationPromptOpen(false)}
         onConvert={() => {
           setLegacyMigrationPromptOpen(false);
-          openSaveFileModal("markdown");
+          openSaveFileModal();
         }}
       />
 
@@ -18399,6 +18725,25 @@ export default function Home() {
           openSidebarView("versions", "versions", "ensure");
         }}
       />
+
+      {readingMode && readingNarration.status !== "idle" && (
+        <ReadingListenToolbar
+          status={readingNarration.status}
+          preparation={readingNarration.preparation}
+          engineLabel={readingNarration.engineLabel}
+          speed={readingNarration.speed}
+          canPrevious={readingNarration.position.block > 0}
+          canNext={
+            readingNarration.position.block < readingNarration.blockCount - 1
+          }
+          onPrevious={readingNarration.previousBlock}
+          onPauseOrResume={readingNarration.pauseOrResume}
+          onRetry={() => void readingNarration.start()}
+          onNext={readingNarration.nextBlock}
+          onSpeedChange={readingNarration.changeSpeed}
+          onStop={readingNarration.stop}
+        />
+      )}
 
       {saveModalOpen && (
         <Suspense

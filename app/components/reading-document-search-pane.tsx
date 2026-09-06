@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, X } from "@/app/icons/material-symbols";
-import type { KeyboardEvent, RefObject } from "react";
+import { useEffect, type KeyboardEvent, type RefObject } from "react";
 
 export type ReadingDocumentSearchResult = {
   start: number;
@@ -30,6 +30,12 @@ export function ReadingDocumentSearchPane({
 }) {
   const hasQuery = Boolean(query.trim());
   const resultCount = results.length;
+
+  // The pane is lazy-loaded, so the parent's opening animation frame may run
+  // before this input exists. Focus when the input has actually mounted.
+  useEffect(() => {
+    inputRef.current?.focus({ preventScroll: true });
+  }, [inputRef]);
 
   const activateRelative = (direction: 1 | -1) => {
     if (!resultCount) return;

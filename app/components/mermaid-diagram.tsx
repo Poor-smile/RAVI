@@ -17,6 +17,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -292,7 +293,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
     }
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!fullscreen) return;
     const figure = figureRef.current;
     if (!figure) return;
@@ -301,11 +302,13 @@ export const MermaidDiagram = memo(function MermaidDiagram({
     const restoreOutsideInert = fallbackFullscreen
       ? makeOutsideSubtreeInert(figure)
       : null;
-    figure.addEventListener("keydown", handleFullscreenKeyDown, true);
+    // Escape can arrive before the next frame moves focus into the viewer.
+    // Capture at the window while this modal is open, including that gap.
+    window.addEventListener("keydown", handleFullscreenKeyDown, true);
     return () => {
       if (fallbackFullscreen) document.body.style.overflow = previousOverflow;
       restoreOutsideInert?.();
-      figure.removeEventListener("keydown", handleFullscreenKeyDown, true);
+      window.removeEventListener("keydown", handleFullscreenKeyDown, true);
     };
   }, [fallbackFullscreen, fullscreen, handleFullscreenKeyDown]);
 
@@ -577,7 +580,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({
               event.nativeEvent.stopImmediatePropagation();
               openGraphViewer();
             }}
-            onClick={(event) => {
+            onClick={() => {
               if (readingMode) {
                 return;
               }

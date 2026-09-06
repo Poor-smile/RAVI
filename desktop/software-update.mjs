@@ -11,10 +11,20 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { writeAll } from "./atomic-file.mjs";
+import { responseLength, withUpdateResponse } from "./update-request.mjs";
 
 export const DEFAULT_UPDATE_MANIFEST_URL =
   "https://ravi.poorsmile.ir/updates/stable.json";
 export const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+export const MAX_UPDATE_MANIFEST_BYTES = 256 * 1024;
+export const MAX_UPDATE_ARTIFACT_BYTES = 2 * 1024 * 1024 * 1024;
+export const UPDATE_REQUEST_LIMITS = Object.freeze({
+  headerTimeoutMs: 15_000,
+  idleTimeoutMs: 30_000,
+  manifestTimeoutMs: 30_000,
+  downloadTimeoutMs: 30 * 60_000,
+});
 
 const UPDATE_PHASES = new Set([
   "idle",
@@ -56,13 +66,14 @@ function requiredHttpsUrl(value, code) {
 
 function safeArtifactPath(value) {
   const candidate = String(value ?? "").trim();
-  if (!candidate.startsWith("/") || candidate.includes("..")) {
+  if (!candidate.startsWith("/") || candidate.startsWith("//") || candidate.includes("\\") || candidate.includes("..")) {
     throw new Error("update_invalid_artifact_path");
   }
   return candidate;
 }
 
 function validateMirrors(value) {
+  if (Array.isArray(value) && value.length > 8) throw new Error("update_too_many_mirrors");
   const mirrors = Array.isArray(value)
     ? value.map((mirror, index) => ({
         id: String(mirror?.id ?? `mirror-${index + 1}`),
@@ -81,7 +92,7 @@ function validateArtifact(value, { platform, arch, fallbackMirrors }) {
     throw new Error("update_invalid_artifact");
   }
   const size = Number(value.size);
-  if (!Number.isSafeInteger(size) || size <= 0) {
+  if (!Number.isSafeInteger(size) || size <= 0 || size > MAX_UPDATE_ARTIFACT_BYTES) {
     throw new Error("update_invalid_size");
   }
   const sha512 = String(value.sha512 ?? "").toLowerCase();
@@ -191,6 +202,11 @@ export async function verifyDownloadedUpdate({ filePath, manifest, publicKey }) 
   if (digest !== manifest.artifact.sha512) {
     throw new Error("update_checksum_mismatch");
   }
+  verifyManifestSignature(manifest, publicKey);
+  return true;
+}
+
+function verifyManifestSignature(manifest, publicKey) {
   const verified = verifySignature(
     null,
     updateSignaturePayload(manifest),
@@ -198,11 +214,11 @@ export async function verifyDownloadedUpdate({ filePath, manifest, publicKey }) 
     Buffer.from(manifest.artifact.signature, "base64"),
   );
   if (!verified) throw new Error("update_signature_mismatch");
-  return true;
 }
 
 function friendlyError(error) {
   const code = String(error?.message ?? error ?? "update_failed");
+  if (code.includes("timeout")) return "مهلت دریافت به‌روزرسانی تمام شد. دوباره تلاش کنید.";
   if (code.includes("signature") || code.includes("checksum") || code.includes("size_mismatch")) {
     return "فایل دریافت‌شده معتبر نبود؛ مسیر جایگزین امتحان می‌شود.";
   }
@@ -211,6 +227,25 @@ function friendlyError(error) {
     return "برای معماری این دستگاه هنوز بستهٔ بروزرسانی منتشر نشده است.";
   }
   return "در حال حاضر مسیر دانلود در دسترس نیست.";
+}
+
+function friendlyInstallError(error) {
+  const code = String(error?.message ?? error ?? "update_launch_failed").toLowerCase();
+  if (code.includes("eacces") || code.includes("elevation") || code.includes("access")) {
+    return "Windows اجازهٔ اجرای نصب‌کننده را نداد. دوباره تلاش کنید و درخواست دسترسی مدیر سیستم (Administrator) را تأیید کنید.";
+  }
+  return "نصب‌کننده باز نشد. دوباره تلاش کنید یا فایل نصب را مستقیم دریافت کنید.";
+}
+
+async function launchDetached(command, args, options) {
+  await new Promise((resolve, reject) => {
+    const child = spawn(command, args, options);
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
 }
 
 export function createSoftwareUpdateController({
@@ -224,8 +259,13 @@ export function createSoftwareUpdateController({
   checkIntervalMs = UPDATE_CHECK_INTERVAL_MS,
   platform = process.platform,
   arch = process.arch,
+  requestLimits = {},
 }) {
   if (typeof fetchImpl !== "function") throw new Error("update_fetch_unavailable");
+  const limits = { ...UPDATE_REQUEST_LIMITS, ...requestLimits };
+  for (const value of Object.values(limits)) {
+    if (!Number.isSafeInteger(value) || value <= 0 || value > 2_147_483_647) throw new Error("update_invalid_request_limit");
+  }
   const downloadsDirectory = path.join(userDataPath, "updates");
   let manifest = null;
   let checkTimer = null;
@@ -233,6 +273,9 @@ export function createSoftwareUpdateController({
   let pauseRequested = false;
   let cancelRequested = false;
   let activeDownload = null;
+  let activeCheck = null;
+  let checkController = null;
+  let disposed = false;
   let state = {
     phase: "idle",
     currentVersion,
@@ -249,6 +292,7 @@ export function createSoftwareUpdateController({
   };
 
   const setState = (patch) => {
+    if (disposed) return publicState(state);
     state = { ...state, ...patch };
     if (!UPDATE_PHASES.has(state.phase)) state.phase = "error";
     emit(publicState(state));
@@ -260,19 +304,35 @@ export function createSoftwareUpdateController({
   const finalPath = () => path.join(downloadsDirectory, artifactFileName());
   const partialPath = () => `${finalPath()}.part`;
 
-  async function check({ manual = false } = {}) {
-    if (activeDownload) return publicState(state);
+  async function runCheck({ manual = false } = {}) {
+    checkController = new AbortController();
     setState({ phase: "checking", message: "" });
     try {
-      const response = await fetchImpl(manifestUrl, {
-        headers: { Accept: "application/json" },
-        cache: "no-store",
+      const value = await withUpdateResponse(manifestUrl, {
+        fetchImpl,
+        signal: checkController.signal,
+        ...limits,
+        totalTimeoutMs: limits.manifestTimeoutMs,
+        headers: { Accept: "application/json", "Accept-Encoding": "identity" },
+      }, async (response, chunks) => {
+        if (response.status !== 200) throw new Error(`update_manifest_http_${response.status}`);
+        if (responseLength(response) > MAX_UPDATE_MANIFEST_BYTES) throw new Error("update_manifest_too_large");
+        const parts = [];
+        let size = 0;
+        for await (const chunk of chunks()) {
+          size += chunk.length;
+          if (size > MAX_UPDATE_MANIFEST_BYTES) throw new Error("update_manifest_too_large");
+          parts.push(chunk);
+        }
+        return JSON.parse(Buffer.concat(parts).toString("utf8"));
       });
-      if (!response.ok) throw new Error(`update_manifest_http_${response.status}`);
-      manifest = validateUpdateManifest(await response.json(), {
+      const checkedManifest = validateUpdateManifest(value, {
         platform,
         arch,
       });
+      verifyManifestSignature(checkedManifest, await readFile(publicKeyPath));
+      if (disposed) return publicState(state);
+      manifest = checkedManifest;
       const checkedAt = new Date().toISOString();
       if (compareVersions(manifest.version, currentVersion) <= 0) {
         return setState({
@@ -322,15 +382,27 @@ export function createSoftwareUpdateController({
         installerPath: "",
       });
     } catch (error) {
+      manifest = null;
       return setState({
         phase: "error",
+        installerPath: "",
         checkedAt: new Date().toISOString(),
         message: friendlyError(error),
       });
     }
   }
 
-  async function downloadFromMirror(mirror) {
+  function check(options) {
+    if (disposed || activeDownload || state.phase === "paused") return Promise.resolve(publicState(state));
+    if (activeCheck) return activeCheck;
+    activeCheck = runCheck(options).finally(() => {
+      activeCheck = null;
+      checkController = null;
+    });
+    return activeCheck;
+  }
+
+  async function downloadFromMirror(mirror, remainingMs) {
     await mkdir(downloadsDirectory, { recursive: true });
     let downloadedBytes = 0;
     try {
@@ -342,54 +414,71 @@ export function createSoftwareUpdateController({
       await rm(partialPath(), { force: true });
       downloadedBytes = 0;
     }
+    if (pauseRequested || cancelRequested || disposed) return false;
+    if (downloadedBytes === manifest.artifact.size) return true;
     abortController = new AbortController();
     const url = new URL(manifest.artifact.path, `${mirror.baseUrl}/`).toString();
-    const response = await fetchImpl(url, {
-      headers: downloadedBytes ? { Range: `bytes=${downloadedBytes}-` } : {},
+    return withUpdateResponse(url, {
+      fetchImpl,
+      ...limits,
+      totalTimeoutMs: remainingMs,
+      headers: { "Accept-Encoding": "identity", ...(downloadedBytes ? { Range: `bytes=${downloadedBytes}-` } : {}) },
       signal: abortController.signal,
-      cache: "no-store",
-    });
-    if (!response.ok && response.status !== 206) {
-      throw new Error(`update_artifact_http_${response.status}`);
-    }
-    if (downloadedBytes && response.status !== 206) {
-      await rm(partialPath(), { force: true });
-      downloadedBytes = 0;
-    }
-    const file = await open(partialPath(), downloadedBytes ? "a" : "w");
-    try {
-      for await (const chunk of response.body) {
-        if (pauseRequested || cancelRequested) break;
-        const buffer = Buffer.from(chunk);
-        await file.write(buffer);
-        downloadedBytes += buffer.length;
-        setState({
-          phase: "downloading",
-          downloadedBytes,
-          totalBytes: manifest.artifact.size,
-          progress: Math.min(1, downloadedBytes / manifest.artifact.size),
-          message: "می‌توانید هم‌زمان به کارتان ادامه دهید.",
-        });
+    }, async (response, chunks, signal) => {
+      if (response.status !== 200 && response.status !== 206) {
+        throw new Error(`update_artifact_http_${response.status}`);
       }
-    } finally {
-      await file.close();
-    }
-    if (pauseRequested || cancelRequested) return false;
-    if (downloadedBytes !== manifest.artifact.size) {
-      throw new Error("update_incomplete_download");
-    }
-    return true;
+      if (response.headers.get("content-encoding") && response.headers.get("content-encoding") !== "identity") {
+        throw new Error("update_invalid_content_encoding");
+      }
+      if (response.status === 206) {
+        const range = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(response.headers.get("content-range") ?? "");
+        if (!range || Number(range[1]) !== downloadedBytes || Number(range[2]) !== manifest.artifact.size - 1 || Number(range[3]) !== manifest.artifact.size) {
+          throw new Error("update_invalid_content_range");
+        }
+      } else {
+        if (response.headers.has("content-range")) throw new Error("update_invalid_content_range");
+        downloadedBytes = 0;
+      }
+      const length = responseLength(response);
+      if (length !== null && length !== manifest.artifact.size - downloadedBytes) throw new Error("update_size_mismatch");
+      signal.throwIfAborted();
+      const file = await open(partialPath(), downloadedBytes ? "a" : "w");
+      try {
+        for await (const buffer of chunks()) {
+          signal.throwIfAborted();
+          // Reject before disk I/O; never write even part of an oversized chunk.
+          if (buffer.length > manifest.artifact.size - downloadedBytes) throw new Error("update_size_mismatch");
+          await writeAll(file, buffer);
+          downloadedBytes += buffer.length;
+          setState({
+            phase: "downloading",
+            downloadedBytes,
+            totalBytes: manifest.artifact.size,
+            progress: Math.min(1, downloadedBytes / manifest.artifact.size),
+            message: "می‌توانید هم‌زمان به کارتان ادامه دهید.",
+          });
+        }
+        signal.throwIfAborted();
+        if (downloadedBytes !== manifest.artifact.size) throw new Error("update_incomplete_download");
+        await file.sync();
+      } finally {
+        await file.close();
+      }
+      return !pauseRequested && !cancelRequested && !disposed;
+    });
   }
 
   async function runDownload() {
+    if (activeCheck) await activeCheck;
     if (!manifest || compareVersions(manifest.version, currentVersion) <= 0) {
-      await check({ manual: true });
+      // This is already single-flight under activeDownload.
+      await runCheck({ manual: true });
     }
+    if (disposed || pauseRequested || cancelRequested) return publicState(state);
     if (!manifest || compareVersions(manifest.version, currentVersion) <= 0) {
-      throw new Error("update_no_newer_version");
+      return state.phase === "error" ? publicState(state) : setState({ phase: "error", message: friendlyError(new Error("update_no_newer_version")) });
     }
-    pauseRequested = false;
-    cancelRequested = false;
     setState({
       phase: "downloading",
       version: manifest.version,
@@ -398,9 +487,15 @@ export function createSoftwareUpdateController({
       message: "می‌توانید هم‌زمان به کارتان ادامه دهید.",
     });
     let lastError = null;
+    const deadline = Date.now() + limits.downloadTimeoutMs;
     for (const mirror of manifest.mirrors) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        lastError = new Error("update_total_timeout");
+        break;
+      }
       try {
-        const complete = await downloadFromMirror(mirror);
+        const complete = await downloadFromMirror(mirror, remainingMs);
         if (!complete) break;
         const publicKey = await readFile(publicKeyPath);
         await verifyDownloadedUpdate({
@@ -408,7 +503,7 @@ export function createSoftwareUpdateController({
           manifest,
           publicKey,
         });
-        await rm(finalPath(), { force: true }).catch(() => {});
+        if (pauseRequested || cancelRequested || disposed) break;
         await rename(partialPath(), finalPath());
         return setState({
           phase: "ready",
@@ -419,11 +514,12 @@ export function createSoftwareUpdateController({
           installerPath: finalPath(),
         });
       } catch (error) {
-        if (pauseRequested || cancelRequested) break;
+        if (pauseRequested || cancelRequested || disposed) break;
         lastError = error;
         await rm(partialPath(), { force: true }).catch(() => {});
       }
     }
+    if (disposed) return publicState(state);
     if (cancelRequested) {
       await rm(partialPath(), { force: true }).catch(() => {});
       return setState({
@@ -446,12 +542,18 @@ export function createSoftwareUpdateController({
     }
     return setState({
       phase: "error",
+      downloadedBytes: 0,
+      progress: 0,
+      installerPath: "",
       message: friendlyError(lastError),
     });
   }
 
   function download() {
+    if (disposed) return Promise.resolve(publicState(state));
     if (activeDownload) return activeDownload;
+    pauseRequested = false;
+    cancelRequested = false;
     activeDownload = runDownload().finally(() => {
       activeDownload = null;
       abortController = null;
@@ -468,12 +570,13 @@ export function createSoftwareUpdateController({
   }
 
   async function cancel() {
-    if (state.phase !== "downloading" && state.phase !== "paused") {
+    if (!activeDownload && state.phase !== "paused") {
       return publicState(state);
     }
     cancelRequested = true;
     pauseRequested = false;
     abortController?.abort();
+    checkController?.abort();
     await activeDownload?.catch(() => {});
     await rm(partialPath(), { force: true }).catch(() => {});
     return setState({
@@ -488,36 +591,46 @@ export function createSoftwareUpdateController({
     if (state.phase !== "ready" || !state.installerPath) {
       throw new Error("update_not_ready");
     }
-    if (launchInstaller) {
-      await launchInstaller(state.installerPath);
-    } else if (platform === "darwin") {
-      const child = spawn("/usr/bin/open", [state.installerPath], {
-        detached: true,
-        stdio: "ignore",
+    try {
+      if (launchInstaller) {
+        await launchInstaller(state.installerPath);
+      } else if (platform === "darwin") {
+        await launchDetached("/usr/bin/open", [state.installerPath], {
+          detached: true,
+          stdio: "ignore",
+        });
+      } else {
+        await launchDetached(state.installerPath, [], {
+          detached: true,
+          stdio: "ignore",
+          windowsHide: true,
+        });
+      }
+    } catch (error) {
+      setState({
+        phase: "ready",
+        message: friendlyInstallError(error),
       });
-      child.unref();
-    } else {
-      const child = spawn(state.installerPath, [], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-      });
-      child.unref();
+      return { started: false, error: "update_launch_failed" };
     }
+    setState({ message: "" });
     return { started: true };
   }
 
   function start() {
+    if (disposed || checkTimer) return;
     void check();
     checkTimer = setInterval(() => void check(), checkIntervalMs);
     checkTimer.unref?.();
   }
 
   function dispose() {
+    disposed = true;
     if (checkTimer) clearInterval(checkTimer);
     checkTimer = null;
     pauseRequested = true;
     abortController?.abort();
+    checkController?.abort();
   }
 
   return {

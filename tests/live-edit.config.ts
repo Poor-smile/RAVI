@@ -17,6 +17,7 @@ export default defineConfig({
     "structural-block-operations.spec.ts",
     "nested-list-blocks.spec.ts",
     "double-click-selection.spec.ts",
+    "text-selection-regression.spec.ts",
     "w04-active-block.spec.ts",
     "w05-block-type-menu.spec.ts",
     "w06-writing-dark.spec.ts",

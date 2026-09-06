@@ -52,7 +52,7 @@ test.describe("Markdown درون‌خطی راوی", () => {
     const formattedLine = page.locator("#markdown-editor .cm-line").filter({ hasText: "پررنگ" }).first();
     await expect(formattedLine).not.toContainText("**پررنگ**");
     await formattedLine.click();
-    await expect(formattedLine).not.toContainText("**پررنگ**");
+    await expect(formattedLine).toContainText("**پررنگ**");
     await expect(formattedLine).toContainText("مورب");
     await expect(
       page.locator("#markdown-editor .cm-line").filter({ hasText: "عنوان دو" }),

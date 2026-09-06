@@ -124,7 +124,7 @@ test("W08 assembles the editable Markdown source on the full Code surface", asyn
   await expect(
     page.locator('.editor-mode-switcher button[aria-pressed="true"]'),
   ).toHaveAttribute("aria-label", "متن خام");
-  await expect(page.locator(".sidebar-rail > button:enabled")).toHaveCount(7);
+  await expect(page.locator(".sidebar-rail > button:enabled")).toHaveCount(8);
   await expect(page.locator(".sidebar-shell")).not.toHaveClass(/is-open/);
 
   const contract = await page.evaluate(() => {
@@ -204,7 +204,7 @@ test("W08 assembles the editable Markdown source on the full Code surface", asyn
   expect(contract.geometry.source.x).toBeLessThan(64);
   expect(contract.geometry.source.y).toBe(128);
   expect(contract.geometry.source.height).toBe(786);
-  expect(contract.geometry.firstLine.y).toBe(152);
+  expect(contract.geometry.firstLine.y).toBe(148);
   expect(contract.colors).toEqual({
     titleBar: "rgb(14, 19, 15)",
     commandBar: "rgb(24, 30, 26)",
@@ -221,8 +221,8 @@ test("W08 assembles the editable Markdown source on the full Code surface", asyn
     shadow: "none",
     sourceSize: "13px",
     sourceLineHeight: "23px",
-    sourceFont: '"Cascadia Code", "Vazir Code", Consolas, monospace',
-    sourcePadding: "24px 32px 96px",
+    sourceFont: "Tahoma, Arial, sans-serif",
+    sourcePadding: "20px 64px 96px",
     gutterDisplay: "flex",
     activeLineBackground: "rgba(0, 0, 0, 0)",
     activeLineBorder: "0px",
@@ -284,4 +284,38 @@ test("Code view keeps slash literal and never opens the block menu", async ({
   await expect(page.locator(".writing-block-gutter")).toHaveCount(0);
   await expect(page.locator(".cm-block-menu-trigger")).toHaveCount(0);
   await expect(page.locator(".cm-structural-block-selected")).toHaveCount(0);
+});
+
+test("Code view keeps a bounded reading inset on ultrawide screens", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 3440, height: 1440 });
+  await page.goto("/");
+  await expect(page.locator(".app-shell")).toHaveAttribute(
+    "data-hydrated",
+    "true",
+  );
+  await page
+    .locator('input[type="file"][accept*=".md"]')
+    .first()
+    .setInputFiles({
+      name: "ultrawide.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("# نمای فوق‌عریض\n\nمتن و کد باید از لبه‌ها فاصله داشته باشند."),
+    });
+  const leaveReading = page.getByRole("button", {
+    name: "بازگشت به میز",
+    exact: true,
+  });
+  if (await leaveReading.isVisible()) await leaveReading.click();
+  await page.getByRole("button", { name: "متن خام", exact: true }).click();
+
+  await expect(page.locator("#markdown-editor .cm-content")).toHaveCSS(
+    "padding",
+    "20px 160px 96px",
+  );
+  await page.screenshot({
+    path: ".artifacts/w08-code-ultrawide.png",
+    fullPage: true,
+  });
 });

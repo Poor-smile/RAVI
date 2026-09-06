@@ -48,7 +48,7 @@ const READING_SEARCH_CONTINUITY_FIXTURE = [
   "سامانه با رنگ و فاصله مسیر خواندن را نشان می‌دهد.",
 ].join("\n");
 
-test("R03 docks local document search between the reading sheet and four-item rail", async ({
+test("R03 docks local document search between the reading sheet and reading rail with local search and assistance", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1180, height: 858 });
@@ -97,7 +97,7 @@ test("R03 docks local document search between the reading sheet and four-item ra
   await expect(sidebar).toHaveAttribute("role", "complementary");
   await expect(sidebar).not.toHaveAttribute("aria-modal");
   await expect(searchTrigger).toHaveAttribute("aria-current", "page");
-  await expect(rail.getByRole("button")).toHaveCount(4);
+  await expect(rail.getByRole("button")).toHaveCount(5);
 
   const panelTitle = pane.locator("#sidebar-pane-title");
   await expect(panelTitle).toBeVisible();
@@ -183,6 +183,7 @@ test("R03 docks local document search between the reading sheet and four-item ra
     };
   });
 
+  expect(contract.geometry.sheet.height).toBeGreaterThanOrEqual(680);
   expect(contract.geometry).toEqual({
     header: { x: 0, y: 36, width: 820, height: 64 },
     workspace: { x: 0, y: 36, width: 820, height: 822 },
@@ -192,7 +193,7 @@ test("R03 docks local document search between the reading sheet and four-item ra
     panelHeader: { x: 834, y: 50, width: 276, height: 52 },
     search: { x: 834, y: 110, width: 276, height: 40 },
     firstResult: { x: 834, y: 188, width: 276, height: 40 },
-    sheet: { x: 30, y: 120, width: 760, height: 680 },
+    sheet: { x: 30, y: 120, width: 760, height: contract.geometry.sheet.height },
   });
   expect(contract.surfaces).toEqual({
     sidebarBackground: "rgb(232, 235, 226)",

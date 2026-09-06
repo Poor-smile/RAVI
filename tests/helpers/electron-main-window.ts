@@ -4,7 +4,7 @@ import type { ElectronApplication } from "playwright";
 const pause = (milliseconds: number) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function dismissFirstRunIfNeeded(page: Page) {
+export async function dismissFirstRunIfNeeded(page: Page) {
   const deadline = Date.now() + 6_000;
   const dialog = page.locator(".first-run-dialog");
 
@@ -12,12 +12,19 @@ async function dismissFirstRunIfNeeded(page: Page) {
     if (await dialog.isVisible().catch(() => false)) {
       for (let step = 0; step < 3; step += 1) {
         const skip = page.getByRole("button", { name: "رد کردن", exact: true });
-        if (!(await skip.isVisible().catch(() => false))) break;
+        const enter = page.getByRole("button", { name: "ورود به راوی", exact: true });
+        await skip.or(enter).first().waitFor({ state: "visible", timeout: 5_000 });
+        if (await enter.isVisible()) break;
+        const heading = await dialog.locator("h1").textContent();
         await skip.click();
+        await page.waitForFunction((previousHeading) => {
+          const next = document.querySelector(".first-run-dialog h1");
+          return next !== null && next.textContent !== previousHeading;
+        }, heading, { timeout: 5_000 });
       }
       const enter = page.getByRole("button", { name: "ورود به راوی", exact: true });
-      if (await enter.isVisible().catch(() => false)) await enter.click();
-      await dialog.waitFor({ state: "detached", timeout: 5_000 }).catch(() => {});
+      await enter.click({ timeout: 5_000 });
+      await dialog.waitFor({ state: "detached", timeout: 5_000 });
       return;
     }
     await pause(100);

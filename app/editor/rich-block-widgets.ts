@@ -26,6 +26,7 @@ import {
   updateGfmTableCell,
 } from "./rich-blocks";
 import { createStructuralBlockOperations } from "./block-operations";
+import { mixedScriptWordRangeAt } from "./text-selection";
 
 export type LiveImageResolution =
   | { status: "ready"; source: string }
@@ -34,7 +35,11 @@ export type LiveImageResolution =
 export type LiveAudioResolution = AudioSourceResolution;
 
 function createMaterialSymbol(
-  symbol: "pause" | "play_arrow" | "speech_to_text",
+  symbol:
+    | "content_copy"
+    | "pause"
+    | "play_arrow"
+    | "speech_to_text",
 ) {
   const namespace = "http://www.w3.org/2000/svg";
   const vector = MATERIAL_SYMBOL_PATHS[symbol];
@@ -50,6 +55,39 @@ function createMaterialSymbol(
     svg.append(iconPath);
   }
   return svg;
+}
+
+export class CodeBlockHeaderWidget extends WidgetType {
+  constructor(
+    private readonly language: string,
+    private readonly code: string,
+  ) {
+    super();
+  }
+
+  eq(other: CodeBlockHeaderWidget) {
+    return other.code === this.code && other.language === this.language;
+  }
+
+  toDOM() {
+    const header = document.createElement("span");
+    header.className = "cm-ch";
+    header.textContent = this.language || "text";
+    const copy = actionButton(
+      "کپی کد",
+      (button) => {
+        void import("./clipboard").then((clipboard) =>
+          clipboard.copyCode(button, this.code),
+        );
+      },
+      "cm-copy",
+    );
+    copy.replaceChildren(createMaterialSymbol("content_copy"));
+    copy.onpointerdown = (event) => event.preventDefault();
+    header.append(copy);
+    return header;
+  }
+
 }
 
 export type RichWidgetOptions = {
@@ -80,11 +118,11 @@ function actionButton(
   button.className = `cm-rich-action ${className}`.trim();
   button.textContent = label;
   button.setAttribute("aria-label", label);
-  button.addEventListener("click", (event) => {
+  button.onclick = (event) => {
     event.preventDefault();
     event.stopPropagation();
     action(button);
-  });
+  };
   return button;
 }
 
@@ -398,15 +436,6 @@ export class TableBlockWidget extends SourceBlockWidget {
       shell.dataset.activeCell = cellKey(position);
       updateCellVisuals();
       syncDestructiveActions();
-    };
-
-    const revealContextualHint = (editor: HTMLTextAreaElement) => {
-      requestAnimationFrame(() => {
-        if (!editor.isConnected || document.activeElement !== editor) return;
-        view.dom
-          .querySelector<HTMLElement>(".cm-contextual-shortcut-hint")
-          ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-      });
     };
 
     const focusCell = (
@@ -910,7 +939,6 @@ export class TableBlockWidget extends SourceBlockWidget {
         cellEditor.dataset.editing = "true";
         if (!preserveSelectionOnFocus) setCellSelection({ row, column });
         preserveSelectionOnFocus = false;
-        revealContextualHint(editor);
       });
       editor.addEventListener("pointerdown", (event) => {
         if (!event.shiftKey) return;
@@ -919,6 +947,26 @@ export class TableBlockWidget extends SourceBlockWidget {
         preserveSelectionOnFocus = true;
         setCellSelection({ row, column }, true);
         editor.focus({ preventScroll: true });
+      });
+      editor.addEventListener("dblclick", (event) => {
+        const probe = Math.floor(
+          (editor.selectionStart + editor.selectionEnd) / 2,
+        );
+        const range = mixedScriptWordRangeAt(editor.value, probe);
+        if (!range) return;
+        event.preventDefault();
+        event.stopPropagation();
+        editor.setSelectionRange(range.from, range.to);
+        cellEditor.dataset.editing = "preview-selection";
+        editor.dispatchEvent(new Event("select", { bubbles: true }));
+      });
+      editor.addEventListener("click", (event) => {
+        if (event.detail < 3) return;
+        event.preventDefault();
+        event.stopPropagation();
+        editor.setSelectionRange(0, editor.value.length);
+        cellEditor.dataset.editing = "preview-selection";
+        editor.dispatchEvent(new Event("select", { bubbles: true }));
       });
       editor.addEventListener("contextmenu", (event) => {
         openContextMenu(event, { row, column });

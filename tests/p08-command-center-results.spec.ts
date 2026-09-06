@@ -120,6 +120,8 @@ test("P08 matches the compact Figma command-center results state", async ({
     JSON.parse(window.localStorage.getItem("raavi:command-usage:v1") ?? "{}"),
   );
   expect(recordedUsage["view.theme"]?.count).toBe(1);
+  // Reopening has the same focus-ready contract as the first opening.
+  await expect(input).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(returnTarget).toBeFocused();

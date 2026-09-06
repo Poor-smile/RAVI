@@ -1,0 +1,11 @@
+Meta MMS Persian Text-to-Speech (mms-tts-fas)
+
+Creator: Meta AI
+Source: https://huggingface.co/facebook/mms-tts-fas
+Revision: 8818d36618d125a0b40b5d2b2713a852877e9b68
+License: Creative Commons Attribution-NonCommercial 4.0 International
+License URL: https://creativecommons.org/licenses/by-nc/4.0/
+
+Raavi redistributes the original model weights for local, offline inference.
+The model weights have not been modified. Packaging and integration changes
+do not imply endorsement by Meta AI. Use is limited to noncommercial purposes.

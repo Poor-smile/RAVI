@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 
 const projectUrl = new URL("../", import.meta.url);
 
-test("keeps the landing Markdown demo usable when landing.md is unavailable", async () => {
+test("keeps the single-screen landing usable without WebGL", async () => {
   const [html, script] = await Promise.all([
     readFile(new URL("landing/index.html", projectUrl), "utf8"),
     readFile(new URL("landing/app.js", projectUrl), "utf8"),
@@ -15,26 +15,31 @@ test("keeps the landing Markdown demo usable when landing.md is unavailable", as
     url: "https://ravi.poorsmile.ir/",
   });
   const { window } = dom;
-  window.fetch = async () => {
-    throw new Error("landing.md is unavailable");
-  };
-  window.requestAnimationFrame = (callback) => window.setTimeout(callback, 0);
+  window.HTMLCanvasElement.prototype.getContext = () => null;
+  window.requestAnimationFrame = (callback) => window.setTimeout(callback, 16);
   window.cancelAnimationFrame = (handle) => window.clearTimeout(handle);
   window.matchMedia = () => ({ matches: false });
+  window.Math.random = () => 0;
 
   window.eval(script);
-  await new Promise((resolve) => window.setTimeout(resolve, 0));
+  await new Promise((resolve) => window.setTimeout(resolve, 20));
 
-  const source = window.document.querySelector("#markdown-source");
-  const preview = window.document.querySelector("#markdown-preview");
-  const status = window.document.querySelector("#editor-status");
-  const stats = window.document.querySelector("#editor-stats");
+  const experience = window.document.querySelector("[data-experience]");
+  const info = window.document.querySelector("[data-info-window]");
+  const theme = window.document.querySelector("[data-theme-switch]");
+  const logo = window.document.querySelector("[data-raavi-logo]");
 
-  assert.equal(source.disabled, false);
-  assert.match(source.value, /Markdown فارسی را ساده شروع کنید/);
-  assert.match(preview.textContent, /ویرایش و پیش‌نمایش زنده/);
-  assert.match(status.textContent, /نسخهٔ داخلی نمونه نمایش داده شد/);
-  assert.match(stats.textContent, /واژه/);
+  assert.equal(experience.classList.contains("is-webgl-fallback"), true);
+  assert.equal(theme.getAttribute("aria-checked"), "false");
+  theme.click();
+  assert.equal(theme.getAttribute("aria-checked"), "true");
+  assert.equal(info.classList.contains("is-dark"), true);
+
+  logo.click();
+  assert.equal(info.classList.contains("is-minimized"), true);
+  for (let click = 0; click < 5; click += 1) logo.click();
+  assert.equal(window.document.querySelectorAll(".feature-token").length, 5);
+  assert.equal(window.document.querySelectorAll(".support-token").length, 1);
 
   dom.window.close();
 });

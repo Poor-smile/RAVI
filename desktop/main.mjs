@@ -10,14 +10,16 @@ import {
   WebContentsView,
 } from "electron";
 import { access, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { readFileSync, renameSync, watch, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, watch, writeFileSync } from "node:fs";
 import path from "node:path";
+import { atomicWriteFile, createFileTaskQueue } from "./atomic-file.mjs";
 import { fileURLToPath } from "node:url";
 import {
   createRaaviServer,
   markdownPathFromArguments,
   readDocumentPath,
   readLibraryDocument,
+  resolveLibraryDocumentPath,
   scanMarkdownFolder,
 } from "./server.mjs";
 import { desktopPdfOptions } from "./pdf-options.mjs";
@@ -33,6 +35,7 @@ import {
   getCodexConnectionStatus,
   getCodexModels,
   runCodexAudioCleanup,
+  runCodexNarrationDirector,
   runCodexPrompt,
   runCodexPersianReview,
   runCodexSmartAnnotations,
@@ -46,6 +49,7 @@ import {
   writeStoredAiPreferences,
 } from "./ai-preferences-store.mjs";
 import { createAudioLocalController } from "./audio-local.mjs";
+import { createTtsLocalController } from "./tts-local.mjs";
 import { createAudioFileResponse } from "./audio-protocol.mjs";
 import {
   STARTUP_RECOVERY_TIMEOUT_MS,
@@ -56,6 +60,33 @@ import { createGoogleDriveBackupProvider } from "./google-drive-backup.mjs";
 import { createProtonDriveBackupProvider } from "./proton-drive-backup.mjs";
 import { restoreCloudBackupSet } from "./cloud-restore.mjs";
 import { createSoftwareUpdateController } from "./software-update.mjs";
+import { createTrustedIpc, isTrustedAppUrl } from "./ipc-security.mjs";
+import { resolveUserDataPaths } from "./user-data-paths.mjs";
+import { createElectronMermaidRenderer } from "./mermaid-renderer.mjs";
+
+let mermaidRenderer;
+
+// Keep every persisted path ASCII-only. Native speech dependencies such as
+// SentencePiece can fail on otherwise valid Windows paths containing Persian
+// characters. Existing installations are moved atomically on the same volume,
+// so downloaded models and user preferences are preserved without a re-download.
+const appDataDirectory = app.getPath("appData");
+const { directory: raaviUserDataDirectory, legacyDirectory: legacyUserDataDirectory } =
+  resolveUserDataPaths(appDataDirectory, app.commandLine.getSwitchValue("user-data-dir"));
+if (
+  process.platform === "win32" &&
+  legacyUserDataDirectory &&
+  existsSync(legacyUserDataDirectory) &&
+  !existsSync(raaviUserDataDirectory)
+) {
+  try {
+    renameSync(legacyUserDataDirectory, raaviUserDataDirectory);
+  } catch (error) {
+    console.warn("Raavi could not migrate its legacy user-data directory", error);
+  }
+}
+app.setName("راوی");
+app.setPath("userData", raaviUserDataDirectory);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -115,6 +146,7 @@ let pendingDocumentRequest = initialDocumentPath
   ? { filePath: initialDocumentPath, openInReadingMode: true }
   : null;
 let audioLocalController = null;
+let ttsLocalController = null;
 let backupCoordinator = null;
 let googleDriveBackupProvider = null;
 let protonDriveBackupProvider = null;
@@ -696,7 +728,7 @@ async function readLibraryState() {
 }
 
 async function writeLibraryState(value) {
-  await writeFile(libraryStatePath(), JSON.stringify(value, null, 2), "utf8");
+  await atomicWriteFile(libraryStatePath(), JSON.stringify(value, null, 2));
 }
 
 async function getRendererState() {
@@ -945,7 +977,15 @@ async function forgetLibraryFolder(_event, rootPath) {
   return getLibrarySnapshot();
 }
 
-async function recordRecent(filePath, documentType) {
+let recentWriteQueue = Promise.resolve();
+
+function recordRecent(filePath, documentType) {
+  const result = recentWriteQueue.then(() => writeRecent(filePath, documentType));
+  recentWriteQueue = result.catch(() => {});
+  return result;
+}
+
+async function writeRecent(filePath, documentType) {
   const resolvedPath = path.resolve(filePath);
   const state = await readLibraryState();
   const key = normalizedPathKey(resolvedPath);
@@ -1002,6 +1042,13 @@ async function ensureDocumentAccess(filePath) {
       new Error("This document must be opened before it can be saved."),
       { code: "permission" },
     );
+  }
+
+  const explicitlyOpened = state.recents.some(
+    (recent) => normalizedPathKey(recent.path) === requestedKey,
+  );
+  if (!explicitlyOpened) {
+    await resolveLibraryDocumentPath(filePath, state.folders);
   }
 
   let details;
@@ -1079,7 +1126,16 @@ async function historyForPath(filePath) {
   };
 }
 
-async function saveHistoryForPath(filePath, revision, versions) {
+let historyWriteQueue = Promise.resolve();
+const documentSaveQueue = createFileTaskQueue();
+
+function saveHistoryForPath(filePath, revision, versions) {
+  const result = historyWriteQueue.then(() => writeHistoryForPath(filePath, revision, versions));
+  historyWriteQueue = result.catch(() => {});
+  return result;
+}
+
+async function writeHistoryForPath(filePath, revision, versions) {
   const state = await readHistoryState();
   const key = normalizedPathKey(filePath);
   state.documents[key] = {
@@ -1099,7 +1155,7 @@ async function saveHistoryForPath(filePath, revision, versions) {
     )
     .slice(0, MAX_HISTORY_DOCUMENTS);
   state.documents = Object.fromEntries(entries);
-  await writeFile(historyStatePath(), JSON.stringify(state, null, 2), "utf8");
+  await atomicWriteFile(historyStatePath(), JSON.stringify(state, null, 2));
 }
 
 function validateDocumentPayload(value) {
@@ -1377,6 +1433,7 @@ async function readDocumentVersions(_event, filePath) {
     if (!isRecent && !isInLibrary) {
       throw new Error("Document version access is not allowed.");
     }
+    if (!isRecent) await resolveLibraryDocumentPath(resolvedPath, state.folders);
   }
 
   const documentValue = await readDocumentPath(resolvedPath);
@@ -1418,33 +1475,27 @@ async function saveMarkdown(event, payload) {
   const filePath = /\.(?:md|markdown)$/i.test(result.filePath)
     ? result.filePath
     : `${result.filePath}.md`;
-  await writeFile(filePath, documentValue.content, "utf8");
-  await saveHistoryForPath(
-    filePath,
-    documentValue.revision,
-    documentValue.versions,
-  );
-  allowedDocumentPaths.add(normalizedPathKey(filePath));
-  await recordRecent(filePath, "markdown");
+  await documentSaveQueue(filePath, async () => {
+    await atomicWriteFile(filePath, documentValue.content);
+    await saveHistoryForPath(filePath, documentValue.revision, documentValue.versions);
+    allowedDocumentPaths.add(normalizedPathKey(filePath));
+    await recordRecent(filePath, "markdown");
+  });
   return { saved: true, filePath, documentType: "markdown" };
 }
 
 async function saveCurrentDocument(_event, payload) {
   const filePath = path.resolve(String(payload?.filePath ?? ""));
-  await ensureDocumentAccess(filePath);
-
   const documentValue = validateDocumentPayload(payload?.document);
   if (/\.ravi$/i.test(filePath)) {
     throw new Error("LEGACY_DOCUMENT_REQUIRES_MARKDOWN_SAVE_AS");
   }
-  await writeFile(filePath, documentValue.content, "utf8");
-  await saveHistoryForPath(
-    filePath,
-    documentValue.revision,
-    documentValue.versions,
-  );
-
-  await recordRecent(filePath, "markdown");
+  await documentSaveQueue(filePath, async () => {
+    await ensureDocumentAccess(filePath);
+    await atomicWriteFile(filePath, documentValue.content);
+    await saveHistoryForPath(filePath, documentValue.revision, documentValue.versions);
+    await recordRecent(filePath, "markdown");
+  });
   return { saved: true, filePath, documentType: "markdown" };
 }
 
@@ -1510,6 +1561,12 @@ async function revealExport(_event, payload) {
 }
 
 function registerDesktopHandlers() {
+  const trustedIpc = createTrustedIpc(ipcMain, () => ({
+    window: mainWindow,
+    origin: localServer?.origin,
+  }));
+  trustedIpc.handle("mermaid:render", (event, job) => mermaidRenderer.render(event, job));
+  trustedIpc.handle("mermaid:restart", (event, reason) => mermaidRenderer.restart(event, reason));
   audioLocalController = createAudioLocalController({
     emit(event) {
       if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -1518,136 +1575,153 @@ function registerDesktopHandlers() {
     ensureDocumentAccess,
     getOwner: () => mainWindow,
   });
-  ipcMain.handle("renderer-state:get", getRendererState);
-  ipcMain.handle("renderer-state:save", saveRendererState);
-  ipcMain.handle("backup:get-status", getBackupStatus);
-  ipcMain.handle(
+  ttsLocalController = createTtsLocalController({
+    emit(event) {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.webContents.send("tts:local-event", event);
+    },
+    prepareSmartNarration: runCodexNarrationDirector,
+  });
+  trustedIpc.handle("renderer-state:get", getRendererState);
+  trustedIpc.handle("renderer-state:save", saveRendererState);
+  trustedIpc.handle("backup:get-status", getBackupStatus);
+  trustedIpc.handle(
     "backup:get-provider-connections",
     getBackupProviderConnections,
   );
-  ipcMain.handle("backup:update-preferences", updateBackupPreferences);
-  ipcMain.handle("backup:select-provider", selectBackupProvider);
-  ipcMain.handle("backup:connect-provider", connectBackupProvider);
-  ipcMain.handle("backup:disconnect-provider", disconnectBackupProvider);
-  ipcMain.handle("backup:connect-google", connectGoogleDrive);
-  ipcMain.handle("backup:disconnect-google", disconnectGoogleDrive);
-  ipcMain.handle("backup:flush", flushBackup);
-  ipcMain.handle("backup:list-cloud", listCloudBackups);
-  ipcMain.handle("backup:restore-cloud", restoreCloudBackups);
-  ipcMain.handle("backup:reveal-restore", revealCloudRestore);
-  ipcMain.handle("vault:promote", promoteSnapshotToVault);
-  ipcMain.handle("vault:residency", getSnapshotResidency);
-  ipcMain.handle(
+  trustedIpc.handle("backup:update-preferences", updateBackupPreferences);
+  trustedIpc.handle("backup:select-provider", selectBackupProvider);
+  trustedIpc.handle("backup:connect-provider", connectBackupProvider);
+  trustedIpc.handle("backup:disconnect-provider", disconnectBackupProvider);
+  trustedIpc.handle("backup:connect-google", connectGoogleDrive);
+  trustedIpc.handle("backup:disconnect-google", disconnectGoogleDrive);
+  trustedIpc.handle("backup:flush", flushBackup);
+  trustedIpc.handle("backup:list-cloud", listCloudBackups);
+  trustedIpc.handle("backup:restore-cloud", restoreCloudBackups);
+  trustedIpc.handle("backup:reveal-restore", revealCloudRestore);
+  trustedIpc.handle("vault:promote", promoteSnapshotToVault);
+  trustedIpc.handle("vault:residency", getSnapshotResidency);
+  trustedIpc.handle(
     "renderer-state:save-reading-positions",
     saveRendererReadingPositions,
   );
-  ipcMain.on(
+  trustedIpc.on(
     "renderer-state:save-reading-positions-sync",
     saveRendererReadingPositionsSync,
   );
-  ipcMain.handle("library:get-state", getLibrarySnapshot);
-  ipcMain.handle("library:clear-recents", clearRecentFiles);
-  ipcMain.handle("library:remove-recent-if-missing", removeRecentFileIfMissing);
-  ipcMain.handle("library:choose-folder", chooseLibraryFolder);
-  ipcMain.handle("library:disconnect-folder", forgetLibraryFolder);
-  ipcMain.handle("library:scan-folder", rescanLibraryFolder);
-  ipcMain.handle("library:read-file", openLibraryDocument);
-  ipcMain.handle("library:read-search-text", readLibrarySearchText);
-  ipcMain.handle("library:mutate", mutateLibrary);
-  ipcMain.handle("library:undo", undoLibraryMutation);
-  ipcMain.handle("document:choose", chooseDocument);
-  ipcMain.handle("document:open-recent", openRecentDocument);
-  ipcMain.handle("document:read-versions", readDocumentVersions);
-  ipcMain.handle("document:save-markdown", saveMarkdown);
-  ipcMain.handle("document:save-current", saveCurrentDocument);
-  ipcMain.handle("export:save-word", saveWordExport);
-  ipcMain.handle("export:pdf", exportPdf);
-  ipcMain.handle("export:reveal", revealExport);
-  ipcMain.handle("external:open-url", openExternalUrl);
-  ipcMain.handle("software-update:get-status", () =>
+  trustedIpc.handle("library:get-state", getLibrarySnapshot);
+  trustedIpc.handle("library:clear-recents", clearRecentFiles);
+  trustedIpc.handle("library:remove-recent-if-missing", removeRecentFileIfMissing);
+  trustedIpc.handle("library:choose-folder", chooseLibraryFolder);
+  trustedIpc.handle("library:disconnect-folder", forgetLibraryFolder);
+  trustedIpc.handle("library:scan-folder", rescanLibraryFolder);
+  trustedIpc.handle("library:read-file", openLibraryDocument);
+  trustedIpc.handle("library:read-search-text", readLibrarySearchText);
+  trustedIpc.handle("library:mutate", mutateLibrary);
+  trustedIpc.handle("library:undo", undoLibraryMutation);
+  trustedIpc.handle("document:choose", chooseDocument);
+  trustedIpc.handle("document:open-recent", openRecentDocument);
+  trustedIpc.handle("document:read-versions", readDocumentVersions);
+  trustedIpc.handle("document:save-markdown", saveMarkdown);
+  trustedIpc.handle("document:save-current", saveCurrentDocument);
+  trustedIpc.handle("export:save-word", saveWordExport);
+  trustedIpc.handle("export:pdf", exportPdf);
+  trustedIpc.handle("export:reveal", revealExport);
+  trustedIpc.handle("external:open-url", openExternalUrl);
+  trustedIpc.handle("software-update:get-status", () =>
     softwareUpdateController?.getState(),
   );
-  ipcMain.handle("software-update:check", () =>
+  trustedIpc.handle("software-update:check", () =>
     softwareUpdateController?.check({ manual: true }),
   );
-  ipcMain.handle("software-update:download", () =>
+  trustedIpc.handle("software-update:download", () =>
     softwareUpdateController?.download(),
   );
-  ipcMain.handle("software-update:pause", () =>
+  trustedIpc.handle("software-update:pause", () =>
     softwareUpdateController?.pause(),
   );
-  ipcMain.handle("software-update:resume", () =>
+  trustedIpc.handle("software-update:resume", () =>
     softwareUpdateController?.resume(),
   );
-  ipcMain.handle("software-update:cancel", () =>
+  trustedIpc.handle("software-update:cancel", () =>
     softwareUpdateController?.cancel(),
   );
-  ipcMain.handle("software-update:install", async () => {
+  trustedIpc.handle("software-update:install", async () => {
     const result = await softwareUpdateController?.install();
     if (result?.started) setTimeout(() => app.quit(), 120);
     return result;
   });
-  ipcMain.handle("software-update:open-notes", async () => {
+  trustedIpc.handle("software-update:open-notes", async () => {
     const notesUrl = softwareUpdateController?.getState()?.notesUrl;
     if (!notesUrl) return { opened: false };
     await shell.openExternal(notesUrl);
     return { opened: true };
   });
-  ipcMain.handle("software-update:open-direct-download", async () => {
+  trustedIpc.handle("software-update:open-direct-download", async () => {
     const directUrl = softwareUpdateController?.getDirectDownloadUrl();
     if (!directUrl) return { opened: false };
     await shell.openExternal(directUrl);
     return { opened: true };
   });
-  ipcMain.handle("ai:preferences-get", getStoredAiPreferences);
-  ipcMain.handle("ai:preferences-save", saveStoredAiPreferences);
-  ipcMain.handle("ai:preferences-clear", clearAiPreferences);
-  ipcMain.handle("codex:connection-status", getCodexConnectionStatus);
-  ipcMain.handle("codex:models", getCodexModels);
-  ipcMain.handle("codex:install-cli", startCodexCliInstall);
-  ipcMain.handle("codex:start-login", startCodexLogin);
-  ipcMain.handle("codex:reset-connection", resetCodexConnection);
-  ipcMain.handle("codex:run", (_event, payload) => runCodexPrompt(payload));
-  ipcMain.handle("codex:audio-cleanup", (_event, payload) =>
+  trustedIpc.handle("ai:preferences-get", getStoredAiPreferences);
+  trustedIpc.handle("ai:preferences-save", saveStoredAiPreferences);
+  trustedIpc.handle("ai:preferences-clear", clearAiPreferences);
+  trustedIpc.handle("codex:connection-status", getCodexConnectionStatus);
+  trustedIpc.handle("codex:models", getCodexModels);
+  trustedIpc.handle("codex:install-cli", startCodexCliInstall);
+  trustedIpc.handle("codex:start-login", startCodexLogin);
+  trustedIpc.handle("codex:reset-connection", resetCodexConnection);
+  trustedIpc.handle("codex:run", (_event, payload) => runCodexPrompt(payload));
+  trustedIpc.handle("codex:audio-cleanup", (_event, payload) =>
     runCodexAudioCleanup(payload),
   );
-  ipcMain.handle("codex:persian-review", (_event, payload) =>
+  trustedIpc.handle("codex:persian-review", (_event, payload) =>
     runCodexPersianReview(payload),
   );
-  ipcMain.handle("codex:smart-annotations", (_event, payload) =>
+  trustedIpc.handle("codex:smart-annotations", (_event, payload) =>
     runCodexSmartAnnotations(payload),
   );
-  ipcMain.handle("audio:choose-asset", audioLocalController.chooseAudioAsset);
-  ipcMain.handle("audio:remove-asset", audioLocalController.removeAudioAsset);
-  ipcMain.handle("audio:resolve-asset", audioLocalController.resolveAudioAsset);
-  ipcMain.handle("audio:model-state", audioLocalController.getAudioModelState);
-  ipcMain.handle("audio:model-install", audioLocalController.installAudioModel);
-  ipcMain.handle("audio:model-pause", audioLocalController.pauseAudioModelInstall);
-  ipcMain.handle("audio:model-resume", audioLocalController.resumeAudioModelInstall);
-  ipcMain.handle("audio:model-delete", audioLocalController.deleteAudioModel);
-  ipcMain.handle("audio:transcription-start", audioLocalController.startAudioTranscription);
-  ipcMain.handle("audio:transcription-pause", audioLocalController.pauseAudioTranscription);
-  ipcMain.handle("audio:transcription-resume", audioLocalController.resumeAudioTranscription);
-  ipcMain.handle("audio:transcription-cancel", audioLocalController.cancelAudioTranscription);
-  ipcMain.handle("audio:transcription-list", audioLocalController.listAudioTranscriptionJobs);
-  ipcMain.handle("audio:transcription-save-result", audioLocalController.saveAudioTranscriptionResult);
-  ipcMain.on("window:set-theme", (event, theme) => {
+  trustedIpc.handle("audio:choose-asset", audioLocalController.chooseAudioAsset);
+  trustedIpc.handle("audio:remove-asset", audioLocalController.removeAudioAsset);
+  trustedIpc.handle("audio:resolve-asset", audioLocalController.resolveAudioAsset);
+  trustedIpc.handle("audio:model-state", audioLocalController.getAudioModelState);
+  trustedIpc.handle("audio:model-install", audioLocalController.installAudioModel);
+  trustedIpc.handle("audio:model-pause", audioLocalController.pauseAudioModelInstall);
+  trustedIpc.handle("audio:model-resume", audioLocalController.resumeAudioModelInstall);
+  trustedIpc.handle("audio:model-delete", audioLocalController.deleteAudioModel);
+  trustedIpc.handle("audio:transcription-start", audioLocalController.startAudioTranscription);
+  trustedIpc.handle("audio:transcription-pause", audioLocalController.pauseAudioTranscription);
+  trustedIpc.handle("audio:transcription-resume", audioLocalController.resumeAudioTranscription);
+  trustedIpc.handle("audio:transcription-cancel", audioLocalController.cancelAudioTranscription);
+  trustedIpc.handle("audio:transcription-list", audioLocalController.listAudioTranscriptionJobs);
+  trustedIpc.handle("audio:transcription-save-result", audioLocalController.saveAudioTranscriptionResult);
+  trustedIpc.handle("tts:model-state", ttsLocalController.getState);
+  trustedIpc.handle("tts:model-install", ttsLocalController.install);
+  trustedIpc.handle("tts:model-pause", ttsLocalController.pause);
+  trustedIpc.handle("tts:model-resume", ttsLocalController.resume);
+  trustedIpc.handle("tts:model-select", ttsLocalController.select);
+  trustedIpc.handle("tts:model-delete", ttsLocalController.remove);
+  trustedIpc.handle("tts:preview", ttsLocalController.preview);
+  trustedIpc.handle("tts:narration-prepare", ttsLocalController.prepareNarration);
+  trustedIpc.handle("tts:synthesize", ttsLocalController.synthesize);
+  trustedIpc.handle("tts:cancel", ttsLocalController.cancel);
+  trustedIpc.on("window:set-theme", (event, theme) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;
     applyWindowTheme(theme);
   });
-  ipcMain.on("window:minimize", (event) => {
+  trustedIpc.on("window:minimize", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });
-  ipcMain.on("window:toggle-maximize", (event) => {
+  trustedIpc.on("window:toggle-maximize", (event) => {
     const owner = BrowserWindow.fromWebContents(event.sender);
     if (!owner) return;
     if (owner.isMaximized()) owner.unmaximize();
     else owner.maximize();
   });
-  ipcMain.on("window:close", (event) => {
+  trustedIpc.on("window:close", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();
   });
-  ipcMain.on("renderer:ready", (event) => {
+  trustedIpc.on("renderer:ready", (event) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;
     rendererReady = true;
     if (pendingDocumentRequest) {
@@ -1664,7 +1738,7 @@ function registerDesktopHandlers() {
       setTimeout(() => app.quit(), 600);
     }
   });
-  ipcMain.on("renderer:document-presented", (event) => {
+  trustedIpc.on("renderer:document-presented", (event) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;
     startupDocumentRequest = null;
     removeStartupOverlay();
@@ -1702,6 +1776,7 @@ async function openDocumentPath(filePath, options = {}) {
 
 async function createWindow() {
   if (!localServer) localServer = await createRaaviServer();
+  mermaidRenderer = createElectronMermaidRenderer(() => ({ window: mainWindow, origin: localServer.origin }));
   rendererReady = false;
   currentWindowTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
 
@@ -1732,7 +1807,7 @@ async function createWindow() {
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(localServer.origin)) {
+    if (!isTrustedAppUrl(url, localServer.origin)) {
       event.preventDefault();
       if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     }
@@ -1754,6 +1829,8 @@ async function createWindow() {
     if (startupOverlayView) void renderStartupOverlay("error");
   });
   mainWindow.on("closed", () => {
+    mermaidRenderer?.dispose();
+    mermaidRenderer = null;
     rendererReady = false;
     startupDocumentRequest = null;
     removeStartupOverlay();
@@ -1796,13 +1873,21 @@ if (!hasSingleInstanceLock) {
         process.env.RAAVI_UPDATE_MANIFEST_URL || undefined,
       platform: process.platform,
       arch: process.arch,
+      launchInstaller: async (installerPath) => {
+        const launchError = await shell.openPath(installerPath);
+        if (launchError) {
+          throw new Error(`update_launch_failed:${launchError}`);
+        }
+      },
       emit(status) {
         if (!mainWindow || mainWindow.isDestroyed()) return;
         mainWindow.webContents.send("software-update:status-changed", status);
       },
     });
     protocol.handle("raavi-audio", async (request) => {
-      const filePath = audioLocalController?.resolveProtocol(request.url);
+      const filePath =
+        ttsLocalController?.resolveProtocol(request.url) ||
+        audioLocalController?.resolveProtocol(request.url);
       if (!filePath) return new Response("Audio asset not found", { status: 404 });
       try {
         return await createAudioFileResponse(request, filePath);
@@ -1820,9 +1905,11 @@ if (!hasSingleInstanceLock) {
     if (process.platform !== "darwin") app.quit();
   });
   app.on("before-quit", () => {
+    mermaidRenderer?.dispose();
     clearStartupOverlayTimer();
     closeLibraryWatchers();
     audioLocalController?.dispose();
+    ttsLocalController?.dispose();
     backupCoordinator?.dispose();
     softwareUpdateController?.dispose();
     if (localServer) void localServer.close();

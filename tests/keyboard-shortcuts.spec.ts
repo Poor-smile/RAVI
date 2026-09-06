@@ -1,5 +1,6 @@
+import { releaseElectron as electron } from "./helpers/release-electron";
 import { expect, test, type Page } from "@playwright/test";
-import { _electron as electron } from "playwright";
+
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -475,6 +476,7 @@ test.describe("Electron Mermaid parity", () => {
     });
 
     try {
+      expect(await app.evaluate(({ app }) => app.getPath("userData"))).toBe(userDataPath);
       const window = await waitForRaaviWindow(app);
       await startElectronWritingDraft(window);
       const editor = window.locator("#markdown-editor:visible");
@@ -743,10 +745,10 @@ test.describe("Electron Mermaid parity", () => {
           }),
         )
         .toBe(true);
-      const fittedTransform = await fullscreenSurface.evaluate(
+      // Fit writes its transform on the next animation frame.
+      await expect.poll(() => fullscreenSurface.evaluate(
         (surface) => (surface as HTMLElement).style.transform,
-      );
-      expect(fittedTransform).toMatch(
+      )).toMatch(
         /^translate3d\(-?\d+(?:\.\d+)?px, -?\d+(?:\.\d+)?px, 0px\) scale\((?:0?\.\d+|1)\)$/,
       );
       await expect(fullscreenOutput).toHaveAttribute(

@@ -159,7 +159,7 @@ test("R06 renders the exact dark Comments pane and keeps comments editable", asy
   await expect(sidebar).toHaveAttribute("role", "complementary");
   await expect(sidebar).not.toHaveAttribute("aria-modal");
   await expect(trigger).toHaveAttribute("aria-current", "page");
-  await expect(rail.getByRole("button")).toHaveCount(4);
+  await expect(rail.getByRole("button")).toHaveCount(5);
 
   await expect(pane.locator("#sidebar-pane-title")).toHaveText("نظرات");
   await expect(pane.locator(".sidebar-pane-heading > span")).toHaveCount(0);
@@ -194,7 +194,7 @@ test("R06 renders the exact dark Comments pane and keeps comments editable", asy
   await expect(pane.getByRole("button", { name: /افزودن نظر/ })).toHaveCount(0);
   await expect(page.locator(".library-privacy")).toBeHidden();
   await expect(page.locator(".library-footer")).toHaveText(
-    "محلی · همراه فایل .ravi",
+    "Markdown · محلی و قابل‌حمل",
   );
 
   const contract = await page.evaluate(() => {
@@ -257,8 +257,8 @@ test("R06 renders the exact dark Comments pane and keeps comments editable", asy
     pane: { x: 820, y: 36, width: 304, height: 822 },
     rail: { x: 1124, y: 36, width: 56, height: 822 },
     panelHeader: { x: 834, y: 50, width: 276, height: 52 },
-    summary: { x: 834, y: 110, width: 276, height: 18 },
-    firstRow: { x: 834, y: 132, width: 276, height: 64 },
+    summary: { x: 834, y: 138, width: 276, height: 18 },
+    firstRow: { x: 834, y: 160, width: 276, height: 64 },
   });
   expect(sheetGeometry).toMatchObject({ x: 30, y: 120, width: 760 });
   expect(sheetGeometry.height).toBeGreaterThanOrEqual(680);

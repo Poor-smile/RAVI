@@ -153,6 +153,12 @@ export function ReadingCommentsPane(props: {
     const rows = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(".reading-comment-row-jump"));
     const currentIndex = rows.indexOf(target);
     if (currentIndex < 0 || !rows.length) return;
+    if (event.key === "Delete" || event.key === "Backspace") {
+      event.preventDefault();
+      const comment = visibleNormalComments[currentIndex];
+      if (comment) onDelete(comment.id);
+      return;
+    }
     let nextIndex = currentIndex;
     if (event.key === "ArrowDown") nextIndex = (currentIndex + 1) % rows.length;
     else if (event.key === "ArrowUp") nextIndex = (currentIndex - 1 + rows.length) % rows.length;
@@ -165,7 +171,17 @@ export function ReadingCommentsPane(props: {
   };
 
   return (
-    <section ref={panelRef} id={panelId} className="sidebar-annotations-view reading-comments-pane" aria-labelledby="sidebar-pane-title" tabIndex={-1} onKeyDownCapture={(event) => { if (event.key !== "Escape") return; event.preventDefault(); event.stopPropagation(); onDismiss(); }}>
+    <section ref={panelRef} id={panelId} className="sidebar-annotations-view reading-comments-pane" aria-labelledby="sidebar-pane-title" tabIndex={-1} onKeyDownCapture={(event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const target = event.target;
+      if (target instanceof HTMLInputElement && target.classList.contains("reading-comment-row-body")) {
+        target.closest(".reading-comment-row")?.querySelector<HTMLButtonElement>(".reading-comment-row-jump")?.focus({ preventScroll: true });
+        return;
+      }
+      onDismiss();
+    }}>
       {searchOpen && <label className="reading-sidebar-filter-control reading-comments-search-control"><Search size={18} aria-hidden="true" /><input ref={searchInputRef} type="search" value={searchQuery} onChange={(event) => onSearchQueryChange(event.target.value)} placeholder="جست‌وجو در نظرات…" aria-label="جست‌وجو در نظرات سند" autoComplete="off" spellCheck={false} dir="auto" /><button type="button" onClick={() => { if (!searchQuery) onSearchClose(); else { onSearchQueryChange(""); searchInputRef.current?.focus({ preventScroll: true }); } }} aria-label={searchQuery ? "پاک‌کردن جست‌وجوی نظرات" : "بستن جست‌وجوی نظرات"}><X size={16} aria-hidden="true" /></button></label>}
       <button className="smart-annotation-trigger" type="button" onClick={() => void beginReview()} disabled={!documentContent.trim() || session.phase === "checking"}><span>{session.phase === "checking" ? "در حال نشانه‌گذاری…" : session.phase === "complete" ? "نشانه‌گذاری دوباره" : "نشانه‌گذاری هوشمند سند"}</span><FactCheck size={18} aria-hidden="true" /></button>
       {session.phase === "confirm" && <div className="smart-annotation-confirm" role="group" aria-label="تأیید نشانه‌گذاری هوشمند"><strong>کل سند بررسی می‌شود</strong><p>راوی متن همین سند را برای پیدا‌کردن ابهام، تناقض، تکرار و ضعف ساختار به ChatGPT می‌فرستد. هیچ تغییری بدون تأیید شما اعمال نمی‌شود.</p><div className="smart-annotation-privacy"><strong>محدوده: کل سند</strong><span>کامنت‌ها و نتیجه در فایل Markdown محلی می‌مانند.</span></div><div className="smart-annotation-actions"><button type="button" onClick={() => setPhase("idle")}>انصراف</button><button className="is-primary" type="button" onClick={() => void runReview()}>شروع بررسی</button></div><small>پیش از اعمال، نسخهٔ فعلی سند برای بازگشت احتمالی ذخیره می‌شود.</small></div>}

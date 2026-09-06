@@ -139,3 +139,19 @@ test("preserves invalid YAML as a raw custom property", () => {
     { name: "Raavi.Frontmatter", value: "title: [بسته نشده" },
   ]);
 });
+
+test("preserves circular YAML metadata without overflowing the export stack", () => {
+  const raw = "title: Safe title\ncustom: &node\n  self: *node";
+  const extracted = extractWordFrontmatter(`---\n${raw}\n---\n# Body`);
+  assert.equal(extracted.markdown, "# Body");
+  assert.equal(extracted.properties.title, "Safe title");
+  assert.deepEqual(extracted.properties.customProperties, [{ name: "Raavi.Frontmatter", value: raw }]);
+});
+
+test("flattens shared acyclic YAML aliases at each property path", () => {
+  const extracted = extractWordFrontmatter("---\nfirst: &node\n  label: shared\nsecond: *node\n---\n# Body");
+  assert.deepEqual(extracted.properties.customProperties, [
+    { name: "Raavi.first.label", value: "shared" },
+    { name: "Raavi.second.label", value: "shared" },
+  ]);
+});

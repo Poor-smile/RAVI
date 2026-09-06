@@ -117,7 +117,7 @@ test("R04 renders the real hierarchical outline in the docked Reading pane", asy
   await expect(sidebar).toHaveAttribute("role", "complementary");
   await expect(sidebar).not.toHaveAttribute("aria-modal");
   await expect(outlineTrigger).toHaveAttribute("aria-current", "page");
-  await expect(rail.getByRole("button")).toHaveCount(4);
+  await expect(rail.getByRole("button")).toHaveCount(5);
 
   await expect(pane.locator("#sidebar-pane-title")).toHaveText("فهرست سند");
   await expect(pane.locator(".sidebar-pane-heading > span")).toHaveCount(0);
