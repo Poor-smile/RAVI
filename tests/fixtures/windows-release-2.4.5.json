@@ -1,0 +1,14 @@
+{
+  "candidate": {
+    "version": "2.4.5",
+    "file": "Raavi-Setup-2.4.5-x64.exe",
+    "sha256": "8b9d4b4244c96fad834e169173cfc693f1d28a7406e3341e359ebeec29ae02b5",
+    "asarSha256": "e523732efcb89c377c079d11a519dacacdbc2f905021e7576475a2fc19a667a0"
+  },
+  "previous": {
+    "version": "2.2.1",
+    "file": "Raavi-Setup-2.2.1-x64.exe",
+    "sha256": "e9b1d515ac9e3d5986e5ada4e711605e4d0330c9c7296c4e034afc380f0b4ef3"
+  },
+  "scope": "Real installation and upgrade on a clean disposable Windows administrator runner. Unsigned packages require explicit opt-in and never count as valid Authenticode."
+}

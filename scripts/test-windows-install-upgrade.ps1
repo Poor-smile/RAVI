@@ -3,7 +3,8 @@
   [Parameter(Mandatory=$true)][string]$EvidenceDirectory,
   [string]$NodePath = "node",
   [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
-  [switch]$PreflightOnly
+  [switch]$PreflightOnly,
+  [switch]$AllowUnsigned
 )
 $ErrorActionPreference = 'Stop'
 $contractFile = (Resolve-Path -LiteralPath $ContractPath).Path
@@ -25,12 +26,12 @@ function Get-RaaviInstallations {
     Where-Object { $_.DisplayName -match '^(Raavi|راوی)(\s|$)' }
 }
 $existing = @(Get-RaaviInstallations)
-$preflight = [ordered]@{ isAdministrator=$isAdministrator; authenticode=$signature.Status.ToString(); existingInstallations=$existing.Count; candidate=$candidate; previous=$previous; installerHashesMatch=$true; installationExecuted=$false }
+$preflight = [ordered]@{ isAdministrator=$isAdministrator; authenticode=$signature.Status.ToString(); allowUnsigned=[bool]$AllowUnsigned; existingInstallations=$existing.Count; candidate=$candidate; previous=$previous; installerHashesMatch=$true; installationExecuted=$false }
 $preflight | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence 'preflight.json') -Encoding UTF8
 if ($PreflightOnly) { $preflight | ConvertTo-Json; return }
 if (!$isAdministrator) { throw 'Run in an elevated PowerShell on a disposable Windows test machine.' }
 if ($existing.Count -ne 0) { throw 'This test requires a clean Windows test machine without Raavi installed.' }
-if ($signature.Status -ne 'Valid') { throw 'The final installer must have valid Windows Authenticode before this signed-release test.' }
+if ($signature.Status -ne 'Valid' -and !($AllowUnsigned -and $signature.Status -eq 'NotSigned')) { throw 'The installer must have valid Windows Authenticode, or explicitly opt into testing a NotSigned release with -AllowUnsigned.' }
 
 $installRoot = Join-Path ${env:ProgramFiles} ('Raavi Release Verification ' + [Guid]::NewGuid().ToString('N'))
 $fixtureRoot = Join-Path $evidence 'داده پایدار'
@@ -76,6 +77,8 @@ function Install-Version([string]$Installer, [string]$Version) {
     if ($shell.CreateShortcut($shortcut).TargetPath -ne $exe) { throw 'Shortcut target does not match the installation.' }
   }
   Assert-Preserved
+  $preflight.installationExecuted = $true
+  $preflight | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence 'preflight.json') -Encoding UTF8
   Record-Result "installed-$Version" @{installLocation=$installRoot;associations=$true;shortcuts=$true;dataPreserved=$true}
 }
 function Uninstall-Version {
@@ -109,11 +112,12 @@ try {
 $documentHash = (Get-FileHash -LiteralPath $document -Algorithm SHA256).Hash
 Install-Version $candidate $contract.candidate.version
 if ((Get-FileHash -LiteralPath (Join-Path $installRoot 'resources\app.asar') -Algorithm SHA256).Hash -ne $contract.candidate.asarSha256) { throw 'Upgraded payload differs from the fully tested candidate.' }
-if ((Get-AuthenticodeSignature -LiteralPath (Join-Path $installRoot 'Raavi.exe')).Status -ne 'Valid') { throw 'Installed application signature is invalid.' }
+$installedSignature = (Get-AuthenticodeSignature -LiteralPath (Join-Path $installRoot 'Raavi.exe')).Status.ToString()
+if ($installedSignature -ne 'Valid' -and !($AllowUnsigned -and $installedSignature -eq 'NotSigned')) { throw 'Installed application signature is invalid.' }
 Push-Location -LiteralPath $ProjectRoot
 try {
   & $NodePath --import tsx $probe verify (Join-Path $installRoot 'Raavi.exe') $profile $document $probeEvidence
   if ($LASTEXITCODE -ne 0) { throw 'Installed upgrade did not preserve the real document and comment.' }
 } finally { Pop-Location }
-Record-Result 'fresh-install-and-upgrade' @{from=$contract.previous.version;to=$contract.candidate.version;payloadIdentical=$true}
+Record-Result 'fresh-install-and-upgrade' @{from=$contract.previous.version;to=$contract.candidate.version;payloadIdentical=$true;installerAuthenticode=$signature.Status.ToString();applicationAuthenticode=$installedSignature;allowUnsigned=[bool]$AllowUnsigned}
 Write-Output "Installer checks passed. Installed application retained for manual Windows file-association open testing: $installRoot"

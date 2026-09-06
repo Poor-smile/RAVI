@@ -1,0 +1,63 @@
+name: Verify Windows release installation
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_unsigned:
+        description: Explicitly test the labelled unsigned 2.4.5 release without claiming valid Authenticode
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  install-upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install the exact test dependencies
+        shell: pwsh
+        run: |
+          npm install --global npm@11.16.0
+          if ($LASTEXITCODE -ne 0) { throw 'npm setup failed' }
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+          npm run verify:dependencies
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency lock verification failed' }
+      - name: Download and verify the immutable release installers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'raavi-install-test'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item -LiteralPath 'tests/fixtures/windows-release-2.4.5.json' -Destination (Join-Path $stage 'contract.json')
+          $contract = Get-Content -LiteralPath (Join-Path $stage 'contract.json') -Raw | ConvertFrom-Json
+          foreach ($entry in @($contract.candidate, $contract.previous)) {
+            gh release download "v$($entry.version)" --repo Poor-smile/RAVI --pattern $entry.file --dir $stage
+            if ($LASTEXITCODE -ne 0) { throw 'GitHub release download failed' }
+            if ((Get-FileHash -LiteralPath (Join-Path $stage $entry.file) -Algorithm SHA256).Hash -ne $entry.sha256) { throw 'Installer checksum mismatch' }
+          }
+      - name: Exercise fresh install, uninstall and real upgrade
+        shell: pwsh
+        env:
+          ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'raavi-install-test'
+          $evidence = Join-Path $env:RUNNER_TEMP 'raavi-install-evidence'
+          & ./scripts/test-windows-install-upgrade.ps1 -ContractPath (Join-Path $stage 'contract.json') -EvidenceDirectory $evidence -AllowUnsigned:($env:ALLOW_UNSIGNED -eq 'true')
+      - name: Retain installation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raavi-windows-install-upgrade-2.4.5
+          path: ${{ runner.temp }}/raavi-install-evidence
+          if-no-files-found: warn
+          retention-days: 30
