@@ -99,7 +99,8 @@ test("P11 matches Replace / Found and replaces locally with one-step undo", asyn
       ).borderRadius,
     };
   });
-  expect(geometry.panel).toEqual({ x: 232, y: 144, width: 760, height: 192 });
+  // D01 adds a 1px border around the 760px editor paper.
+  expect(geometry.panel).toEqual({ x: 233, y: 145, width: 758, height: 192 });
   expect(geometry.queryRow.height).toBe(84);
   expect(geometry.replaceRow.height).toBe(84);
   expect(geometry.field).toMatchObject({ width: 320, height: 84 });
@@ -192,41 +193,7 @@ test("P11 matches Replace / Found and replaces locally with one-step undo", asyn
   expect(replacementTypingDuration).toBeLessThan(250);
 });
 
-test("P11 mobile Replace stacks fields and keeps every action at 44px", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.addInitScript(() => {
-    window.localStorage.clear();
-    window.localStorage.setItem("raavi:theme:v1", "dark");
-  });
-  await openWritingDocument(page);
-  await page.keyboard.press("Control+h");
-  const panel = page.getByRole("search", {
-    name: "جست‌وجو و جایگزینی در سند",
-  });
-  await expect(panel).toBeVisible();
-  const targets = await panel
-    .locator(
-      ".raavi-find-control, .raavi-find-option, .raavi-search-control, .raavi-search-clear, .raavi-search-input, .raavi-replace-action, .raavi-replace-control, .raavi-replace-input",
-    )
-    .evaluateAll((elements) =>
-      elements.map((element) => {
-        const rect = element.getBoundingClientRect();
-        return { width: Math.round(rect.width), height: Math.round(rect.height) };
-      }),
-    );
-  for (const target of targets) {
-    expect(target.width).toBeGreaterThanOrEqual(44);
-    expect(target.height).toBeGreaterThanOrEqual(44);
-  }
-  const panelBox = await panel.boundingBox();
-  expect(panelBox?.height).toBe(324);
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.
 
 test("P11 panel shortcuts remain platform-specific on macOS", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 914 });

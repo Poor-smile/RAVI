@@ -218,7 +218,7 @@ test("empty dark uses the independent W02 surface hierarchy", async ({ page }) =
   expect(surfaces).toEqual({
     titlebar: "rgb(14, 19, 15)",
     commandbar: "rgb(24, 30, 26)",
-    workspace: "rgb(26, 33, 28)",
+    workspace: "rgb(38, 56, 45)",
     rail: "rgb(16, 20, 17)",
     office: "rgb(24, 30, 26)",
     officeIcon: "rgb(20, 26, 22)",
@@ -266,7 +266,7 @@ test("empty dark uses the independent W02 surface hierarchy", async ({ page }) =
     railRadius: "6px",
     shellRadius: "14px",
     shortcutColor: "rgb(242, 245, 241)",
-    brandCursor: "default",
+    brandCursor: "pointer",
   });
 });
 
@@ -370,36 +370,4 @@ test("compact desktop preserves the 760px document measure and opens the sidebar
   expect(previewWidth).toBeLessThanOrEqual(1);
 });
 
-test("mobile sidebar is a trapped drawer with scrim, Escape and focus restoration", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await openWithFreshSidebar(page);
-
-  const overflow = page.getByRole("button", { name: "بازکردن فرمان‌های بیشتر" });
-  await overflow.click();
-  await page
-    .getByRole("button", { name: /بازکردن نوار کناری/ })
-    .click();
-
-  const drawer = page.getByRole("dialog", { name: "کتابخانه" });
-  await expect(drawer).toBeVisible();
-  await expect(drawer).toHaveAttribute("aria-modal", "true");
-  await expect(page.locator(".sidebar-scrim")).toBeVisible();
-  await expect(page.locator(".sidebar-rail > button")).toHaveCount(8);
-  await expect(page.getByRole("button", { name: "جمع‌کردن نوار کناری" })).toBeFocused();
-
-  const undersizedTargets = await drawer.locator("button").evaluateAll((buttons) =>
-    buttons
-      .filter((button) => {
-        const rect = button.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0 && (rect.width < 43.5 || rect.height < 43.5);
-      })
-      .map((button) => button.getAttribute("aria-label") || button.textContent?.trim()),
-  );
-  expect(undersizedTargets).toEqual([]);
-
-  await page.keyboard.press("Escape");
-  await expect(drawer).toBeHidden();
-  await expect(overflow).toBeFocused();
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.

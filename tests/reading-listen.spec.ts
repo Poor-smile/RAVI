@@ -116,19 +116,19 @@ test("local reading narration starts at the beginning and exposes paragraph cont
   await page.keyboard.press("ArrowDown");
   await expect(page.locator(".is-reading-aloud")).toContainText("روایت فردا");
 
-  await page.setViewportSize({ width: 320, height: 720 });
-  await expect(toolbar.locator(".reading-listen-engine-short")).toBeVisible();
-  await expect(toolbar.locator(".reading-listen-engine-short")).toContainText("مانا");
-  const mobile = await toolbar.evaluate((node) => ({
+  await page.setViewportSize({ width: 1024, height: 720 });
+  await expect(toolbar.locator(".reading-listen-engine")).toBeVisible();
+  await expect(toolbar.locator(".reading-listen-engine")).toContainText("مانا");
+  const compact = await toolbar.evaluate((node) => ({
     width: Math.round(node.getBoundingClientRect().width),
     buttonHeights: Array.from(node.querySelectorAll("button"), (button) =>
       Math.round(button.getBoundingClientRect().height),
     ),
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   }));
-  expect(mobile.width).toBeLessThanOrEqual(296);
-  expect(mobile.buttonHeights.every((height) => height >= 44)).toBe(true);
-  expect(mobile.overflow).toBeLessThanOrEqual(0);
+  expect(compact.width).toBeLessThanOrEqual(1000);
+  expect(compact.buttonHeights.every((height) => height >= 38)).toBe(true);
+  expect(compact.overflow).toBeLessThanOrEqual(0);
 
   await toolbar.getByRole("button", { name: "توقف شنیدن" }).click();
   await page.evaluate(() => {

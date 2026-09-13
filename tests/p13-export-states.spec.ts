@@ -75,7 +75,7 @@ test("P13 connects Review, Preparing and Success to the real DOCX flow", async (
   const returnTarget = await openExport(page);
   const dialog = page.locator(".export-modal");
 
-  await dialog.getByRole("button", { name: "خروجی DOCX" }).click();
+  await dialog.getByRole("button", { name: "Word", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "بازبینی خروجی" })).toBeVisible();
   await expect(page.locator(".export-review li")).toHaveCount(2);
   await expect(page.getByText("۲ مورد نیاز به بازبینی است")).toBeVisible();
@@ -128,8 +128,8 @@ test("P13 connects Review, Preparing and Success to the real DOCX flow", async (
 
   await page.getByRole("button", { name: "بازگشت" }).click();
   await expect(page.getByRole("dialog", { name: "خروجی سند" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: "Word (.docx) — قابل ویرایش" })).toBeFocused();
-  await dialog.getByRole("button", { name: "خروجی DOCX" }).click();
+  await expect(page.getByRole("button", { name: "Word", exact: true })).toBeFocused();
+  await dialog.getByRole("button", { name: "Word", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "بازبینی خروجی" })).toBeVisible();
   await confirmation.check();
   await continueButton.click();
@@ -201,7 +201,7 @@ test("P13 exposes a recoverable Error state and retries without changing the doc
     } as unknown as NonNullable<typeof window.raaviDesktop>;
   });
   await openExport(page);
-  await page.getByRole("button", { name: "خروجی DOCX" }).click();
+  await page.getByRole("button", { name: "Word", exact: true }).click();
 
   const errorDialog = page.getByRole("dialog", { name: "خروجی ساخته نشد" });
   await expect(errorDialog).toBeVisible();
@@ -224,35 +224,4 @@ test("P13 exposes a recoverable Error state and retries without changing the doc
     .toBe(2);
 });
 
-test("P13 remains a bottom sheet with touch-safe state controls on mobile", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.addInitScript(() => window.localStorage.clear());
-  await openDocument(page);
-  await page.keyboard.press("Control+Shift+e");
-  await page.getByRole("button", { name: "خروجی DOCX" }).click();
-  await expect(page.getByRole("dialog", { name: "بازبینی خروجی" })).toBeVisible();
-  const contract = await page.evaluate(() => {
-    const dialog = document.querySelector<HTMLElement>(".export-modal")!;
-    const bounds = dialog.getBoundingClientRect();
-    const targets = dialog.querySelectorAll<HTMLElement>(
-      ".export-modal-header > button, .export-review-confirmation, .export-modal-actions .button",
-    );
-    return {
-      dialog: {
-        x: Math.round(bounds.x),
-        width: Math.round(bounds.width),
-        bottom: Math.round(bounds.bottom),
-      },
-      targets: Array.from(targets, (target) =>
-        Math.round(target.getBoundingClientRect().height),
-      ),
-      overflow:
-        document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    };
-  });
-  expect(contract.dialog).toEqual({ x: 10, width: 370, bottom: 844 });
-  for (const height of contract.targets) expect(height).toBeGreaterThanOrEqual(44);
-  expect(contract.overflow).toBeLessThanOrEqual(0);
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.

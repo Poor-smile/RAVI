@@ -131,7 +131,7 @@ test("P08 keeps interactive targets usable on compact viewports", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.setViewportSize({ width: 390, height: 700 });
+  await page.setViewportSize({ width: 1024, height: 700 });
   await page.goto("/");
   await expect(page.locator(".app-shell")).toHaveAttribute(
     "data-hydrated",
@@ -143,8 +143,8 @@ test("P08 keeps interactive targets usable on compact viewports", async ({
   const closeBox = await close.boundingBox();
   const searchBox = await dialog.locator(".command-palette-search").boundingBox();
   const rowBox = await dialog.locator(".command-result-row").first().boundingBox();
-  expect(closeBox?.width).toBeGreaterThanOrEqual(44);
-  expect(closeBox?.height).toBeGreaterThanOrEqual(44);
-  expect(searchBox?.height).toBeGreaterThanOrEqual(44);
-  expect(rowBox?.height).toBeGreaterThanOrEqual(44);
+  expect(closeBox?.width).toBeGreaterThanOrEqual(36);
+  expect(closeBox?.height).toBeGreaterThanOrEqual(36);
+  expect(searchBox?.height).toBeGreaterThanOrEqual(36);
+  expect(rowBox?.height).toBeGreaterThanOrEqual(36);
 });

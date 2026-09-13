@@ -181,28 +181,4 @@ test("P16 Reading matches Figma and drives the real reading surface", async ({
   await expect(page.locator(".reading-header-document")).toBeVisible();
 });
 
-test("P16 Reading remains touch-safe and overflow-free on mobile", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.addInitScript(() => window.localStorage.clear());
-  await openSettings(page);
-
-  const contract = await page.evaluate(() => {
-    const targets = document.querySelectorAll<HTMLElement>(
-      ".reading-settings .settings-segmented-control > button, .reading-settings .settings-switch",
-    );
-    return {
-      targetHeights: Array.from(targets, (target) =>
-        Math.round(target.getBoundingClientRect().height),
-      ),
-      overflow:
-        document.documentElement.scrollWidth -
-        document.documentElement.clientWidth,
-    };
-  });
-  expect(contract.overflow).toBeLessThanOrEqual(0);
-  for (const height of contract.targetHeights) {
-    expect(height).toBeGreaterThanOrEqual(44);
-  }
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.

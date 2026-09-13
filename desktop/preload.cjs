@@ -10,7 +10,19 @@ contextBridge.exposeInMainWorld(
   "raaviDesktop",
   Object.freeze({
     isDesktop: true,
+    onPrepareToClose: (callback) => {
+      const listener = (_event, id) => {
+        Promise.resolve().then(callback).then(
+          () => ipcRenderer.send("renderer:checkpoint-ready", id, true),
+          () => ipcRenderer.send("renderer:checkpoint-ready", id, false),
+        );
+      };
+      ipcRenderer.on("renderer:prepare-close", listener);
+      return () => ipcRenderer.removeListener("renderer:prepare-close", listener);
+    },
     getLocalDocumentSnapshot: () => ipcRenderer.invoke("renderer-state:get"),
+    getDocumentSession: () => ipcRenderer.invoke("document-session:get"),
+    saveDocumentSession: (session) => ipcRenderer.invoke("document-session:save", session),
     saveLocalDocumentSnapshot: (snapshot) =>
       ipcRenderer.invoke("renderer-state:save", snapshot),
     getBackupStatus: () => ipcRenderer.invoke("backup:get-status"),
@@ -85,7 +97,10 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke("document:save-current", { filePath, document }),
     saveWordExport: (fileName, bytes) =>
       ipcRenderer.invoke("export:save-word", { fileName, bytes }),
-    exportPdf: (fileName) => ipcRenderer.invoke("export:pdf", { fileName }),
+    preparePdf: (options) => ipcRenderer.invoke("export:prepare-pdf", { landscape: options?.landscape === true }),
+    savePreparedPdf: (id, fileName) => ipcRenderer.invoke("export:save-prepared-pdf", { id, fileName }),
+    releasePreparedPdf: (id) => ipcRenderer.invoke("export:release-prepared-pdf", { id }),
+    exportPdf: (fileName, options) => ipcRenderer.invoke("export:pdf", { fileName, landscape: options?.landscape === true }),
     revealExport: (filePath) =>
       ipcRenderer.invoke("export:reveal", { filePath }),
     openExternalUrl: (url) => ipcRenderer.invoke("external:open-url", url),

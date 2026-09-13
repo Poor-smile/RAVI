@@ -25,6 +25,7 @@ function hashText(value: string) {
 
 export function findMermaidBlocks(markdown: string): MermaidBlock[] {
   const blocks: MermaidBlock[] = [];
+  if (!/mermaid/iu.test(markdown)) return blocks;
   let offset = 0;
   let lineNumber = 1;
   let activeFence:

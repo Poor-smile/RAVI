@@ -55,9 +55,12 @@ test("Save As, concurrent saves, permission failure, and restart preserve comple
     const expected = "# Revision 10\n" + "فارسی 📝\n".repeat(500);
     expect(await readFile(original, "utf8")).toBe(expected);
     expect(await readFile(created, "utf8")).toBe("# Other 10\n");
-    const history = JSON.parse(await readFile(path.join(profile, "document-history.json"), "utf8"));
-    expect(history.documents[original.toLowerCase()].revision).toBe(10);
-    expect(history.documents[created.toLowerCase()].revision).toBe(10);
+    const { createSnapshotStorage } = await import("../desktop/snapshot-storage.mjs");
+    const { createDocumentHistoryStore } = await import("../desktop/document-history-store.mjs");
+    const stateRoot = path.join(profile, "state-store");
+    const history = createDocumentHistoryStore(path.join(stateRoot, "history"), path.join(profile, "document-history.json"), createSnapshotStorage(stateRoot));
+    expect((await history.read(original)).revision).toBe(10);
+    expect((await history.read(created)).revision).toBe(10);
     await chmod(original, 0o444);
     try {
       const failure = await page.evaluate(async ({ file, payload }) => {

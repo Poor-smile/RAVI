@@ -118,7 +118,9 @@ test("ships the viewer implementation instead of starter assets", async () => {
     ),
   ]);
 
-  assert.match(page, /ReactMarkdown/);
+  assert.match(page, /MemoMarkdown/);
+  const markdownRenderer = await readFile(new URL("../app/components/memo-markdown.tsx", import.meta.url), "utf8");
+  assert.match(markdownRenderer, /<ReactMarkdown/);
   assert.match(page, /ImagePlus/);
   assert.match(page, /edit\.image/);
   assert.match(page, /imageModalOpen/);
@@ -154,21 +156,14 @@ test("ships the viewer implementation instead of starter assets", async () => {
   assert.match(readingSelectionMenu, /ابزار متن انتخاب‌شده/);
   assert.match(page, /captureEditorSelection/);
   assert.match(page, /editor-selection-mini-menu/);
-  assert.match(page, /data-mobile-editor-action="bold"/);
+  assert.match(page, /data-command-id="edit\.bold"/);
+  assert.doesNotMatch(page, /data-mobile-editor-action=/);
   assert.match(page, /className="format-tool-overflow"/);
   assert.match(page, /collapseDesktopPane\("preview"\)/);
   assert.match(page, /data-command-id="edit\.task"/);
   assert.match(page, /runEditorToolCommand\("edit\.task"\)/);
   assert.match(page, /data-command-id="edit\.list"/);
   assert.match(page, /runEditorToolCommand\("edit\.orderedList"\)/);
-  assert.match(
-    css,
-    /\.editor-primary-tools[\s\S]*grid-template-columns:\s*repeat\(5/,
-  );
-  assert.match(
-    css,
-    /\.editor-primary-tools\s*>\s*button:not\(\[data-mobile-editor-action\]\)/,
-  );
   assert.match(page, /قالب‌بندی متن انتخاب‌شده/);
   assert.match(page, /addAnnotation/);
   assert.match(page, /findAnnotationAtPoint/);

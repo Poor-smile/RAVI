@@ -244,39 +244,7 @@ test("P20 matches the returning-user Launch frame and opens a real recent file",
     .toContain("تحقیق کاربران.md");
 });
 
-test("P20 adapts Launch to one touch-safe mobile column without overflow", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await waitForLaunch(page);
-
-  const mobile = await page.evaluate(() => ({
-    launchWidth: Math.round(
-      document.querySelector<HTMLElement>(".launch-returning")!.getBoundingClientRect()
-        .width,
-    ),
-    cardWidths: Array.from(
-      document.querySelectorAll<HTMLElement>("[data-launch-recent-card]"),
-      (card) => Math.round(card.getBoundingClientRect().width),
-    ),
-    actionHeight: Math.round(
-      document.querySelector<HTMLElement>(".launch-recent-open")!.getBoundingClientRect()
-        .height,
-    ),
-    pageOverflow:
-      document.documentElement.scrollWidth -
-      document.documentElement.clientWidth,
-  }));
-  expect(mobile.launchWidth).toBe(390);
-  expect(new Set(mobile.cardWidths)).toEqual(new Set([358]));
-  expect(mobile.actionHeight).toBeGreaterThanOrEqual(44);
-  expect(mobile.pageOverflow).toBeLessThanOrEqual(0);
-
-  await page.screenshot({
-    path: ".artifacts/p20-launch-mobile.png",
-    fullPage: false,
-  });
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.
 
 test("P20 removes a missing recent entry and keeps recovery visible locally", async ({
   page,

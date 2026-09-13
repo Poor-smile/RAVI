@@ -9,6 +9,7 @@ export type ReadingViewMode = "reading" | "desk";
 
 export type ReadingAnchor = {
   blockIndex: number;
+  sourceOffset?: number;
   blockType: string;
   headingPath: string[];
   textPrefix: string;
@@ -94,6 +95,14 @@ function readingBlocks(article: HTMLElement) {
   return Array.from(
     article.querySelectorAll<HTMLElement>(READING_BLOCK_SELECTOR),
   ).filter((block) => blockText(block).length > 0);
+}
+
+function blockSourceOffset(block: HTMLElement) {
+  const source = block.closest<HTMLElement>("[data-source-offset]");
+  if (!source) return undefined;
+  const local = Number(source.dataset.sourceOffset);
+  const start = Number(source.closest<HTMLElement>("[data-source-start]")?.dataset.sourceStart ?? 0);
+  return Number.isSafeInteger(local) && Number.isSafeInteger(start) ? start + local : undefined;
 }
 
 function blockAtProbe(
@@ -192,6 +201,7 @@ function anchorFromBlock(blocks: HTMLElement[], index: number): ReadingAnchor {
   const headingPath = headingPathAt(blocks, index);
   return {
     blockIndex: index,
+    sourceOffset: blockSourceOffset(block),
     blockType: blockType(block),
     headingPath,
     textPrefix: text.slice(0, 120),
@@ -266,6 +276,10 @@ function findAnchorBlock(
   currentContentSignature: string,
 ) {
   const { anchor } = record;
+  if (record.contentSignature === currentContentSignature && anchor.sourceOffset !== undefined) {
+    const block = blocks.find(block => blockSourceOffset(block) === anchor.sourceOffset && blockType(block) === anchor.blockType);
+    if (block && (!anchor.textHash || readingTextFingerprint(blockText(block)) === anchor.textHash)) return { block, match: "exact" as const };
+  }
   const headingPath: string[] = [];
   const candidates = blocks.map((block, index) => {
     const text = blockText(block);
@@ -432,6 +446,16 @@ export function restoreReadingViewport(
   };
 }
 
+export function mergeReadingPositionMaps(...maps: unknown[]): ReadingPositionMap {
+  const result: ReadingPositionMap = {};
+  for (const map of maps) {
+    for (const [key, record] of Object.entries(sanitizeReadingPositionMap(map))) {
+      if (!result[key] || record.updatedAt >= result[key].updatedAt) result[key] = record;
+    }
+  }
+  return sanitizeReadingPositionMap(result);
+}
+
 export function sanitizeReadingPositionMap(value: unknown): ReadingPositionMap {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const records = Object.entries(value as Record<string, unknown>)
@@ -467,6 +491,7 @@ export function sanitizeReadingPositionMap(value: unknown): ReadingPositionMap {
           viewMode: record.viewMode,
           anchor: {
             blockIndex: Math.max(0, Number(anchor.blockIndex)),
+            sourceOffset: Number.isSafeInteger(anchor.sourceOffset) && Number(anchor.sourceOffset) >= 0 ? anchor.sourceOffset : undefined,
             blockType: anchor.blockType.slice(0, 24),
             headingPath: anchor.headingPath.slice(0, 6).map((item) => item.slice(0, 140)),
             textPrefix: anchor.textPrefix.slice(0, 120),

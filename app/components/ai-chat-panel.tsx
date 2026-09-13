@@ -11,6 +11,9 @@ import {
 } from "react";
 import {
   Check,
+  ChevronDown,
+  Table2,
+  AlertTriangle,
   ChevronLeft,
   Copy,
   Download,
@@ -38,12 +41,14 @@ import type {
   CodexResult,
 } from "../ai/types";
 import { MagicWandIcon } from "./magic-wand-trigger";
+import { changedPhrase } from "../ai/change-review";
 
 type ChatMessage = {
   id: number;
   role: "user" | "assistant";
   text: string;
   replacement?: string | null;
+  original?: string;
 };
 
 export function AiChatPanel({
@@ -59,6 +64,8 @@ export function AiChatPanel({
   onUndo,
   canUndo,
   onOpenVersions,
+  onReselect,
+  contextCurrent = true,
 }: {
   context: AiFrozenContext;
   connectionState: CodexConnectionState;
@@ -72,6 +79,8 @@ export function AiChatPanel({
   onUndo: () => void;
   canUndo: boolean;
   onOpenVersions: () => void;
+  onReselect: () => void;
+  contextCurrent?: boolean;
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -120,7 +129,8 @@ export function AiChatPanel({
       const applied = await apply(value);
       if (applied) {
         setMessages([]);
-        setPrompt("");
+      } else {
+        setError("زمینه تغییر کرده است؛ متن تازه را انتخاب کنید. پیشنهاد قبلی اعمال نشده است.");
       }
     } finally {
       setApplying(false);
@@ -132,7 +142,7 @@ export function AiChatPanel({
 
   const submit = async (value = prompt) => {
     const nextPrompt = value.trim();
-    if (!nextPrompt || running || connectionState !== "connected") return;
+    if (!nextPrompt || running || applying || !contextCurrent || connectionState !== "connected") return;
     setRunning(true);
     setError("");
     setPrompt("");
@@ -149,6 +159,7 @@ export function AiChatPanel({
           role: "assistant",
           text: result.answer,
           replacement: result.replacement,
+          original: context.content,
         },
       ]);
     } catch (requestError) {
@@ -234,17 +245,22 @@ export function AiChatPanel({
 
   return (
     <section className="ai-chat-panel" aria-labelledby="sidebar-pane-title">
-      <div className="ai-context-chip" title={context.content}>
-        <span>{scopeLabel}</span>
-        <small>زمینه ثابت</small>
-      </div>
+      <details className={`ai-context-details${contextCurrent ? "" : " is-stale"}`}>
+        <summary><span className="ai-context-kind">{context.source === "table" ? <Table2 size={20} aria-hidden="true" /> : <TextCursorInput size={20} aria-hidden="true" />}</span><span className="ai-context-summary"><strong>{contextCurrent ? "زمینهٔ این پاسخ" : "زمینه تغییر کرده است"}</strong><small>{context.label}</small></span><ChevronDown className="ai-context-chevron" size={20} aria-hidden="true" /></summary>
+        <p>{scopeLabel}</p><pre dir="auto">{context.content}</pre>
+      </details>
+      {!contextCurrent && <div className="ai-context-conflict" role="alert">
+        <strong><AlertTriangle size={18} aria-hidden="true" /> زمینه تغییر کرده است</strong>
+        <p>متن تازهٔ سند حفظ شده؛ برای ادامه، محدوده را دوباره انتخاب کنید.</p>
+        <button type="button" disabled={running || applying} onClick={() => { onReselect(); setMessages(current => current.map(message => ({ ...message, replacement: null }))); setError(""); }}><RefreshCw size={16} aria-hidden="true" /> انتخاب دوباره</button>
+      </div>}
 
       <div className="ai-chat-scroll" aria-live="polite">
         {messages.length === 0 ? (
           <div className="ai-chat-welcome">
             <strong>چه کمکی از من برمی‌آید؟</strong>
             <span>
-              درخواستتان را بنویسید یا از پیشنهادهای پایین استفاده کنید.
+              {context.kind === "document" ? "درخواستتان را بنویسید یا برای دیدن فرمان‌ها / را بزنید." : "درخواست خود را دربارهٔ محدودهٔ انتخاب‌شده بنویسید."}
             </span>
           </div>
         ) : (
@@ -259,9 +275,7 @@ export function AiChatPanel({
                 message.replacement !== null &&
                 message.replacement !== undefined && (
                   <>
-                    <pre dir="auto">
-                      <code>{message.replacement}</code>
-                    </pre>
+                    <ChangeReview original={message.original ?? ""} replacement={message.replacement} stale={!contextCurrent} />
                     <div className="ai-result-actions">
                       <button
                         type="button"
@@ -275,7 +289,7 @@ export function AiChatPanel({
                         context.blockTo !== undefined && (
                           <button
                             type="button"
-                            disabled={applying}
+                            disabled={applying || running || !contextCurrent || message.original !== context.content}
                             onClick={() =>
                               void applySuggestion(
                                 message.replacement ?? "",
@@ -291,7 +305,7 @@ export function AiChatPanel({
                         <button
                           className="is-primary"
                           type="button"
-                          disabled={applying}
+                          disabled={applying || running || !contextCurrent || message.original !== context.content}
                           onClick={() =>
                             void applySuggestion(
                               message.replacement ?? "",
@@ -303,6 +317,7 @@ export function AiChatPanel({
                           در سند
                         </button>
                       )}
+                      <button type="button" disabled={applying || running} onClick={() => setMessages(current => current.filter(item => item.id !== message.id))}>رد پیشنهاد</button>
                     </div>
                   </>
                 )}
@@ -342,7 +357,7 @@ export function AiChatPanel({
       <div className={`ai-composer-shell ${commandMode ? "is-command-mode" : ""}`}>
         <small className="ai-composer-scope">دامنه: {scopeLabel}</small>
 
-        {messages.length === 0 && !commandMode && (
+        {messages.length === 0 && !commandMode && context.kind === "document" && (
           <div className="ai-quick-prompts" aria-label="پیشنهادهای آماده">
             {suggestedCommands.map((item) => (
               <AiCommandButton
@@ -394,6 +409,8 @@ export function AiChatPanel({
           <label className="visually-hidden" htmlFor={inputId}>
             پیام به راوی هوشمند
           </label>
+          <div className="ai-input-wrap">
+          {!prompt && <span className="ai-input-placeholder" aria-hidden="true">درخواستتان را بنویسید یا <kbd>/</kbd> را بزنید</span>}
           <textarea
             ref={inputRef}
             id={inputId}
@@ -433,7 +450,7 @@ export function AiChatPanel({
                 void submit();
               }
             }}
-            placeholder="درخواستتان را بنویسید…"
+            placeholder="درخواستتان را بنویسید یا / را بزنید"
             rows={2}
             dir="rtl"
             disabled={running}
@@ -447,7 +464,8 @@ export function AiChatPanel({
                 : undefined
             }
           />
-          <div className="ai-composer-hint" aria-live="polite">
+          </div>
+          {(commandMode || context.kind === "document") && <div className="ai-composer-hint" aria-live="polite">
             {commandMode ? (
               <span>برای خروج، / را پاک کنید</span>
             ) : (
@@ -455,12 +473,13 @@ export function AiChatPanel({
                 برای فرمان‌های بیشتر، <kbd>/</kbd> را بزنید
               </span>
             )}
-          </div>
+          </div>}
           <button
             type="submit"
             aria-label={commandMode ? "اجرای فرمان انتخاب‌شده" : "ارسال پیام"}
             disabled={
               running ||
+              applying || !contextCurrent ||
               (commandMode
                 ? commandResults.length === 0
                 : !prompt.trim())
@@ -484,6 +503,15 @@ const CATEGORY_ICONS = {
   persian: Spellcheck,
   structured: Workflow,
 } satisfies Record<AiWritingCommandCategory, typeof TextCursorInput>;
+
+function ChangeReview({ original, replacement, stale }: { original: string; replacement: string; stale: boolean }) {
+  const diff = changedPhrase(original, replacement);
+  return <section className="ai-change-review" aria-label="مقایسهٔ متن و پیشنهاد">
+    <div className="ai-review-original"><strong>{stale ? "نسخهٔ قبلی هنگام درخواست" : "متن فعلی"} · عبارت حذف‌شده خط خورده است</strong><pre dir="auto">{diff.prefix}<del>{diff.removed}</del>{diff.suffix}</pre></div>
+    <div className="ai-review-proposal"><strong>پیشنهاد راوی · عبارت تازه زیرخط دارد</strong><pre dir="auto">{diff.prefix}<ins>{diff.added}</ins>{diff.suffix}</pre></div>
+    <small>معنا، عددها، واحدها و میزان قطعیت عبارت را بررسی کنید.</small>
+  </section>;
+}
 
 function AiCommandButton({
   command,

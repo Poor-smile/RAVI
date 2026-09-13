@@ -87,76 +87,7 @@ test("outline targets the active surface and Reading preserves the semantic bloc
   );
 });
 
-test("mobile Reading opens outline as a modal drawer and restores focus", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto("/");
-  await expect(page.locator(".app-shell")).toHaveAttribute("data-hydrated", "true");
-  await openWritingDocument(page);
-  const overflowTrigger = page.locator(".mobile-topbar-menu-trigger");
-  await expect
-    .poll(async () => {
-      if ((await overflowTrigger.getAttribute("aria-expanded")) !== "true") {
-        await overflowTrigger.click();
-      }
-      return overflowTrigger.getAttribute("aria-expanded");
-    })
-    .toBe("true");
-  const overflowMenu = page.locator(".mobile-topbar-menu");
-  await expect(overflowMenu).toBeVisible();
-  await overflowMenu
-    .getByRole("button", { name: /حالت مطالعه/ })
-    .click();
-
-  await expect(page.locator(".workspace")).toHaveClass(/workspace--reading/);
-  const drawer = page.locator("#library-panel");
-  await expect(drawer).toHaveClass(/is-collapsed/);
-  await expect(drawer).toHaveAttribute("role", "complementary");
-  await expect(drawer.locator(".sidebar-rail")).toBeVisible();
-  await expect(drawer.locator(".sidebar-pane")).toBeHidden();
-  await expect(
-    page.locator(".workspace--reading .pane-header:visible"),
-  ).toHaveCount(0);
-  await expect(
-    page.locator(
-      ".workspace--reading .annotation-toolbar:not(.is-composing):visible",
-    ),
-  ).toHaveCount(0);
-
-  const article = page.locator(".workspace--reading .markdown-body");
-  await expect(article).toBeVisible();
-  await expect
-    .poll(async () => (await article.boundingBox())?.y ?? 10_000)
-    .toBeLessThan(150);
-
-  const outlineTrigger = drawer.getByRole("button", {
-    name: "فهرست سند",
-    exact: true,
-  });
-  await outlineTrigger.click();
-  await expect(drawer).toBeVisible();
-  await expect(drawer).toHaveAttribute("role", "dialog");
-  await expect(drawer).toHaveAttribute("aria-modal", "true");
-  await expect(page.locator(".workspace")).toHaveAttribute("inert", "");
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        Boolean(
-          document.activeElement &&
-            document.querySelector("#library-panel")?.contains(document.activeElement),
-        ),
-      ),
-    )
-    .toBe(true);
-
-  await page.keyboard.press("Escape");
-  await expect(drawer).toHaveClass(/is-collapsed/);
-  await expect(drawer).toHaveAttribute("role", "complementary");
-  await expect(drawer.locator(".sidebar-rail")).toBeVisible();
-  await expect(drawer.locator(".sidebar-pane")).toBeHidden();
-  await expect(outlineTrigger).toBeFocused();
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.
 
 test("annotation deletion is reversible without moving the reading position", async ({
   page,

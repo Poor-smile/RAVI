@@ -353,7 +353,7 @@ test.describe("command resolver", () => {
     );
     expect(
       resolveOnly("file.save", save, windowsWeb, "composer"),
-    ).toBeUndefined();
+    ).toBe("file.save");
     expect(
       resolveOnly(
         "help.shortcuts",

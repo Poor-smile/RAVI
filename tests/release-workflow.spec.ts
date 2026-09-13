@@ -5,9 +5,9 @@ import path from "node:path";
 import { RELEASE_PERFORMANCE_BUDGETS } from "../app/release/performance-budgets";
 
 async function openOverflow(page: Page) {
-  const trigger = page.locator(".mobile-topbar-menu-trigger");
+  const trigger = page.locator(".header-overflow-trigger");
   await trigger.click();
-  await expect(page.locator(".mobile-topbar-menu")).toBeVisible();
+  await expect(page.locator(".header-overflow-menu")).toBeVisible();
 }
 
 test("open → search → edit → preview → read → save/export survives interruption", async ({
@@ -60,10 +60,7 @@ test("open → search → edit → preview → read → save/export survives int
     await page.getByRole("button", { name: "بازگشت به میز", exact: true }).click();
 
     await page.locator("input[webkitdirectory]").setInputFiles(shelf);
-    await openOverflow(page);
-    await page
-      .locator('.mobile-topbar-menu-grid [data-command-id="view.sidebar"]')
-      .click();
+    await page.getByRole("navigation", { name: "نماهای نوار کناری" }).getByRole("button", { name: "کتابخانه", exact: true }).click();
     await expect(page.locator("#library-panel")).toBeVisible();
     await page
       .getByRole("button", { name: "جست‌وجو در کتابخانه", exact: true })
@@ -80,28 +77,17 @@ test("open → search → edit → preview → read → save/export survives int
 
     await expect(page.locator("#library-panel")).toHaveClass(/is-collapsed/u);
     await page.getByRole("button", { name: "بازگشت به میز", exact: true }).click();
-    await page.locator('.mobile-tabs [role="tab"]').first().click();
+    await page.getByRole('button', { name: 'متن خام', exact: true }).click();
     const editor = page.locator("#markdown-editor .cm-content");
-    await editor.fill("# مسیر بازیابی\n\nمتن ویرایش‌شده و پایدار");
-    const mobileModeControls = page.locator(".editor-mode-switcher > button:visible");
-    const mobileViewTabs = page.locator('.mobile-tabs [role="tab"]:visible');
-    await expect(mobileModeControls).toHaveCount(4);
-    await expect(mobileViewTabs).toHaveCount(2);
-    for (const control of await mobileModeControls.all()) {
-      const box = await control.boundingBox();
-      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
-    }
-    for (const tab of await mobileViewTabs.all()) {
-      const box = await tab.boundingBox();
-      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
-    }
-
-    await page.locator('.mobile-tabs [role="tab"]').nth(1).click();
-    await expect(page.locator(".markdown-body")).toContainText("متن ویرایش‌شده و پایدار");
-    await openOverflow(page);
-    await page
-      .locator('.mobile-topbar-menu-grid [data-command-id="view.reading"]')
-      .click();
+    await editor.focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText("# مسیر بازیابی\n\nمتن ویرایش‌شده و پایدار");
+    await expect(editor).toContainText("متن ویرایش‌شده و پایدار");
+    await expect(page.locator('.editor-mode-switcher > button:visible')).toHaveCount(4);
+    await expect(page.locator('.mobile-tabs')).toHaveCount(0);
+    await page.getByRole('button', { name: 'نمونه‌خوانی دوبرگی', exact: true }).click();
+    await expect(page.getByRole("region", { name: "نوشتن بلاکی", exact: true })).toContainText("متن ویرایش‌شده و پایدار");
+    await page.getByRole('button', { name: 'خواندن', exact: true }).click();
     await expect(page.locator(".app-shell")).toHaveClass(/is-reading/u);
     await expect(page.locator(".markdown-body")).toContainText("متن ویرایش‌شده و پایدار");
     await page.getByRole("button", { name: "بازگشت به میز" }).click();
@@ -122,17 +108,19 @@ test("open → search → edit → preview → read → save/export survives int
     await expect(exportDialog).toBeVisible();
     const [exportDownload] = await Promise.all([
       page.waitForEvent("download"),
-      exportDialog.locator(".export-modal-actions .button--primary").click(),
+      exportDialog.getByRole("button", { name: "Word", exact: true }).click(),
     ]);
     expect(exportDownload.suggestedFilename()).toMatch(/\.docx$/iu);
     await exportDialog.getByRole("button", { name: "تمام", exact: true }).click();
     await expect(exportDialog).toBeHidden();
 
-    await page.locator('.mobile-tabs [role="tab"]').first().click();
-    await editor.fill("# مسیر بازیابی\n\nپیش‌نویس پس از وقفه");
+    await page.getByRole('button', { name: 'متن خام', exact: true }).click();
+    await editor.focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.insertText("# مسیر بازیابی\n\nپیش‌نویس پس از وقفه");
     await page.waitForTimeout(650);
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.locator('.mobile-tabs [role="tab"]').first().click();
+    await page.getByRole('button', { name: 'متن خام', exact: true }).click();
     await expect(page.locator("#markdown-editor .cm-content")).toContainText(
       "پیش‌نویس پس از وقفه",
     );

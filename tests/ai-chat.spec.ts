@@ -87,7 +87,7 @@ test("AI composer uses one input for free prompts and all 47 slash commands", as
   await expect(composer).toHaveAttribute("dir", "rtl");
   await expect(composer).toHaveAttribute(
     "placeholder",
-    "درخواستتان را بنویسید…",
+    "درخواستتان را بنویسید یا / را بزنید",
   );
   await expect(page.locator(".ai-quick-prompts .ai-command-button")).toHaveCount(
     4,

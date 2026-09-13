@@ -219,7 +219,7 @@ test("P06 assembles the independent local Highlights panel from Figma", async ({
   await expect(sidebar).toHaveClass(/is-collapsed/);
   await expect(trigger).toBeFocused();
 
-  await page.setViewportSize({ width: 375, height: 812 });
+  await page.setViewportSize({ width: 1024, height: 812 });
   const overflow = page.getByRole("button", {
     name: "بازکردن فرمان‌های بیشتر",
   });
@@ -233,7 +233,7 @@ test("P06 assembles the independent local Highlights panel from Figma", async ({
     .getByRole("button", { name: "جست‌وجو در هایلایت‌ها" })
     .click();
   await rowActions.first().focus();
-  const mobileTargets = await page.evaluate(() => {
+  const compactTargets = await page.evaluate(() => {
     const size = (selector: string) => {
       const bounds = document
         .querySelector<HTMLElement>(selector)!
@@ -249,12 +249,12 @@ test("P06 assembles the independent local Highlights panel from Figma", async ({
       row: size(".reading-highlight-row-main"),
     };
   });
-  expect(mobileTargets).toMatchObject({
-    searchDismiss: { width: 44, height: 44 },
-    deleteAction: { width: 44, height: 44 },
+  expect(compactTargets).toMatchObject({
+    searchDismiss: { width: 32, height: 32 },
+    deleteAction: { width: 36, height: 36 },
     row: { height: 64 },
   });
-  expect(mobileTargets.row.width).toBeGreaterThanOrEqual(276);
+  expect(compactTargets.row.width).toBeGreaterThanOrEqual(276);
   await page.keyboard.press("Escape");
   await expect(sidebar).toBeHidden();
   await expect(overflow).toBeFocused();

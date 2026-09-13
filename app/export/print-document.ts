@@ -7,6 +7,9 @@ const UI_ONLY_SELECTOR = [
   ".mermaid-diagram-hint",
   ".selection-range-feedback",
   ".reading-document-kicker",
+  "button",
+  '[data-test-only]',
+  '[data-ui-only]',
 ].join(",");
 
 const ID_REFERENCE_ATTRIBUTES = [
@@ -116,11 +119,23 @@ export type StagedPrintDocument = {
   cleanup: () => void;
 };
 
+export function printableArticleClone(sourceArticle: HTMLElement) {
+  const article = sourceArticle.cloneNode(true) as HTMLElement;
+  article.classList.remove("has-annotation-hover");
+  article.classList.add("raavi-print-article");
+  article.removeAttribute("tabindex");
+  article.querySelectorAll(UI_ONLY_SELECTOR).forEach(element => element.remove());
+  normalizePrintableArticle(article);
+  remapCloneIds(article);
+  return article;
+}
+
 export async function stagePrintDocument(
   sourceArticle: HTMLElement | null,
   fileName: string,
+  landscape = false,
 ): Promise<StagedPrintDocument> {
-  if (!sourceArticle?.isConnected) throw new Error("PRINT_ARTICLE_UNAVAILABLE");
+  if (!sourceArticle) throw new Error("PRINT_ARTICLE_UNAVAILABLE");
 
   document.getElementById(PRINT_ROOT_ID)?.remove();
 
@@ -131,14 +146,11 @@ export async function stagePrintDocument(
   root.dataset.fileName = fileName;
   root.setAttribute("aria-hidden", "true");
 
-  const article = sourceArticle.cloneNode(true) as HTMLElement;
-  article.classList.remove("has-annotation-hover");
-  article.classList.add("raavi-print-article");
-  article.removeAttribute("tabindex");
-  article.querySelectorAll(UI_ONLY_SELECTOR).forEach((element) => element.remove());
-  normalizePrintableArticle(article);
-  remapCloneIds(article);
+  const article = printableArticleClone(sourceArticle);
   root.appendChild(article);
+  const pageStyle = document.createElement("style");
+  pageStyle.textContent = `@media print { @page { size: A4 ${landscape ? "landscape" : "portrait"}; margin: 14mm; background: white; } }`;
+  root.appendChild(pageStyle);
 
   document.body.appendChild(root);
   document.documentElement.setAttribute(PRINT_ACTIVE_ATTRIBUTE, "");

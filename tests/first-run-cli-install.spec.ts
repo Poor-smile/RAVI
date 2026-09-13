@@ -38,7 +38,7 @@ test("First Run keeps CLI setup lightweight and uses Material Symbol actions", a
   expect(surfaceColor).not.toBe("rgb(255, 245, 243)");
 });
 
-test("First Run CLI actions stay touch-safe without horizontal overflow", async ({
+test("First Run CLI actions remain accessible in a narrow desktop window without overflow", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 760, height: 900 });
@@ -64,5 +64,11 @@ test("First Run CLI actions stay touch-safe without horizontal overflow", async 
 
   expect(geometry.dialogOverflow).toBeLessThanOrEqual(0);
   expect(geometry.codeOverflow).toBeLessThanOrEqual(0);
-  expect(geometry.controlHeights.every((height) => height >= 44)).toBe(true);
+  // Narrow desktop windows retain the 36px desktop controls; phone/tablet
+  // access is tested separately in desktop-access.spec.ts.
+  expect(geometry.controlHeights.every((height) => height >= 36)).toBe(true);
+  const copy = dialog.getByRole("button", { name: "کپی فرمان نصب CLI" });
+  await copy.focus();
+  await expect(copy).toBeFocused();
+  await expect(copy).toBeEnabled();
 });

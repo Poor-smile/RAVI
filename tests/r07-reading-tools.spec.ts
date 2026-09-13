@@ -214,72 +214,7 @@ test("R07 enforces 16–22, keyboard navigation, and Escape focus restoration", 
   await expect(menu).toBeHidden();
 });
 
-test("R07 keeps the Reading Rail reachable beside the mobile Drawer", async ({
-  page,
-}) => {
-  await openReadingFixture(page, { width: 375, height: 812 });
-
-  const sidebar = page.locator("#library-panel");
-  const rail = sidebar.locator(".sidebar-rail");
-  const commentsTrigger = rail.getByRole("button", {
-    name: "نظرات",
-    exact: true,
-  });
-  await expect(sidebar).toHaveClass(/has-persistent-rail/);
-  await expect(sidebar).toHaveAttribute("role", "complementary");
-  await expect(rail).toBeVisible();
-  await expect(rail.getByRole("button")).toHaveCount(5);
-  await expect(commentsTrigger).toBeVisible();
-  await expect(
-    page.locator(".reading-header-outline-toggle--mobile"),
-  ).toHaveCount(0);
-
-  const railContract = await page.evaluate(() => {
-    const railNode = document.querySelector<HTMLElement>(
-      "#library-panel .sidebar-rail",
-    )!;
-    const button = railNode.querySelector<HTMLElement>("button")!;
-    const railRect = railNode.getBoundingClientRect();
-    const buttonRect = button.getBoundingClientRect();
-    return {
-      rail: {
-        x: Math.round(railRect.x),
-        width: Math.round(railRect.width),
-      },
-      button: {
-        width: Math.round(buttonRect.width),
-        height: Math.round(buttonRect.height),
-      },
-    };
-  });
-  expect(railContract).toEqual({
-    rail: { x: 319, width: 56 },
-    button: { width: 44, height: 44 },
-  });
-
-  const toolsTrigger = page.getByRole("button", { name: "ابزار مطالعه" });
-  await expect(toolsTrigger).toHaveCSS("border-width", "0px");
-  await toolsTrigger.click();
-  const menu = page.getByRole("menu", { name: "ابزار مطالعه" });
-  await expect(menu.getByRole("menuitem")).toHaveCount(2);
-  await expect(menu.getByRole("menuitem").first()).toHaveCSS("width", "44px");
-  const increase = menu.getByRole("menuitem", {
-    name: "بزرگ‌تر کردن متن",
-  });
-  for (let step = 0; step < 4; step += 1) {
-    await increase.click();
-  }
-  await expect(menu.locator(".reading-tools-size-value")).toHaveText("۲۲");
-  await expect(
-    page.locator('[data-workspace-screen="reading"] .markdown-body'),
-  ).toHaveCSS("font-size", "22px");
-  await page.keyboard.press("Escape");
-
-  await commentsTrigger.click();
-  await expect(sidebar).toHaveAttribute("role", "dialog");
-  await expect(sidebar).toHaveAttribute("aria-modal", "true");
-  await expect(commentsTrigger).toHaveAttribute("aria-current", "page");
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.
 
 test("R07 preserves the live reading anchor instead of a delayed saved position", async ({
   page,

@@ -56,9 +56,7 @@ export function DocumentCommandBar({
   saveErrorBannerVisible,
   saveIndicatorRef,
   saveState,
-  selectEditorMode,
   setDocumentMenuOpen,
-  setMobileEditorToolsExpanded,
   wordCount,
 }: {
   activeEditorMode: EditorMode;
@@ -77,9 +75,7 @@ export function DocumentCommandBar({
   saveErrorBannerVisible: boolean;
   saveIndicatorRef: RefObject<HTMLButtonElement | null>;
   saveState: SaveState;
-  selectEditorMode: (mode: EditorMode) => void;
   setDocumentMenuOpen: Dispatch<SetStateAction<boolean>>;
-  setMobileEditorToolsExpanded: Dispatch<SetStateAction<boolean>>;
   wordCount: number;
 }) {
   return (
@@ -204,27 +200,7 @@ export function DocumentCommandBar({
         <span>{wordCount.toLocaleString("fa-IR")} واژه</span>
       </div>
 
-      <div className="mobile-tabs" role="tablist" aria-label="نمای موبایل">
-        <button
-          role="tab"
-          aria-selected={activeEditorMode === "source"}
-          type="button"
-          onClick={() => selectEditorMode("source")}
-        >
-          کد
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeEditorMode === "live"}
-          type="button"
-          onClick={() => {
-            setMobileEditorToolsExpanded(false);
-            selectEditorMode("live");
-          }}
-        >
-          نوشتن
-        </button>
-      </div>
+
     </div>
   );
 }

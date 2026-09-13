@@ -43,9 +43,6 @@ async function openFixture(page: Page, content = fixture) {
   await expect(page.locator(".app-shell")).toHaveAttribute("data-hydrated", "true");
   const editor = page.locator("#markdown-editor .cm-content");
   await page.getByRole("button", { name: "متن خام", exact: true }).click();
-  if ((page.viewportSize()?.width ?? 1280) <= 820) {
-    await page.getByRole("tab", { name: "ویرایش", exact: true }).click();
-  }
   await expect(editor).toBeVisible();
   await editor.fill(content);
   await editor.focus();
@@ -923,10 +920,9 @@ test.describe("بلوک‌های غنی در ویرایش روان", () => {
     ).toHaveCount(0);
   });
 
-  test("keeps inline code visible at 320px and 200% zoom", async ({ page }) => {
+  test("keeps inline code visible on desktop at 200% zoom", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await openFixture(page);
-    await page.setViewportSize({ width: 320, height: 720 });
-    await page.getByRole("tab", { name: "نوشتن", exact: true }).click();
     await page.evaluate(() => { document.documentElement.style.zoom = "2"; });
     await expect(page.locator(".cm-rich-code")).toHaveCount(0);
     const codeLine = page.locator(".cm-line-code").filter({ hasText: "const پیام" });

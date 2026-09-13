@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { BackLayerProvider } from "./components/back-layer-provider";
 import "./globals.css";
+import "./components/corrective-fidelity.css";
 
 const themeBootScript = `
 (() => {

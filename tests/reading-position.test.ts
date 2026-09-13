@@ -24,6 +24,19 @@ test("reading document keys remain stable for native paths", () => {
   );
 });
 
+test("source anchors retain exact identity when unvisited predecessor blocks are absent", () => {
+  const repeated = "متن کاملاً تکراری در همه بخش‌ها";
+  const source = readingFixture(Array.from({ length: 12 }, () => ({ tag: "p", text: repeated })), 8 * 212 - 300);
+  Array.from(source.context.article.children).forEach((element, index) => element.setAttribute("data-source-offset", String(index * 1000)));
+  const snapshot = captureReadingViewport(source.context)!;
+  assert.equal(snapshot.anchor.sourceOffset, 8000);
+  const sparse = readingFixture(Array.from({ length: 5 }, () => ({ tag: "p", text: repeated })), 0);
+  [0, 8000, 9000, 10000, 11000].forEach((offset, index) => sparse.context.article.children[index].setAttribute("data-source-offset", String(offset)));
+  const result = restoreReadingViewport(sparse.context, { ...snapshot, version: READING_POSITION_VERSION, documentKey: "draft:sparse", contentSignature: "same", viewMode: "reading", readerSize: 18, outlineOpen: false, updatedAt: 1 }, "same");
+  assert.equal(result.match, "exact");
+  assert.equal(captureReadingViewport(sparse.context)?.anchor.sourceOffset, 8000);
+});
+
 test("draft ids and content signatures are stable enough for local records", () => {
   const draftId = createReadingDraftId();
   assert.match(draftId, /^draft-/u);

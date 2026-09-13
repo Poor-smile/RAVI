@@ -9,10 +9,16 @@ import {
   shell,
   WebContentsView,
 } from "electron";
-import { access, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { existsSync, readFileSync, renameSync, watch, writeFileSync } from "node:fs";
+import { access, readFile, stat, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync, renameSync, watch } from "node:fs";
 import path from "node:path";
+import { createPreparedPdfStore } from "./prepared-pdf-store.mjs";
 import { atomicWriteFile, createFileTaskQueue } from "./atomic-file.mjs";
+import { warmWindowsSavePermissions } from "./windows-save-permissions.mjs";
+import { createDocumentSessionStore } from "./document-session-store.mjs";
+import { createSnapshotStorage } from "./snapshot-storage.mjs";
+import { createRendererStateStore } from "./renderer-state-store.mjs";
+import { createDocumentHistoryStore } from "./document-history-store.mjs";
 import { fileURLToPath } from "node:url";
 import {
   createRaaviServer,
@@ -87,6 +93,12 @@ if (
 }
 app.setName("راوی");
 app.setPath("userData", raaviUserDataDirectory);
+const snapshotStorage = createSnapshotStorage(path.join(app.getPath("userData"), "state-store"), {
+  manifests: [rendererStatePath(), path.join(app.getPath("userData"), "document-session.json")],
+  automaticCollection: true,
+});
+const documentSessionStore = createDocumentSessionStore(path.join(app.getPath("userData"), "document-session.json"), { storage: snapshotStorage });
+const rendererStateStore = createRendererStateStore(rendererStatePath(), path.join(app.getPath("userData"), "reading-positions.json"), snapshotStorage);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -131,7 +143,7 @@ function applyWindowTheme(theme) {
   if (startupOverlayView) void renderStartupOverlay(startupOverlayState);
 }
 const MAX_DOCUMENT_VERSIONS = 30;
-const MAX_RENDERER_STATE_BYTES = 48 * 1024 * 1024;
+const documentHistoryStore = createDocumentHistoryStore(path.join(app.getPath("userData"), "state-store", "history"), historyStatePath(), snapshotStorage, MAX_DOCUMENT_VERSIONS, MAX_HISTORY_DOCUMENTS);
 const MAX_EXPORT_BYTES = 96 * 1024 * 1024;
 const isSmokeTest =
   process.argv.includes("--smoke-test") || process.env.RAAVI_SMOKE_TEST === "1";
@@ -140,7 +152,24 @@ const initialDocumentPath = markdownPathFromArguments(process.argv);
 let mainWindow = null;
 let localServer = null;
 let rendererReady = false;
-let rendererStateWriteQueue = Promise.resolve();
+let shutdownCheckpointComplete = false;
+let checkpointSequence = 0;
+const closeCheckpoints = new Map();
+function requestRendererCheckpoint(window) {
+  if (!rendererReady || !window || window.isDestroyed()) return Promise.resolve();
+  const id = ++checkpointSequence;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      closeCheckpoints.delete(id);
+      reject(new Error("Renderer checkpoint timed out."));
+    }, 30_000);
+    closeCheckpoints.set(id, { sender: window.webContents, finish(ok) {
+      clearTimeout(timer); closeCheckpoints.delete(id);
+      if (ok) resolve(); else reject(new Error("Renderer checkpoint failed."));
+    } });
+    window.webContents.send("renderer:prepare-close", id);
+  });
+}
 let rendererStateReadCount = 0;
 let pendingDocumentRequest = initialDocumentPath
   ? { filePath: initialDocumentPath, openInReadingMode: true }
@@ -740,209 +769,34 @@ async function getRendererState() {
   // document first creates a brief stale view and lets its scroll callbacks
   // race with the requested document. Only hydrate the cross-document reading
   // index; the requested file remains the sole source of visible content.
-  return snapshot?.readingPositions
-    ? { readingPositions: snapshot.readingPositions }
-    : null;
+  return { readingPositions: snapshot?.readingPositions ?? {}, startupDocumentPath: initialDocumentPath };
 }
 
-async function readRendererStateFile() {
-  const value = await readJsonFile(rendererStatePath(), null);
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value
-    : null;
+
+async function readRendererStateFile() { return rendererStateStore.read(); }
+
+async function saveRendererState(_event, snapshot) {
+  const result = await rendererStateStore.write(snapshot);
+  if (snapshot.residency && snapshot.residency !== "reading") {
+    void ensureBackupServices().then(({ coordinator }) => coordinator.stageSnapshot(snapshot, snapshot.vaultReason || "local-change")).catch(() => {});
+  }
+  return result;
 }
 
-function saveRendererState(_event, snapshot) {
-  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
-    throw new Error("Renderer state is invalid.");
-  }
-  const incomingSerialized = JSON.stringify(snapshot);
-  if (Buffer.byteLength(incomingSerialized, "utf8") > MAX_RENDERER_STATE_BYTES) {
-    throw new Error("Renderer state is too large.");
-  }
-
-  rendererStateWriteQueue = rendererStateWriteQueue
-    .catch(() => {})
-    .then(async () => {
-      const currentSnapshot = (await readRendererStateFile()) ?? {};
-      const currentPositions =
-        currentSnapshot.readingPositions &&
-        typeof currentSnapshot.readingPositions === "object" &&
-        !Array.isArray(currentSnapshot.readingPositions)
-          ? currentSnapshot.readingPositions
-          : {};
-      const incomingPositions =
-        snapshot.readingPositions &&
-        typeof snapshot.readingPositions === "object" &&
-        !Array.isArray(snapshot.readingPositions)
-          ? snapshot.readingPositions
-          : {};
-      const readingPositions = { ...incomingPositions };
-      for (const [key, currentRecord] of Object.entries(currentPositions)) {
-        const incomingRecord = readingPositions[key];
-        if (
-          !incomingRecord ||
-          Number(currentRecord?.updatedAt ?? 0) >
-            Number(incomingRecord?.updatedAt ?? 0)
-        ) {
-          readingPositions[key] = currentRecord;
-        }
-      }
-      // A synchronous beforeunload save can interleave while this queued write
-      // is awaiting the filesystem. Re-read immediately before serialization
-      // so an older renderer snapshot never overwrites a newer reading anchor.
-      const latestSnapshot = (await readRendererStateFile()) ?? {};
-      const latestPositions =
-        latestSnapshot.readingPositions &&
-        typeof latestSnapshot.readingPositions === "object" &&
-        !Array.isArray(latestSnapshot.readingPositions)
-          ? latestSnapshot.readingPositions
-          : {};
-      for (const [key, latestRecord] of Object.entries(latestPositions)) {
-        const candidate = readingPositions[key];
-        if (
-          !candidate ||
-          Number(latestRecord?.updatedAt ?? 0) >
-            Number(candidate?.updatedAt ?? 0)
-        ) {
-          readingPositions[key] = latestRecord;
-        }
-      }
-      const serialized = JSON.stringify({ ...snapshot, readingPositions });
-      if (Buffer.byteLength(serialized, "utf8") > MAX_RENDERER_STATE_BYTES) {
-        throw new Error("Renderer state is too large.");
-      }
-      const targetPath = rendererStatePath();
-      const temporaryPath = `${targetPath}.tmp`;
-      await writeFile(temporaryPath, serialized, "utf8");
-      try {
-        await rename(temporaryPath, targetPath);
-      } catch {
-        await writeFile(targetPath, serialized, "utf8");
-      }
-      if (snapshot.residency && snapshot.residency !== "reading") {
-        void ensureBackupServices()
-          .then(({ coordinator }) =>
-            coordinator.stageSnapshot(
-              snapshot,
-              snapshot.vaultReason || "local-change",
-            ),
-          )
-          .catch(() => {});
-      }
-      return { saved: true };
-    });
-  return rendererStateWriteQueue;
+function saveRendererReadingPositions(_event, positions) {
+  return rendererStateStore.writePositions(positions);
 }
 
-function saveRendererReadingPositions(_event, readingPositions) {
-  if (
-    !readingPositions ||
-    typeof readingPositions !== "object" ||
-    Array.isArray(readingPositions)
-  ) {
-    throw new Error("Renderer reading positions are invalid.");
+function saveRendererReadingPositionsSync(event, positions) {
+  if (!positions || typeof positions !== "object" || Array.isArray(positions)) {
+    event.returnValue = { saved: false }; return;
   }
-
-  rendererStateWriteQueue = rendererStateWriteQueue
-    .catch(() => {})
-    .then(async () => {
-      const currentSnapshot = (await readRendererStateFile()) ?? {};
-      const currentPositions =
-        currentSnapshot.readingPositions &&
-        typeof currentSnapshot.readingPositions === "object" &&
-        !Array.isArray(currentSnapshot.readingPositions)
-          ? currentSnapshot.readingPositions
-          : {};
-      const mergedPositions = { ...readingPositions };
-      for (const [key, currentRecord] of Object.entries(currentPositions)) {
-        const incomingRecord = mergedPositions[key];
-        if (
-          !incomingRecord ||
-          Number(currentRecord?.updatedAt ?? 0) >
-            Number(incomingRecord?.updatedAt ?? 0)
-        ) {
-          mergedPositions[key] = currentRecord;
-        }
-      }
-      const latestSnapshot = (await readRendererStateFile()) ?? {};
-      const latestPositions =
-        latestSnapshot.readingPositions &&
-        typeof latestSnapshot.readingPositions === "object" &&
-        !Array.isArray(latestSnapshot.readingPositions)
-          ? latestSnapshot.readingPositions
-          : {};
-      for (const [key, latestRecord] of Object.entries(latestPositions)) {
-        const candidate = mergedPositions[key];
-        if (
-          !candidate ||
-          Number(latestRecord?.updatedAt ?? 0) >
-            Number(candidate?.updatedAt ?? 0)
-        ) {
-          mergedPositions[key] = latestRecord;
-        }
-      }
-      const serialized = JSON.stringify({
-        ...currentSnapshot,
-        readingPositions: mergedPositions,
-      });
-      if (Buffer.byteLength(serialized, "utf8") > MAX_RENDERER_STATE_BYTES) {
-        throw new Error("Renderer state is too large.");
-      }
-      const targetPath = rendererStatePath();
-      const temporaryPath = `${targetPath}.tmp`;
-      await writeFile(temporaryPath, serialized, "utf8");
-      try {
-        await rename(temporaryPath, targetPath);
-      } catch {
-        await writeFile(targetPath, serialized, "utf8");
-      }
-      return { saved: true };
-    });
-  return rendererStateWriteQueue;
+  // sendSync acknowledges receipt before renderer teardown. Durable IO runs
+  // outside this handler and before-quit waits for it; reload reads the cache.
+  void rendererStateStore.writePositions(positions, { final: true }).catch(() => {});
+  event.returnValue = { saved: false, queued: true };
 }
 
-function saveRendererReadingPositionsSync(event, readingPositions) {
-  if (
-    !readingPositions ||
-    typeof readingPositions !== "object" ||
-    Array.isArray(readingPositions)
-  ) {
-    event.returnValue = { saved: false };
-    return;
-  }
-
-  try {
-    const targetPath = rendererStatePath();
-    let currentSnapshot = {};
-    try {
-      const parsed = JSON.parse(readFileSync(targetPath, "utf8"));
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        currentSnapshot = parsed;
-      }
-    } catch {
-      // A first-run profile has no renderer snapshot yet.
-    }
-    const serialized = JSON.stringify({
-      ...currentSnapshot,
-      readingPositions,
-    });
-    if (Buffer.byteLength(serialized, "utf8") > MAX_RENDERER_STATE_BYTES) {
-      event.returnValue = { saved: false };
-      return;
-    }
-    const temporaryPath = `${targetPath}.positions.tmp`;
-    writeFileSync(temporaryPath, serialized, "utf8");
-    try {
-      renameSync(temporaryPath, targetPath);
-    } catch {
-      writeFileSync(targetPath, serialized, "utf8");
-    }
-    event.returnValue = { saved: true };
-  } catch {
-    event.returnValue = { saved: false };
-  }
-}
 
 async function rememberLibraryFolder(rootPath) {
   const state = await readLibraryState();
@@ -1101,62 +955,18 @@ async function openExternalUrl(_event, value) {
   return { opened: true };
 }
 
-async function readHistoryState() {
-  const value = await readJsonFile(historyStatePath(), { documents: {} });
-  return {
-    documents:
-      value && typeof value.documents === "object" ? value.documents : {},
-  };
-}
 
-async function historyForPath(filePath) {
-  const state = await readHistoryState();
-  const value = state.documents[normalizedPathKey(filePath)];
-  if (!value || typeof value !== "object") {
-    return { revision: 1, versions: [] };
-  }
-  return {
-    revision:
-      Number.isSafeInteger(value.revision) && value.revision > 0
-        ? value.revision
-        : 1,
-    versions: Array.isArray(value.versions)
-      ? value.versions.slice(-MAX_DOCUMENT_VERSIONS)
-      : [],
-  };
-}
-
-let historyWriteQueue = Promise.resolve();
-const documentSaveQueue = createFileTaskQueue();
-
-function saveHistoryForPath(filePath, revision, versions) {
-  const result = historyWriteQueue.then(() => writeHistoryForPath(filePath, revision, versions));
-  historyWriteQueue = result.catch(() => {});
+const queueDocumentSave = createFileTaskQueue();
+const pendingDocumentSaves = new Set();
+const documentSaveQueue = (file, task) => {
+  const result = queueDocumentSave(file, task);
+  pendingDocumentSaves.add(result);
+  void result.finally(() => pendingDocumentSaves.delete(result)).catch(() => {});
   return result;
-}
+};
+async function historyForPath(filePath) { return documentHistoryStore.read(filePath); }
+function saveHistoryForPath(filePath, revision, versions) { return documentHistoryStore.write(filePath, revision, versions); }
 
-async function writeHistoryForPath(filePath, revision, versions) {
-  const state = await readHistoryState();
-  const key = normalizedPathKey(filePath);
-  state.documents[key] = {
-    path: path.resolve(filePath),
-    revision,
-    versions: Array.isArray(versions)
-      ? versions.slice(-MAX_DOCUMENT_VERSIONS)
-      : [],
-    updatedAt: new Date().toISOString(),
-  };
-
-  const entries = Object.entries(state.documents)
-    .sort(
-      (first, second) =>
-        Date.parse(second[1]?.updatedAt ?? "") -
-        Date.parse(first[1]?.updatedAt ?? ""),
-    )
-    .slice(0, MAX_HISTORY_DOCUMENTS);
-  state.documents = Object.fromEntries(entries);
-  await atomicWriteFile(historyStatePath(), JSON.stringify(state, null, 2));
-}
 
 function validateDocumentPayload(value) {
   if (
@@ -1282,26 +1092,9 @@ async function rewriteTrackedDocumentPath(
   await writeLibraryState(libraryState);
 
   if (!nextAbsolute) return;
-  const historyState = await readHistoryState();
-  let historyChanged = false;
-  for (const [historyKey, value] of Object.entries(historyState.documents)) {
-    const mappedPath = remapAbsolute(value?.path ?? historyKey);
-    if (!mappedPath) continue;
-    delete historyState.documents[historyKey];
-    historyState.documents[normalizedPathKey(mappedPath)] = {
-      ...value,
-      path: mappedPath,
-    };
-    historyChanged = true;
-  }
-  if (historyChanged) {
-    await writeFile(
-      historyStatePath(),
-      JSON.stringify(historyState, null, 2),
-      "utf8",
-    );
-  }
+  await documentHistoryStore.remap(remapAbsolute);
 }
+
 
 async function mutateLibrary(_event, payload) {
   const rootPath = path.resolve(String(payload?.rootPath ?? ""));
@@ -1485,17 +1278,26 @@ async function saveMarkdown(event, payload) {
 }
 
 async function saveCurrentDocument(_event, payload) {
+  const started = performance.now();
+  const timings = [];
+  const mark = (stage) => { if (process.env.RAAVI_PERFORMANCE_TRACE === "1") timings.push({ stage, elapsedMs: performance.now() - started }); };
   const filePath = path.resolve(String(payload?.filePath ?? ""));
   const documentValue = validateDocumentPayload(payload?.document);
   if (/\.ravi$/i.test(filePath)) {
     throw new Error("LEGACY_DOCUMENT_REQUIRES_MARKDOWN_SAVE_AS");
   }
   await documentSaveQueue(filePath, async () => {
+    mark("queue-ready");
     await ensureDocumentAccess(filePath);
+    mark("access-ready");
     await atomicWriteFile(filePath, documentValue.content);
+    mark("file-replaced");
     await saveHistoryForPath(filePath, documentValue.revision, documentValue.versions);
+    mark("history-saved");
     await recordRecent(filePath, "markdown");
+    mark("recent-saved");
   });
+  if (process.env.RAAVI_PERFORMANCE_TRACE === "1") console.log("[raavi-performance]", JSON.stringify({ operation: "save", timings }));
   return { saved: true, filePath, documentType: "markdown" };
 }
 
@@ -1530,7 +1332,9 @@ async function saveWordExport(event, payload) {
   return { saved: true, filePath };
 }
 
-async function exportPdf(event, payload) {
+const preparedPdfStore = createPreparedPdfStore();
+
+async function writePdfExport(event, payload, getBytes) {
   const owner = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
   const fileName = safeExportName(
     payload?.fileName,
@@ -1547,10 +1351,26 @@ async function exportPdf(event, payload) {
   const filePath = /\.pdf$/i.test(result.filePath)
     ? result.filePath
     : `${result.filePath}.pdf`;
-  const bytes = await event.sender.printToPDF(desktopPdfOptions());
+  const bytes = await getBytes();
   await writeFile(filePath, bytes);
   allowedExportPaths.add(path.resolve(filePath));
   return { saved: true, filePath };
+}
+
+async function exportPdf(event, payload) {
+  return writePdfExport(event, payload, () => event.sender.printToPDF(desktopPdfOptions(payload?.landscape === true)));
+}
+
+async function preparePdf(event, payload) {
+  const owner = event.sender.id;
+  const bytes = await event.sender.printToPDF(desktopPdfOptions(payload?.landscape === true));
+  if (event.sender.isDestroyed()) throw new Error("PDF_PREVIEW_CLOSED");
+  return preparedPdfStore.add(owner, bytes);
+}
+
+async function savePreparedPdf(event, payload) {
+  const bytes = preparedPdfStore.read(event.sender.id, payload?.id);
+  return writePdfExport(event, payload, async () => bytes);
 }
 
 async function revealExport(_event, payload) {
@@ -1583,6 +1403,8 @@ function registerDesktopHandlers() {
     prepareSmartNarration: runCodexNarrationDirector,
   });
   trustedIpc.handle("renderer-state:get", getRendererState);
+  trustedIpc.handle("document-session:get", () => documentSessionStore.read());
+  trustedIpc.handle("document-session:save", (_event, session) => documentSessionStore.write(session));
   trustedIpc.handle("renderer-state:save", saveRendererState);
   trustedIpc.handle("backup:get-status", getBackupStatus);
   trustedIpc.handle(
@@ -1626,6 +1448,9 @@ function registerDesktopHandlers() {
   trustedIpc.handle("document:save-current", saveCurrentDocument);
   trustedIpc.handle("export:save-word", saveWordExport);
   trustedIpc.handle("export:pdf", exportPdf);
+  trustedIpc.handle("export:prepare-pdf", preparePdf);
+  trustedIpc.handle("export:save-prepared-pdf", savePreparedPdf);
+  trustedIpc.handle("export:release-prepared-pdf", (event, { id }) => preparedPdfStore.release(event.sender.id, id));
   trustedIpc.handle("export:reveal", revealExport);
   trustedIpc.handle("external:open-url", openExternalUrl);
   trustedIpc.handle("software-update:get-status", () =>
@@ -1721,9 +1546,17 @@ function registerDesktopHandlers() {
   trustedIpc.on("window:close", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();
   });
+  trustedIpc.on("renderer:checkpoint-ready", (event, id, ok) => {
+    const checkpoint = closeCheckpoints.get(id);
+    if (checkpoint?.sender === event.sender) checkpoint.finish(ok === true);
+  });
   trustedIpc.on("renderer:ready", (event) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;
     rendererReady = true;
+    if (!isSmokeTest) {
+      const warmTimer = setTimeout(() => { void warmWindowsSavePermissions().catch(() => {}); }, 1500);
+      warmTimer.unref();
+    }
     if (pendingDocumentRequest) {
       const request = pendingDocumentRequest;
       pendingDocumentRequest = null;
@@ -1800,6 +1633,8 @@ async function createWindow() {
     },
   });
 
+  const pdfOwner = mainWindow.webContents.id;
+  mainWindow.webContents.once("destroyed", () => preparedPdfStore.clear(pdfOwner));
   mainWindow.setMenuBarVisibility(false);
   mainWindow.on("resize", updateStartupOverlayBounds);
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1835,6 +1670,25 @@ async function createWindow() {
     startupDocumentRequest = null;
     removeStartupOverlay();
     mainWindow = null;
+  });
+  let closingWindow = false;
+  mainWindow.on("close", event => {
+    if (shutdownCheckpointComplete || !rendererReady) return;
+    event.preventDefault();
+    if (closingWindow) return;
+    closingWindow = true;
+    const window = mainWindow;
+    void (async () => {
+      try {
+        await requestRendererCheckpoint(window);
+        await Promise.all([documentSessionStore.flush(), rendererStateStore.flush(), ...pendingDocumentSaves]);
+        await documentHistoryStore.flush();
+        window.destroy();
+      } catch {
+        closingWindow = false;
+        dialog.showErrorBox("ذخیرهٔ نهایی کامل نشد", "راوی باز مانده است تا نوشته‌ها از دست نروند. فضای دیسک و دسترسی پوشه را بررسی و دوباره تلاش کنید.");
+      }
+    })();
   });
 
   await createStartupOverlay();
@@ -1904,7 +1758,26 @@ if (!hasSingleInstanceLock) {
   app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
   });
-  app.on("before-quit", () => {
+  let quitFlush = null;
+  app.on("before-quit", (event) => {
+    if (quitFlush || (!shutdownCheckpointComplete && rendererReady) || documentSessionStore.hasUncommitted() || rendererStateStore.hasUncommitted() || pendingDocumentSaves.size) {
+      event.preventDefault();
+      if (!quitFlush) quitFlush = (async () => {
+        try {
+          await requestRendererCheckpoint(mainWindow);
+          await Promise.all([documentSessionStore.flush(), rendererStateStore.flush(), ...pendingDocumentSaves]);
+          await documentHistoryStore.flush();
+          quitFlush = null;
+          shutdownCheckpointComplete = true;
+          app.quit();
+        } catch {
+          quitFlush = null;
+          if (!mainWindow || mainWindow.isDestroyed()) await createWindow();
+          dialog.showErrorBox("ذخیرهٔ نهایی کامل نشد", "راوی باز مانده است تا نوشته‌ها از دست نروند. فضای دیسک و دسترسی پوشه را بررسی و دوباره ذخیره کنید.");
+        }
+      })();
+      return;
+    }
     mermaidRenderer?.dispose();
     clearStartupOverlayTimer();
     closeLibraryWatchers();

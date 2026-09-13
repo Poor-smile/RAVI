@@ -2,17 +2,19 @@
 
 import { Search, X } from "@/app/icons/material-symbols";
 import { useEffect, type KeyboardEvent, type RefObject } from "react";
+import type { ReadingDocumentMatch } from "../search/reading-document-index";
 
-export type ReadingDocumentSearchResult = {
-  start: number;
-  end: number;
-  label: string;
-};
+export type ReadingDocumentSearchResult = ReadingDocumentMatch;
 
 export function ReadingDocumentSearchPane({
   inputRef,
   query,
   results,
+  total,
+  busy,
+  error,
+  page,
+  onPageChange,
   activeIndex,
   onQueryChange,
   onClear,
@@ -22,6 +24,11 @@ export function ReadingDocumentSearchPane({
   inputRef: RefObject<HTMLInputElement | null>;
   query: string;
   results: readonly ReadingDocumentSearchResult[];
+  total: number;
+  busy: boolean;
+  error: boolean;
+  page: number;
+  onPageChange: (page: number) => void;
   activeIndex: number;
   onQueryChange: (value: string) => void;
   onClear: () => void;
@@ -110,8 +117,9 @@ export function ReadingDocumentSearchPane({
         role="status"
         aria-live="polite"
       >
-        {hasQuery
-          ? `${resultCount.toLocaleString("fa-IR")} نتیجه در همین سند`
+        {busy ? "در حال جست‌وجوی کل سند…" : error ? "جست‌وجو انجام نشد؛ دوباره تلاش کنید."
+          : hasQuery
+          ? `${total.toLocaleString("fa-IR")} نتیجه در همین سند`
           : "عبارت موردنظر را در همین سند پیدا کنید"}
       </p>
 
@@ -121,7 +129,7 @@ export function ReadingDocumentSearchPane({
         aria-label="نتیجه‌های جست‌وجو در سند"
       >
         {results.map((result, index) => (
-          <li key={`${result.start}:${result.end}`}>
+          <li key={`${result.chunkIndex}:${result.blockOffset}:${result.start}:${result.end}`}>
             <button
               type="button"
               className={index === activeIndex ? "is-active" : undefined}
@@ -133,13 +141,20 @@ export function ReadingDocumentSearchPane({
                 {result.label}
               </span>
               <span className="reading-document-search-result-index" dir="ltr">
-                {(index + 1).toLocaleString("fa-IR")}/
-                {resultCount.toLocaleString("fa-IR")}
+                {(page * 50 + index + 1).toLocaleString("fa-IR")}/
+                {total.toLocaleString("fa-IR")}
               </span>
             </button>
           </li>
         ))}
       </ol>
+      {total > 50 && (
+        <nav className="sidebar-pane-actions" aria-label="صفحه‌های نتایج جست‌وجو">
+          <button type="button" className="button button--quiet" disabled={page === 0 || busy} onClick={() => onPageChange(page - 1)}>نتایج قبلی</button>
+          <span>{(page + 1).toLocaleString("fa-IR")} / {Math.ceil(total / 50).toLocaleString("fa-IR")}</span>
+          <button type="button" className="button button--quiet" disabled={(page + 1) * 50 >= total || busy} onClick={() => onPageChange(page + 1)}>نتایج بعدی</button>
+        </nav>
+      )}
     </section>
   );
 }

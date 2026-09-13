@@ -8,15 +8,13 @@ import {
 } from "../release/workspace-state";
 import { parseSingleEditorMode, type SingleEditorMode } from "../editor/mode";
 
-export type MobilePane = "editor" | "preview";
 export type ScrollPane = "editor" | "preview";
 export type DesktopPaneMode = "split" | ScrollPane;
 
 export const PANE_LAYOUT_STORAGE_KEY = "raavi:pane-layout:v1";
 
 export function useWorkspaceLayoutState(liveEditEnabled: boolean) {
-  const [mobilePane, setMobilePane] = useState<MobilePane>("editor");
-  const [isCompactLayout, setIsCompactLayout] = useState(false);
+  const [focusedPane, setFocusedPane] = useState<ScrollPane>("editor");
   const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
   const [desktopPaneMode, setDesktopPaneMode] =
     useState<DesktopPaneMode>("editor");
@@ -113,8 +111,7 @@ export function useWorkspaceLayoutState(liveEditEnabled: boolean) {
   }, [modeSwipeTarget]);
 
   return [
-    [mobilePane, setMobilePane],
-    [isCompactLayout, setIsCompactLayout],
+    [focusedPane, setFocusedPane],
     [scrollSyncEnabled, setScrollSyncEnabled],
     [desktopPaneMode, setDesktopPaneMode],
     [activeSplitPane, setActiveSplitPane],

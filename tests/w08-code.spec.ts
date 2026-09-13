@@ -202,22 +202,22 @@ test("W08 assembles the editable Markdown source on the full Code surface", asyn
   expect(contract.geometry.rail).toEqual({ x: 1224, y: 92, width: 56, height: 822 });
   expect(contract.geometry.codeSurface).toEqual(contract.geometry.workspace);
   expect(contract.geometry.source.x).toBeLessThan(64);
-  expect(contract.geometry.source.y).toBe(128);
-  expect(contract.geometry.source.height).toBe(786);
-  expect(contract.geometry.firstLine.y).toBe(148);
+  expect(contract.geometry.source.y).toBe(129);
+  expect(contract.geometry.source.height).toBe(784);
+  expect(contract.geometry.firstLine.y).toBe(149);
   expect(contract.colors).toEqual({
     titleBar: "rgb(14, 19, 15)",
     commandBar: "rgb(24, 30, 26)",
-    workspace: "rgb(26, 33, 28)",
+    workspace: "rgb(12, 18, 14)",
     rail: "rgb(16, 20, 17)",
-    codeSurface: "rgb(24, 30, 26)",
+    codeSurface: "rgb(38, 56, 45)",
     source: "rgb(240, 244, 239)",
     selectedMode: "rgb(8, 11, 9)",
     selectedModeText: "rgb(247, 250, 247)",
   });
   expect(contract.details).toEqual({
     radius: "0px",
-    border: "0px",
+    border: "1px",
     shadow: "none",
     sourceSize: "13px",
     sourceLineHeight: "23px",

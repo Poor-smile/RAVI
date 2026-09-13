@@ -1,5 +1,7 @@
 "use client";
 
+import { DesktopAccessGate } from "./components/desktop-access-gate";
+
 /*
 THESIS: راوی یک برگه‌ی زنده‌ی نمونه‌خوانی است؛ نه یک ادیتور تیره و فنی.
 OWN-WORLD: کاغذ سرد، مرکب زغالی، آبی نمونه‌خوان و علائم ثبت چاپی.
@@ -8,6 +10,7 @@ FIRST VIEWPORT: نوار ابزار فشرده بالا، دو برگ تمام�
 FORM: مسیر هفتم، میز دوبرگی با ساختار bench؛ seed a26e2614.
 */
 
+import { usePdfExport } from "./export/use-pdf-export";
 import {
   AudioFile,
   AlertTriangle,
@@ -91,15 +94,20 @@ import {
   useRef,
   useState,
 } from "react";
-import ReactMarkdown, {
+import {
   type Components,
   defaultUrlTransform,
 } from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkHighlight from "./markdown/remark-highlight";
-import remarkUnderline from "./markdown/remark-underline";
+import { parseSavedContent, matchesSavedContent } from "./performance/saved-content";
+import { countDocumentWords, type PersianReviewIssue, type PersianReviewIssueId } from "./performance/document-analysis";
+import { useDocumentAnalysis } from "./performance/use-document-analysis";
+import { MemoMarkdown, useMarkdownSourceStart } from "./components/memo-markdown";
+import { DeferredMarkdownChunk, useReadingMaterialization } from "./components/deferred-markdown-chunk";
+import { useStableAction } from "./use-stable-actions";
+import { readDocumentSession, writeDocumentSession } from "./workspace/document-session-store";
+import { useDocumentText } from "./workspace/use-document-text";
+import type { DocumentEdit } from "./workspace/document-text";
 import packageMetadata from "../package.json";
-import { useBackLayer } from "./components/back-layer-provider";
 import {
   Sidebar,
   SidebarPaneHeader,
@@ -115,7 +123,8 @@ import type { FileSuggestion } from "./components/file-suggestion-row";
 import type { RecentFilePanelEntry } from "./components/recent-files-panel";
 import type { VersionPanelEntry } from "./components/versions-panel";
 import type { SearchPaneState } from "./components/library-search-pane";
-import type { ReadingDocumentSearchResult } from "./components/reading-document-search-pane";
+import type { ReadingDocumentMatch } from "./search/reading-document-index";
+import { useReadingDocumentSearch } from "./search/use-reading-document-search";
 import { ReadingToolsMenu } from "./components/reading-tools-menu";
 import { ReadingSelectionMenu } from "./components/reading-selection-menu";
 import {
@@ -192,7 +201,7 @@ import type {
   ExportFormat,
 } from "./components/export-dialog";
 import { extractWordFrontmatter } from "./export/frontmatter";
-import { stagePrintDocument } from "./export/print-document";
+import { PdfPreview } from "./components/pdf-preview";
 import type { NewDocumentSpec } from "./components/new-document-dialog";
 import {
   HiddenAnnotationDataWarningDialog,
@@ -335,7 +344,6 @@ import {
   safeLiveImageSource,
 } from "./editor/rich-blocks";
 import { useCommandSystem } from "./hooks/use-command-system";
-import { useVisualViewportInsets } from "./hooks/use-visual-viewport";
 import { useAppChromeState } from "./hooks/use-app-chrome-state";
 import {
   usePersistedWorkspaceState,
@@ -447,7 +455,7 @@ import {
   readingContentSignature,
   readingDocumentKey,
   restoreReadingViewport,
-  sanitizeReadingPositionMap,
+  mergeReadingPositionMaps,
   upsertReadingPosition,
   type ReadingPositionMap,
   type ReadingPositionRecord,
@@ -466,7 +474,7 @@ import {
   documentTabId,
   orderDocumentTabs,
   parseDocumentSession,
-  serializeDocumentSession,
+  buildDocumentSession,
   setDocumentTabPinned,
   type DocumentTabRecord,
 } from "./workspace/document-session";
@@ -497,7 +505,6 @@ const LOCAL_DOCUMENT_STORE = "documents";
 const LOCAL_DOCUMENT_ID = "active";
 const PINNED_LIBRARY_STORAGE_KEY = "raavi:library-pins:v1";
 const QUICK_OPEN_USAGE_STORAGE_KEY = "raavi:quick-open-usage:v1";
-const MOBILE_LAYOUT_MEDIA_QUERY = "(max-width: 820px)";
 const ANNOTATION_PRESENCE_STORAGE_PREFIX = "raavi:markdown-annotations:v1:";
 
 function annotationPresenceKey(pathValue: string, nameValue: string) {
@@ -726,18 +733,6 @@ const SAMPLE_MARKDOWN = [
   "- [ ] حالا فایل خودتان را باز کنید",
 ].join("\n");
 
-function countDocumentWords(markdown: string) {
-  const visibleText = markdown
-    .replace(/^ {0,3}(?:`{3,}|~{3,})[^\n]*$/gmu, " ")
-    .replace(/^ {0,3}(?:[-+*]|\d+[.)])\s+(?:\[[ xX]\]\s*)?/gmu, "")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/gu, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1");
-  return (
-    visibleText.match(/[\p{L}\p{N}]+(?:[\u200c\u200d'’_-][\p{L}\p{N}]+)*/gu)
-      ?.length ?? 0
-  );
-}
-
 function readAudioDuration(source: string) {
   return new Promise<number>((resolve, reject) => {
     const audio = document.createElement("audio");
@@ -817,19 +812,6 @@ type AnnotationUndoRecord = {
   anchor: ReadingPositionRecord | null;
   returnFocus: HTMLElement | null;
 };
-type PersianReviewIssueId =
-  | "arabic-characters"
-  | "half-space"
-  | "punctuation-spacing"
-  | "heading-spacing"
-  | "trailing-space"
-  | "blank-lines";
-type PersianReviewIssue = {
-  id: PersianReviewIssueId;
-  title: string;
-  detail: string;
-  count: number;
-};
 
 type LocalDirectoryHandle = BrowserDirectoryHandle;
 
@@ -904,6 +886,7 @@ type DocumentSavePayload = {
 };
 
 type LocalDocumentSnapshot = {
+  startupDocumentPath?: string;
   content: string;
   fileName: string;
   readerSize: number;
@@ -958,6 +941,8 @@ type ReadingResumeNotice = {
 export type RaaviDesktopAPI = {
   isDesktop: true;
   getLocalDocumentSnapshot: () => Promise<LocalDocumentSnapshot | null>;
+  getDocumentSession?: () => Promise<unknown>;
+  saveDocumentSession?: (session: unknown) => Promise<{ saved: boolean }>;
   saveLocalDocumentSnapshot: (
     snapshot: LocalDocumentSnapshot,
   ) => Promise<{ saved: boolean }>;
@@ -1001,6 +986,7 @@ export type RaaviDesktopAPI = {
   saveReadingPositionsSync?: (positions: ReadingPositionMap) => {
     saved: boolean;
   };
+  onPrepareToClose?: (callback: () => Promise<void>) => () => void;
   getLibraryState: () => Promise<DesktopLibraryState>;
   clearRecentFiles?: () => Promise<DesktopLibraryState>;
   removeRecentFileIfMissing?: (
@@ -1048,8 +1034,12 @@ export type RaaviDesktopAPI = {
     fileName: string,
     bytes: Uint8Array,
   ) => Promise<{ saved: boolean; filePath?: string }>;
+  preparePdf?: (options: { landscape: boolean }) => Promise<{ id: string; bytes: Uint8Array }>;
+  savePreparedPdf?: (id: string, fileName: string) => Promise<{ saved: boolean; filePath?: string }>;
+  releasePreparedPdf?: (id: string) => Promise<unknown>;
   exportPdf: (
     fileName: string,
+    options?: { landscape?: boolean },
   ) => Promise<{ saved: boolean; filePath?: string }>;
   revealExport?: (filePath: string) => Promise<{ revealed: boolean }>;
   openExternalUrl?: (url: string) => Promise<{ opened: boolean }>;
@@ -1354,85 +1344,6 @@ function sourceOffsetAttribute(node?: {
 }) {
   const offset = node?.position?.start?.offset;
   return Number.isFinite(offset) ? { "data-source-offset": offset } : {};
-}
-
-const PERSIAN_REVIEW_DEFINITIONS: Array<Omit<PersianReviewIssue, "count">> = [
-  {
-    id: "arabic-characters",
-    title: "نویسه‌های عربی",
-    detail: "ی و ک عربی → فارسی",
-  },
-  {
-    id: "half-space",
-    title: "نیم‌فاصله",
-    detail: "می/نمی و واژهٔ بعد",
-  },
-  {
-    id: "punctuation-spacing",
-    title: "فاصلهٔ نشانه‌ها",
-    detail: "پیش و پس از نشانه",
-  },
-  {
-    id: "heading-spacing",
-    title: "تیتر Markdown",
-    detail: "فاصلهٔ پس از #",
-  },
-  {
-    id: "trailing-space",
-    title: "فاصلهٔ انتهای خط",
-    detail: "فاصله‌های پنهان انتهای خط",
-  },
-  {
-    id: "blank-lines",
-    title: "خط‌های خالی اضافه",
-    detail: "فاصلهٔ عمودی سند",
-  },
-];
-
-function analyzePersianMarkdown(markdown: string): PersianReviewIssue[] {
-  const counts: Record<PersianReviewIssueId, number> = {
-    "arabic-characters": 0,
-    "half-space": 0,
-    "punctuation-spacing": 0,
-    "heading-spacing": 0,
-    "trailing-space": 0,
-    "blank-lines": 0,
-  };
-  const lines = markdown.split(/\r?\n/u);
-  let fenceMarker = "";
-  let blankRun = 0;
-
-  for (const line of lines) {
-    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/u);
-    if (fence) {
-      const marker = fence[1][0];
-      fenceMarker = fenceMarker === marker ? "" : fenceMarker || marker;
-      blankRun = 0;
-      continue;
-    }
-    if (fenceMarker) continue;
-
-    counts["arabic-characters"] += line.match(/[\u064A\u0643]/gu)?.length ?? 0;
-    counts["half-space"] +=
-      line.match(/(^|[^\p{L}\p{N}_])(?:ن?می) /gu)?.length ?? 0;
-    counts["punctuation-spacing"] +=
-      (line.match(/\s+[،؛؟!]/gu)?.length ?? 0) +
-      (line.match(/[،؛؟!](?=\S)/gu)?.length ?? 0);
-    counts["heading-spacing"] += /^ {0,3}#{1,6}[^\s#]/u.test(line) ? 1 : 0;
-    counts["trailing-space"] += /[ \t]+$/u.test(line) ? 1 : 0;
-
-    if (!line.trim()) {
-      blankRun += 1;
-      if (blankRun > 1) counts["blank-lines"] += 1;
-    } else {
-      blankRun = 0;
-    }
-  }
-
-  return PERSIAN_REVIEW_DEFINITIONS.map((issue) => ({
-    ...issue,
-    count: counts[issue.id],
-  }));
 }
 
 function applyPersianReviewIssue(
@@ -1748,6 +1659,22 @@ function compactReadingSearchLabel(value: string, maxLength = 48) {
   const compact = value.replace(/\s+/gu, " ").trim();
   if (compact.length <= maxLength) return compact;
   return `${compact.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function renderedReadingSearchMatch(root: HTMLElement, result: ReadingDocumentMatch, query: string) {
+  const chunk = root.querySelector<HTMLElement>(`[data-markdown-chunk="${result.chunkIndex}"]`)
+    ?? (result.chunkIndex === 0 && !root.querySelector("[data-markdown-chunk]") ? root : null);
+  if (!chunk || chunk.dataset.chunkPending === "true") return null;
+  const candidates = Array.from(chunk.querySelectorAll<HTMLElement>("[data-source-offset]"));
+  const block = candidates.find(node => Number(node.dataset.sourceOffset) === result.blockOffset)
+    ?? candidates.filter(node => {
+      const distance = result.blockOffset - Number(node.dataset.sourceOffset);
+      return distance >= 0 && distance <= 4;
+    }).at(-1)
+    ?? chunk;
+  const offsets = readingSearchOffsetsInRoot(block, query, Number.MAX_SAFE_INTEGER)[result.occurrence];
+  const range = offsets ? rangeFromTextOffsets(block, offsets.start, offsets.end) : null;
+  return { block, range };
 }
 
 function readingSearchLabelForRange(
@@ -2319,9 +2246,23 @@ function writeLocalDocumentSnapshot(snapshot: LocalDocumentSnapshot) {
   });
 }
 
+function readAiTableTarget(editor: MarkdownCodeEditorHandle | null, context: AiFrozenContext) {
+  if (context.source !== "table" || !context.tableKey || !editor?.element) return undefined;
+  const [blockFrom, row, column] = context.tableKey.split(":").map(Number);
+  if (![blockFrom, row, column].every(Number.isInteger)) return undefined;
+  const cell = editor.element.querySelector<HTMLTextAreaElement>(`[data-table-from="${blockFrom}"] textarea[data-table-row="${row}"][data-table-column="${column}"]`);
+  if (!cell || context.from === undefined || context.to === undefined || context.to > cell.value.length) return undefined;
+  return { key: context.tableKey, text: cell.value.slice(context.from, context.to) };
+}
+
 export default function Home() {
-  useVisualViewportInsets();
-  const [content, setContent] = useState(SAMPLE_MARKDOWN);
+  return <DesktopAccessGate><DesktopWorkspace /></DesktopAccessGate>;
+}
+
+function DesktopWorkspace() {
+
+  const { snapshot: documentTextSnapshot, setText: setContent, applyEdit: applyDocumentEdit } = useDocumentText(SAMPLE_MARKDOWN);
+  const content = documentTextSnapshot.text;
   const [fileName, setFileName] = useState(DEFAULT_FILE_NAME);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [fileResidency, setFileResidency] =
@@ -2345,6 +2286,10 @@ export default function Home() {
   const [pendingDocumentClose, setPendingDocumentClose] =
     useState<PendingDocumentClose | null>(null);
   const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [pdfLandscape, setPdfLandscape] = useState(false);
+  const { state: pdfPreparation, prepare: preparePdfPreview, refresh: refreshPdfPreview, cancel: cancelPdfPreview, save: savePdfPreview } = usePdfExport();
+  const exportPreviewRequestRef = useRef(0);
+  const [pdfRenderedId, setPdfRenderedId] = useState("");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("word");
   const [exportStatus, setExportStatus] = useState<ExportDialogStatus>("idle");
   const [exportProgress, setExportProgress] = useState(0);
@@ -2451,9 +2396,7 @@ export default function Home() {
   const [activeReadingHeadingIndex, setActiveReadingHeadingIndex] =
     useState(-1);
   const [readingSearchQuery, setReadingSearchQuery] = useState("");
-  const [readingSearchResults, setReadingSearchResults] = useState<
-    ReadingDocumentSearchResult[]
-  >([]);
+  const [readingSearchPage, setReadingSearchPage] = useState(0);
   const [activeReadingSearchIndex, setActiveReadingSearchIndex] = useState(-1);
   const [readingOutlineSearchOpen, setReadingOutlineSearchOpen] =
     useState(false);
@@ -2468,6 +2411,8 @@ export default function Home() {
     contentSignature: "",
     chunkCount: 1,
   });
+  const [completePreviewSignature, setCompletePreviewSignature] = useState<string | null>(null);
+  const [restoredPreviewSource, setRestoredPreviewSource] = useState<{ signature: string; offset: number | null } | null>(null);
   const [progressiveTargetChunk, setProgressiveTargetChunk] = useState<
     number | null
   >(null);
@@ -2479,9 +2424,8 @@ export default function Home() {
   const [readingResumeNotice, setReadingResumeNotice] =
     useState<ReadingResumeNotice | null>(null);
   const [
-    [mobileHeaderMenuOpen, setMobileHeaderMenuOpen],
+    [headerMenuOpen, setHeaderMenuOpen],
     [documentMenuOpen, setDocumentMenuOpen],
-    [mobileEditorToolsExpanded, setMobileEditorToolsExpanded],
     [editorToolMenuOpen, setEditorToolMenuOpen],
   ] = useAppChromeState();
   const [editorBlockMenu, setEditorBlockMenu] = useState<{
@@ -2518,8 +2462,7 @@ export default function Home() {
   const [editorAssistantTab, setEditorAssistantTab] =
     useState<EditorAssistantTab | null>(null);
   const [
-    [mobilePane, setMobilePane],
-    [isCompactLayout, setIsCompactLayout],
+    [focusedPane, setFocusedPane],
     [scrollSyncEnabled, setScrollSyncEnabled],
     [desktopPaneMode, setDesktopPaneMode],
     [activeSplitPane, setActiveSplitPane],
@@ -2574,6 +2517,9 @@ export default function Home() {
     resizeSidebarFromKeyboard,
   ] = useSidebarShellState();
   const [aiContext, setAiContext] = useState<AiFrozenContext | null>(null);
+  const aiDocumentIdRef = useRef(activeDocumentTabId || documentDraftId);
+  useLayoutEffect(() => { aiDocumentIdRef.current = activeDocumentTabId || documentDraftId; }, [activeDocumentTabId, documentDraftId]);
+  const [aiContextCurrent, setAiContextCurrent] = useState(true);
   const [audioTranscriptionSession, setAudioTranscriptionSession] =
     useState<AudioTranscriptionSession | null>(null);
   const [codexConnectionState, setCodexConnectionState] =
@@ -2581,6 +2527,7 @@ export default function Home() {
   const [aiUndoRecord, setAiUndoRecord] = useState<{
     editor: "main" | "writing";
     valueAfter: string;
+    contextBefore: AiFrozenContext;
   } | null>(null);
   const [aiApplyMotion, setAiApplyMotion] = useState<{
     left: number;
@@ -2748,6 +2695,7 @@ export default function Home() {
   const previewArticleRef = useRef<HTMLElement>(null);
   const progressiveRenderSentinelRef = useRef<HTMLDivElement>(null);
   const pendingReadingHeadingIndexRef = useRef<number | null>(null);
+  const pendingReadingSearchNavigationRef = useRef<(() => void) | null>(null);
   const librarySearchRef = useRef<HTMLInputElement>(null);
   const librarySearchFocusPendingRef = useRef(false);
   const readingDocumentSearchRef = useRef<HTMLInputElement>(null);
@@ -2804,14 +2752,14 @@ export default function Home() {
   const closeDocumentCancelRef = useRef<HTMLButtonElement>(null);
   const saveIndicatorRef = useRef<HTMLButtonElement>(null);
   const failedSaveOperationRef = useRef<FailedSaveOperation | null>(null);
-  const closeAfterSaveRequestedRef = useRef(false);
+  const pendingDocumentSavesRef = useRef(new Set<string>());
+  const closeAfterSaveRequestedRef = useRef<string | null>(null);
   const closeDocumentTabActionRef = useRef<
     ((tabId: string, discardChanges?: boolean) => void) | null
   >(null);
   const newDocumentButtonRef = useRef<HTMLButtonElement>(null);
-  const mobileHeaderMenuButtonRef = useRef<HTMLButtonElement>(null);
-  const mobileHeaderMenuRef = useRef<HTMLDivElement>(null);
-  const mobileHeaderMenuCloseRef = useRef<HTMLButtonElement>(null);
+  const headerMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const headerMenuRef = useRef<HTMLDivElement>(null);
   const desktopHeaderMenuFirstItemRef = useRef<HTMLButtonElement>(null);
   const headerOverflowReturnFocusRef = useRef<HTMLElement>(null);
   const documentMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -2823,6 +2771,7 @@ export default function Home() {
   const saveModalRef = useRef<HTMLDivElement>(null);
   const pendingExportRef = useRef<PendingExport | null>(null);
   const openedDocumentRef = useRef(false);
+  const restoredStartupDraftPathRef = useRef<string | null>(null);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedTabRecoveryTimerRef = useRef<ReturnType<
     typeof setTimeout
@@ -2892,6 +2841,7 @@ export default function Home() {
   >({ live: null, source: null });
   const paneDragCleanupRef = useRef<(() => void) | null>(null);
   const scrollSyncFrameRef = useRef<number | null>(null);
+  const outlineScrollGuardUntilRef = useRef(0);
   const scrollSyncTargetRef = useRef<{
     pane: ScrollPane;
     scrollTop: number;
@@ -2926,6 +2876,10 @@ export default function Home() {
     () => readingContentSignature(content),
     [content],
   );
+  const materializeCompletePreview = useCallback(() => setCompletePreviewSignature(currentContentSignature), [currentContentSignature]);
+  useReadingMaterialization(previewArticleRef, materializeCompletePreview);
+  const deferLargePreview = content.length >= 1024 * 1024;
+  const completePreview = completePreviewSignature === currentContentSignature;
   const previewMarkdownChunks = useMemo(
     () => splitMarkdownForProgressiveRender(content),
     [content],
@@ -2934,7 +2888,9 @@ export default function Home() {
     content.length >= LARGE_MARKDOWN_THRESHOLD &&
     previewMarkdownChunks.length > 1;
   const renderedPreviewChunkCount = progressivePreview
-    ? progressiveRenderState.contentSignature === currentContentSignature
+    ? restoredPreviewSource?.signature === currentContentSignature
+      ? previewMarkdownChunks.length
+      : progressiveRenderState.contentSignature === currentContentSignature
       ? Math.min(
           progressiveRenderState.chunkCount,
           previewMarkdownChunks.length,
@@ -3086,10 +3042,8 @@ export default function Home() {
     }
     return activeOffset;
   }, [documentEditorHeadings, editorCaretOffset]);
-  const persianReviewRows = useMemo(
-    () => analyzePersianMarkdown(content),
-    [content],
-  );
+  const documentAnalysis = useDocumentAnalysis(documentTextSnapshot);
+  const persianReviewRows = documentAnalysis.review;
   const persianReviewIssues = useMemo(
     () => persianReviewRows.filter((issue) => issue.count > 0),
     [persianReviewRows],
@@ -3649,6 +3603,7 @@ export default function Home() {
   }, [codeViewPreferences, codeViewPreferencesHydrated]);
 
   const alignScrollPanes = useCallback((sourcePane: ScrollPane) => {
+    if (performance.now() < outlineScrollGuardUntilRef.current) return;
     const writingPane = writingEditorRef.current ?? previewScrollRef.current;
     const source = sourcePane === "editor" ? editorRef.current : writingPane;
     const target = sourcePane === "editor" ? writingPane : editorRef.current;
@@ -3713,6 +3668,7 @@ export default function Home() {
     (sourcePane: ScrollPane) => {
       lastScrolledPaneRef.current = sourcePane;
       if (!scrollSyncEnabled || desktopPaneMode !== "split") return;
+      if (performance.now() < outlineScrollGuardUntilRef.current) return;
 
       const semanticGuard = semanticScrollGuardRef.current;
       if (
@@ -3809,7 +3765,7 @@ export default function Home() {
       setSplitWorkspaceActive(false);
       setSingleEditorMode(targetMode);
       setDesktopPaneMode("editor");
-      setMobilePane("editor");
+      setFocusedPane("editor");
       setActiveSplitPane("editor");
       window.requestAnimationFrame(() => {
         if (editorRef.current) editorRef.current.scrollTop = scrollTop;
@@ -3826,7 +3782,7 @@ export default function Home() {
       lastExpandedPreviewPercentRef,
       setActiveSplitPane,
       setDesktopPaneMode,
-      setMobilePane,
+      setFocusedPane,
       setModeSwipeTarget,
       setPaneCandidate,
       setPaneDragging,
@@ -4598,7 +4554,7 @@ export default function Home() {
                 requestedHeading.offset < chunk.end,
             )
           : -1;
-        if (progressivePreview && targetChunk >= renderedPreviewChunkCount) {
+        if (targetChunk >= 0) {
           pendingReadingHeadingIndexRef.current = documentIndex;
           setProgressiveTargetChunk(targetChunk);
         }
@@ -4662,9 +4618,7 @@ export default function Home() {
     [
       cancelReadingRestoreWork,
       previewMarkdownChunks,
-      progressivePreview,
       readingHeadings,
-      renderedPreviewChunkCount,
       scheduleReadingPositionCommit,
       scrollReadingElement,
     ],
@@ -4678,18 +4632,21 @@ export default function Home() {
           contentSignature: currentContentSignature,
           chunkCount:
             current.contentSignature === currentContentSignature
-              ? Math.min(current.chunkCount + 1, progressiveTargetChunk + 1)
-              : 1,
+              ? Math.max(current.chunkCount, progressiveTargetChunk + 1)
+              : progressiveTargetChunk + 1,
         }));
-      }, 24);
+      }, 0);
       return () => window.clearTimeout(timer);
     }
 
     const frame = window.requestAnimationFrame(() => {
       const pendingHeading = pendingReadingHeadingIndexRef.current;
       pendingReadingHeadingIndexRef.current = null;
+      const pendingSearch = pendingReadingSearchNavigationRef.current;
+      pendingReadingSearchNavigationRef.current = null;
       setProgressiveTargetChunk(null);
       if (pendingHeading !== null) focusReadingHeading(pendingHeading);
+      else pendingSearch?.();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [
@@ -5035,7 +4992,7 @@ export default function Home() {
     desktopPaneMode,
     getReadingScrollContext,
     libraryOpen,
-    mobilePane,
+    focusedPane,
     readerSize,
     readingMode,
     readingOutlineOpen,
@@ -5152,7 +5109,7 @@ export default function Home() {
     commitReadingPosition,
     getReadingScrollContext,
     hydrated,
-    mobilePane,
+    focusedPane,
     readingMode,
     scheduleReadingPositionCommit,
     scheduleReadingRestore,
@@ -5261,13 +5218,7 @@ export default function Home() {
     scrollReadingElement,
   ]);
 
-  const stats = useMemo(
-    () => ({
-      words: countDocumentWords(content),
-      lines: content.split(/\r?\n/u).length,
-    }),
-    [content],
-  );
+  const stats = documentAnalysis;
 
   const annotationCounts = useMemo(
     () =>
@@ -5281,10 +5232,9 @@ export default function Home() {
     [annotations],
   );
 
-  const currentSnapshot = useMemo(
-    () => documentSnapshot(content, annotations, imageAssets),
-    [annotations, content, imageAssets],
-  );
+  const savedContent = useMemo(() => parseSavedContent(lastSavedSnapshot), [lastSavedSnapshot]);
+  const currentMetadata = useMemo(() => JSON.stringify({ annotations, assets: imageAssets }), [annotations, imageAssets]);
+  const documentIsSaved = matchesSavedContent(savedContent, content, currentMetadata);
   const localDocumentSnapshot = useMemo<LocalDocumentSnapshot>(
     () => ({
       content,
@@ -5336,9 +5286,35 @@ export default function Home() {
   const effectiveSaveState: SaveState =
     saveState === "saving" || saveState === "error"
       ? saveState
-      : currentSnapshot === lastSavedSnapshot
+      : documentIsSaved
         ? "saved"
         : "dirty";
+  // A native save can finish after another document is opened. Keep the latest
+  // identity and text separate from the snapshot captured by the save request.
+  const currentSaveDocumentRef = useRef({
+    tabId: activeDocumentTabId,
+    snapshot: localDocumentSnapshot,
+    newTabWorkspaceOpen,
+  });
+  useLayoutEffect(() => {
+    currentSaveDocumentRef.current = {
+      tabId: activeDocumentTabId,
+      snapshot: localDocumentSnapshot,
+      newTabWorkspaceOpen,
+    };
+  }, [activeDocumentTabId, localDocumentSnapshot, newTabWorkspaceOpen]);
+  const isCurrentSaveDocument = useCallback(() => {
+    const current = currentSaveDocumentRef.current;
+    return !current.newTabWorkspaceOpen && current.tabId === activeDocumentTabId &&
+      current.snapshot.draftId === documentDraftId &&
+      current.snapshot.activeDocumentPath === activeDocumentPath;
+  }, [activeDocumentTabId, activeDocumentPath, documentDraftId]);
+  const finishDocumentSave = useCallback(() => {
+    pendingDocumentSavesRef.current.delete(documentDraftId);
+    if (closeAfterSaveRequestedRef.current === documentDraftId) {
+      closeAfterSaveRequestedRef.current = null;
+    }
+  }, [documentDraftId]);
   const isInitialWorkspace =
     !activeDocumentPath &&
     documentDraftId === "active" &&
@@ -5355,7 +5331,7 @@ export default function Home() {
                 title: fileName,
                 path: activeDocumentPath,
                 draftId: documentDraftId,
-                dirty: effectiveSaveState === "dirty",
+                dirty: !documentIsSaved,
                 snapshot: localDocumentSnapshot,
               }
             : tab,
@@ -5367,6 +5343,7 @@ export default function Home() {
     activeDocumentPath,
     activeDocumentTabId,
     documentDraftId,
+    documentIsSaved,
     effectiveSaveState,
     fileName,
     hydrated,
@@ -5384,20 +5361,12 @@ export default function Home() {
       return;
     }
     startupLandingRef.current = false;
-    const timer = window.setTimeout(() => {
-      try {
-        window.localStorage.setItem(
-          DOCUMENT_SESSION_STORAGE_KEY,
-          serializeDocumentSession(
-            activeDocumentTabId,
-            documentTabs,
-            closedDocumentTabs,
-          ),
-        );
-      } catch {
-        // The current document snapshot remains the fallback restore source.
-      }
-    }, 240);
+    const persist = () => {
+      void writeDocumentSession(buildDocumentSession(activeDocumentTabId, documentTabs, closedDocumentTabs)).catch(() => {
+        setError("نشست تب‌ها ذخیره نشد؛ فایل‌های تغییرکرده را ذخیره کنید.");
+      });
+    };
+    const timer = window.setTimeout(persist, 240);
     return () => window.clearTimeout(timer);
   }, [activeDocumentTabId, closedDocumentTabs, documentTabs, hydrated]);
   const saveErrorBannerVisible =
@@ -5891,7 +5860,7 @@ export default function Home() {
     if (
       !hydrated ||
       fileResidency !== "reading" ||
-      currentSnapshot === lastSavedSnapshot
+      documentIsSaved
     ) {
       return;
     }
@@ -5900,7 +5869,7 @@ export default function Home() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [
-    currentSnapshot,
+    documentIsSaved,
     fileResidency,
     hydrated,
     lastSavedSnapshot,
@@ -5995,6 +5964,7 @@ export default function Home() {
       // the new reading location. Resume an existing document with all chunks
       // available; new documents still begin progressively.
       const restoreChunkCount = savedPosition ? nextPreviewChunks.length : 1;
+      setRestoredPreviewSource(savedPosition ? { signature: nextContentSignature, offset: savedPosition.contentSignature === nextContentSignature ? savedPosition.anchor.sourceOffset ?? null : null } : null);
       const nextReadingMode =
         nextDocumentContent.length >= LARGE_MARKDOWN_THRESHOLD ||
         (savedPosition
@@ -6095,8 +6065,7 @@ export default function Home() {
       setComposerKind(null);
       setComposerText("");
       setActiveLibraryPath("");
-      setMobileEditorToolsExpanded(false);
-      setMobilePane("preview");
+      setFocusedPane("preview");
       setReadingMode(nextReadingMode);
       setReadingHeaderVisible(true);
       setReadingResumeNotice(null);
@@ -6137,11 +6106,11 @@ export default function Home() {
       cancelReadingRestoreWork,
       captureCurrentReadingPosition,
       commitReadingPosition,
+      setContent,
       readerSize,
       scheduleReadingRestore,
       setLibraryOpen,
-      setMobileEditorToolsExpanded,
-      setMobilePane,
+      setFocusedPane,
       setSidebarCollapsedPreference,
       showNotice,
     ],
@@ -6163,6 +6132,14 @@ export default function Home() {
       window.setTimeout(() => desktop.documentPresented?.(), 80);
     };
     const unsubscribe = desktop.onOpenMarkdownFile((document) => {
+      if (restoredStartupDraftPathRef.current && documentTabId({ path: document.path }) === documentTabId({ path: restoredStartupDraftPathRef.current })) {
+        // An explicit launch must not replace this file's recovered unsaved
+        // tab with the older disk content returned by the native open request.
+        restoredStartupDraftPathRef.current = null;
+        openedDocumentRef.current = true;
+        notifyDocumentPresented();
+        return;
+      }
       applyOpenedDocumentRef.current(document, `«${document.name}» باز شد.`);
       notifyDocumentPresented();
     });
@@ -6191,9 +6168,7 @@ export default function Home() {
         typeof snapshot.draftId === "string" && snapshot.draftId.trim()
           ? snapshot.draftId
           : createReadingDraftId();
-      const nextPositions = sanitizeReadingPositionMap(
-        snapshot.readingPositions,
-      );
+      const nextPositions = mergeReadingPositionMaps(readingPositionsRef.current, snapshot.readingPositions);
       const nextDocumentKey = readingDocumentKey({
         activeDocumentPath: nextPath,
         draftId: nextDraftId,
@@ -6204,6 +6179,7 @@ export default function Home() {
       const nextContentSignature = readingContentSignature(nextContent);
       const nextPreviewChunks = splitMarkdownForProgressiveRender(nextContent);
       const restoreChunkCount = savedPosition ? nextPreviewChunks.length : 1;
+      setRestoredPreviewSource(savedPosition ? { signature: nextContentSignature, offset: savedPosition.contentSignature === nextContentSignature ? savedPosition.anchor.sourceOffset ?? null : null } : null);
       readingDocumentStateRef.current = {
         documentKey: nextDocumentKey,
         contentSignature: nextContentSignature,
@@ -6249,6 +6225,8 @@ export default function Home() {
       setActiveDocumentPath(nextPath);
       setDocumentDraftId(nextDraftId);
       readingPositionsRef.current = nextPositions;
+      setSaveState(pendingDocumentSavesRef.current.has(nextDraftId) ? "saving" : "saved");
+      setSaveErrorVisible(false);
       setReadingPositions(nextPositions);
       const nextViewMode = savedPosition?.viewMode ?? snapshot.viewMode;
       setReadingMode(nextViewMode === "reading");
@@ -6315,7 +6293,7 @@ export default function Home() {
         });
       }
     },
-    [cancelReadingRestoreWork, scheduleReadingRestore],
+    [cancelReadingRestoreWork, scheduleReadingRestore, setContent],
   );
 
   const applyLocalDocumentSnapshotRef = useRef(applyLocalDocumentSnapshot);
@@ -6341,29 +6319,47 @@ export default function Home() {
               ? (JSON.parse(saved) as LocalDocumentSnapshot)
               : null;
           }
+          const storedSession = await readDocumentSession().catch(() => null)
+            ?? window.localStorage.getItem(DOCUMENT_SESSION_STORAGE_KEY)
+            ?? window.localStorage.getItem(LEGACY_DOCUMENT_SESSION_STORAGE_KEY);
+          // Opening a requested file wins if it completes during async restore.
+          if (openedDocumentRef.current) return;
+          const restoredPositions = mergeReadingPositionMaps(readingPositionsRef.current, parsed?.readingPositions);
+          readingPositionsRef.current = restoredPositions;
+          setReadingPositions(restoredPositions);
           const storedGeneralPreferences = window.localStorage.getItem(
             GENERAL_PREFERENCES_STORAGE_KEY,
           );
           const startupView = storedGeneralPreferences
             ? parseGeneralPreferences(storedGeneralPreferences).startupView
-            : parsed ||
-                window.localStorage.getItem(DOCUMENT_SESSION_STORAGE_KEY) ||
-                window.localStorage.getItem(
-                  LEGACY_DOCUMENT_SESSION_STORAGE_KEY,
-                )
+            : parsed || storedSession
               ? "workspace"
               : DEFAULT_GENERAL_PREFERENCES.startupView;
           const restoredSession = fileLibraryPreferencesRef.current
             .restoreDocumentTabs
             ? parseDocumentSession(
-                window.localStorage.getItem(DOCUMENT_SESSION_STORAGE_KEY) ??
-                  window.localStorage.getItem(
-                    LEGACY_DOCUMENT_SESSION_STORAGE_KEY,
-                  ),
+                storedSession,
                 isLocalDocumentSnapshot,
               )
             : null;
-          if (startupView === "recent") {
+          if (desktop && parsed?.startupDocumentPath) {
+            const requestedId = documentTabId({ path: parsed.startupDocumentPath });
+            const requestedTab = restoredSession?.tabs.find(tab => tab.id === requestedId && tab.dirty);
+            setDocumentTabs(restoredSession?.tabs ?? []);
+            setClosedDocumentTabs(restoredSession?.closedTabs ?? []);
+            if (requestedTab) {
+              restoredStartupDraftPathRef.current = parsed.startupDocumentPath;
+              setActiveDocumentTabId(requestedTab.id);
+              applyLocalDocumentSnapshotRef.current(requestedTab.snapshot);
+              setNewTabWorkspaceOpen(false);
+            } else {
+              // Wait behind the native overlay for the requested file. Keep
+              // other tabs recoverable without briefly rendering their text.
+              startupLandingRef.current = true;
+              setActiveDocumentTabId("");
+              setNewTabWorkspaceOpen(true);
+            }
+          } else if (startupView === "recent") {
             startupLandingRef.current = true;
             setNewTabWorkspaceOpen(true);
           } else if (startupView === "blank") {
@@ -6543,11 +6539,13 @@ export default function Home() {
   useEffect(() => {
     if (!hydrated) return;
 
-    const flushLatestDocument = () => {
+    const flushLatestDocument = async (captureNow = false) => {
+      const writes: Promise<unknown>[] = [];
       if (startupLandingRef.current && isInitialWorkspace) return;
       const position = readingPreferencesRef.current.rememberPosition
-        ? lastReadingAnchorRef.current ?? captureCurrentReadingPosition()
+        ? captureNow ? captureCurrentReadingPosition() ?? lastReadingAnchorRef.current : lastReadingAnchorRef.current ?? captureCurrentReadingPosition()
         : null;
+      if (captureNow && position) lastReadingAnchorRef.current = position;
       const positions = position
         ? upsertReadingPosition(readingPositionsRef.current, position)
         : readingPositionsRef.current;
@@ -6558,12 +6556,20 @@ export default function Home() {
           : "desk",
         readingPositions: positions,
       };
+      if (activeDocumentTabId && documentTabsHydratedRef.current) {
+        // The tab mirror updates on a frame; pagehide must use the immediate
+        // document snapshot so a quick reload cannot lose the last keystroke.
+        const latestTabs = documentTabs.map(tab => tab.id === activeDocumentTabId
+          ? { ...tab, snapshot: latestSnapshot, dirty: !documentIsSaved }
+          : tab);
+        writes.push(writeDocumentSession(buildDocumentSession(activeDocumentTabId, latestTabs, closedDocumentTabs)));
+      }
       const desktop = window.raaviDesktop;
       if (desktop) {
-        void desktop.saveLocalDocumentSnapshot(latestSnapshot).catch(() => {});
+        writes.push(desktop.saveLocalDocumentSnapshot(latestSnapshot));
         void desktop.flushBackup?.().catch(() => {});
       } else {
-        void writeLocalDocumentSnapshot(latestSnapshot).catch(() => {});
+        writes.push(writeLocalDocumentSnapshot(latestSnapshot));
         try {
           window.localStorage.setItem(
             STORAGE_KEY,
@@ -6573,6 +6579,7 @@ export default function Home() {
           // The visible save state already communicates storage failures.
         }
       }
+      await Promise.all(writes);
     };
 
     const flushLatestReadingPositionSync = () => {
@@ -6591,17 +6598,37 @@ export default function Home() {
       window.raaviDesktop?.saveReadingPositionsSync?.(positions);
     };
 
-    window.addEventListener("pagehide", flushLatestDocument);
+    let checkpointCommitted = false;
+    const unsubscribeClose = window.raaviDesktop?.onPrepareToClose?.(async () => {
+      const shell = document.querySelector<HTMLElement>(".app-shell");
+      const active = document.activeElement;
+      const pending = flushLatestDocument(true);
+      if (shell) shell.inert = true;
+      try {
+        await pending;
+        checkpointCommitted = true;
+      } finally {
+        if (shell) shell.inert = false;
+        if (!checkpointCommitted && active instanceof HTMLElement) active.focus({ preventScroll: true });
+      }
+    });
+    const pageHidden = () => { if (!checkpointCommitted) void flushLatestDocument().catch(() => {}); };
+    window.addEventListener("pagehide", pageHidden);
     window.addEventListener("beforeunload", flushLatestReadingPositionSync);
     return () => {
-      window.removeEventListener("pagehide", flushLatestDocument);
+      unsubscribeClose?.();
+      window.removeEventListener("pagehide", pageHidden);
       window.removeEventListener(
         "beforeunload",
         flushLatestReadingPositionSync,
       );
     };
   }, [
+    activeDocumentTabId,
     captureCurrentReadingPosition,
+    closedDocumentTabs,
+    documentTabs,
+    documentIsSaved,
     hydrated,
     isInitialWorkspace,
     localDocumentSnapshot,
@@ -7052,46 +7079,17 @@ export default function Home() {
   }, [editorHelper]);
 
   useEffect(() => {
-    const compactMediaQuery = window.matchMedia(MOBILE_LAYOUT_MEDIA_QUERY);
-    const sidebarDrawerMediaQuery = window.matchMedia(
-      SIDEBAR_DRAWER_MEDIA_QUERY,
-    );
-    const syncLibraryMode = () => {
-      const compact = compactMediaQuery.matches;
-      const sidebarDrawer = sidebarDrawerMediaQuery.matches;
-      setIsCompactLayout(compact);
-      const modalSidebar = compact || (sidebarDrawer && !readingMode);
-      setLibraryIsModal(modalSidebar);
-      if (modalSidebar) {
-        setLibraryOpen(false);
-      }
-      if (compact) {
-        setMobileHeaderMenuOpen(false);
-        setMobileEditorToolsExpanded(false);
-      } else {
-        setMobileHeaderMenuOpen(false);
-        setMobileEditorToolsExpanded(false);
-      }
+    const media = window.matchMedia(SIDEBAR_DRAWER_MEDIA_QUERY);
+    const syncSidebarMode = () => {
+      const modal = media.matches && !readingMode;
+      setLibraryIsModal(modal);
+      if (modal) setLibraryOpen(false);
+      setHeaderMenuOpen(false);
     };
-    const handleLibraryModeChange = () => syncLibraryMode();
-    syncLibraryMode();
-    compactMediaQuery.addEventListener("change", handleLibraryModeChange);
-    sidebarDrawerMediaQuery.addEventListener("change", handleLibraryModeChange);
-    return () => {
-      compactMediaQuery.removeEventListener("change", handleLibraryModeChange);
-      sidebarDrawerMediaQuery.removeEventListener(
-        "change",
-        handleLibraryModeChange,
-      );
-    };
-  }, [
-    readingMode,
-    setIsCompactLayout,
-    setLibraryIsModal,
-    setLibraryOpen,
-    setMobileEditorToolsExpanded,
-    setMobileHeaderMenuOpen,
-  ]);
+    syncSidebarMode();
+    media.addEventListener("change", syncSidebarMode);
+    return () => media.removeEventListener("change", syncSidebarMode);
+  }, [readingMode, setLibraryIsModal, setLibraryOpen, setHeaderMenuOpen]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -7126,8 +7124,8 @@ export default function Home() {
   }, [formulaStudioSession, syncLayer]);
 
   useEffect(() => {
-    syncLayer("mobileMenu", mobileHeaderMenuOpen);
-  }, [mobileHeaderMenuOpen, syncLayer]);
+    syncLayer("mobileMenu", headerMenuOpen);
+  }, [headerMenuOpen, syncLayer]);
 
   useEffect(() => {
     if (!documentMenuOpen) return;
@@ -7356,61 +7354,26 @@ export default function Home() {
     activeAnnotationId,
     annotations,
     content,
-    mobilePane,
+    focusedPane,
     readingMode,
     selectionDraft,
   ]);
 
+  const readingSearch = useReadingDocumentSearch(
+    content, readingSearchQuery, readingSearchPage, readingMode && sidebarView === "search",
+  );
+  const readingSearchResults = readingSearch.results;
   useEffect(() => {
-    const query = readingSearchQuery.trim();
-    const frame = requestAnimationFrame(() => {
-      if (!readingMode || sidebarView !== "search" || !query) {
-        setReadingSearchResults([]);
-        setActiveReadingSearchIndex(-1);
-        return;
-      }
-      const root = previewArticleRef.current;
-      if (!root) {
-        setReadingSearchResults([]);
-        setActiveReadingSearchIndex(-1);
-        return;
-      }
-      const documentText = root.textContent ?? "";
-      const nextResults = readingSearchOffsetsInRoot(root, query).flatMap(
-        ({ start, end }) => {
-          const range = rangeFromTextOffsets(root, start, end);
-          if (!range) return [];
-          return [
-            {
-              start,
-              end,
-              label: readingSearchLabelForRange(
-                root,
-                range,
-                documentText,
-                start,
-                end,
-              ),
-            },
-          ];
-        },
-      );
-      setReadingSearchResults(nextResults);
-      setActiveReadingSearchIndex((current) =>
-        nextResults.length
-          ? Math.min(Math.max(current, 0), nextResults.length - 1)
-          : -1,
-      );
-    });
-
+    const frame = requestAnimationFrame(() => setReadingSearchPage(0));
     return () => cancelAnimationFrame(frame);
-  }, [
-    content,
-    readingMode,
-    readingSearchQuery,
-    renderedPreviewChunkCount,
-    sidebarView,
-  ]);
+  }, [content]);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setActiveReadingSearchIndex(readingSearchResults.length ? 0 : -1));
+    return () => cancelAnimationFrame(frame);
+  }, [readingSearchResults]);
+  useEffect(() => {
+    pendingReadingSearchNavigationRef.current = null;
+  }, [content, readingSearchQuery, readingSearchPage]);
 
   useEffect(() => {
     const highlightRegistry = (
@@ -7432,7 +7395,7 @@ export default function Home() {
 
     const frame = requestAnimationFrame(() => {
       const ranges = readingSearchResults.flatMap((result) => {
-        const range = rangeFromTextOffsets(root, result.start, result.end);
+        const range = renderedReadingSearchMatch(root, result, readingSearchQuery)?.range;
         return range ? [range] : [];
       });
       if (ranges.length) {
@@ -7445,7 +7408,7 @@ export default function Home() {
       }
       const activeResult = readingSearchResults[activeReadingSearchIndex];
       const activeRange = activeResult
-        ? rangeFromTextOffsets(root, activeResult.start, activeResult.end)
+        ? renderedReadingSearchMatch(root, activeResult, readingSearchQuery)?.range
         : null;
       if (activeRange) {
         highlightRegistry.set(
@@ -7461,7 +7424,7 @@ export default function Home() {
       cancelAnimationFrame(frame);
       for (const name of names) highlightRegistry.delete(name);
     };
-  }, [activeReadingSearchIndex, readingSearchResults]);
+  }, [activeReadingSearchIndex, readingSearchResults, readingSearchQuery, renderedPreviewChunkCount]);
 
   useEffect(() => {
     if (!selectionDraft || composerKind) return;
@@ -7486,7 +7449,7 @@ export default function Home() {
       nativeSelection.addRange(range);
     });
     return () => cancelAnimationFrame(frame);
-  }, [composerKind, content, mobilePane, readingMode, selectionDraft]);
+  }, [composerKind, content, focusedPane, readingMode, selectionDraft]);
 
   const capturePreviewSelection = (pointer?: {
     clientX: number;
@@ -7960,7 +7923,7 @@ export default function Home() {
         editorRef.current?.setSelectionRange(
           start,
           start + annotation.quote.length,
-          false,
+          true,
         );
         editorRef.current?.focus();
       });
@@ -8137,51 +8100,44 @@ export default function Home() {
       nextName?: string,
     ) => {
       const savedSnapshot = documentSnapshot(content, annotations, imageAssets);
+      const stillActive = isCurrentSaveDocument();
+      const currentDocument = currentSaveDocumentRef.current;
       const persistedTabId = documentTabId({
         path: nextPath,
         draftId: documentDraftId,
       });
       if (activeDocumentTabId) {
         setDocumentTabs((current) =>
-          current.map((tab) =>
-            tab.id === activeDocumentTabId
-              ? {
+          current.map((tab) => {
+            if (tab.id !== activeDocumentTabId || tab.draftId !== documentDraftId) return tab;
+            // Do not roll back edits made while the filesystem operation was
+            // pending, including edits in a tab that is now in the background.
+            const latest = stillActive ? currentDocument.snapshot : tab.snapshot;
+            return {
                   ...tab,
                   id: persistedTabId,
                   title: nextName ?? fileName,
                   path: nextPath,
-                  dirty: false,
+                  dirty: documentSnapshot(latest.content, latest.annotations, latest.assets) !== savedSnapshot,
                   snapshot: {
-                    ...tab.snapshot,
-                    content,
+                    ...latest,
                     fileName: nextName ?? fileName,
-                    annotations,
-                    assets: imageAssets,
                     revision: nextRevision,
                     versions: nextVersions,
                     activeDocumentPath: nextPath,
                     documentType: nextType,
                     lastSavedSnapshot: savedSnapshot,
                   },
-                }
-              : tab,
-          ),
+                };
+          }),
         );
-        setActiveDocumentTabId(persistedTabId);
       }
-      setRevision(nextRevision);
-      setVersions(nextVersions);
-      setVersionsRefreshError("");
-      setVersionRestoreCandidate(null);
-      setActiveDocumentPath(nextPath);
-      setDocumentType(nextType);
       if (nextPath && annotations.length) {
         window.localStorage.setItem(
           annotationPresenceKey(nextPath, nextName ?? fileName),
           "true",
         );
       }
-      if (nextName) setFileName(nextName);
       if (nextPath) {
         setRecentFiles((current) =>
           [
@@ -8195,18 +8151,30 @@ export default function Home() {
           ].slice(0, 20),
         );
       }
+      // The result belongs to the originating document. It must never change
+      // the current tab's path, save state, dialog, or close request.
+      if (!stillActive) return false;
+      if (activeDocumentTabId) setActiveDocumentTabId(persistedTabId);
+      setRevision(nextRevision);
+      setVersions(nextVersions);
+      setVersionsRefreshError("");
+      setVersionRestoreCandidate(null);
+      setActiveDocumentPath(nextPath);
+      setDocumentType(nextType);
+      if (nextName) setFileName(nextName);
       setLastSavedSnapshot(savedSnapshot);
       setSaveState("saved");
       setSaveErrorVisible(false);
       failedSaveOperationRef.current = null;
       setSaveModalOpen(false);
       showNotice(`نسخه‌ی ${nextRevision.toLocaleString("fa-IR")} ذخیره شد.`);
-      if (closeAfterSaveRequestedRef.current) {
-        closeAfterSaveRequestedRef.current = false;
+      if (closeAfterSaveRequestedRef.current === documentDraftId) {
+        closeAfterSaveRequestedRef.current = null;
         requestAnimationFrame(() =>
           closeDocumentTabActionRef.current?.(persistedTabId),
         );
       }
+      return true;
     },
     [
       activeDocumentTabId,
@@ -8215,6 +8183,7 @@ export default function Home() {
       documentDraftId,
       fileName,
       imageAssets,
+      isCurrentSaveDocument,
       showNotice,
     ],
   );
@@ -8245,6 +8214,8 @@ export default function Home() {
         setError("برای فایل یک نام وارد کنید.");
         return;
       }
+      if (pendingDocumentSavesRef.current.has(documentDraftId)) return;
+      pendingDocumentSavesRef.current.add(documentDraftId);
 
       const { nextRevision, nextVersions, payload } = buildNextSave();
       const nextName = saveNameForType(trimmedName, requestedFileType);
@@ -8266,8 +8237,8 @@ export default function Home() {
             defaultDirectory,
           );
           if (!result.saved) {
-            closeAfterSaveRequestedRef.current = false;
-            setSaveState(effectiveSaveState === "dirty" ? "dirty" : "saved");
+            if (!isCurrentSaveDocument()) return;
+            setSaveState("saved");
             setSaveErrorVisible(false);
             failedSaveOperationRef.current = null;
             return;
@@ -8301,7 +8272,10 @@ export default function Home() {
           nextName,
         );
       } catch {
-        closeAfterSaveRequestedRef.current = false;
+        if (!isCurrentSaveDocument()) {
+          showNotice(`ذخیرهٔ «${fileName}» انجام نشد؛ به تب آن برگردید و دوباره ذخیره کنید.`);
+          return;
+        }
         failedSaveOperationRef.current = {
           kind: "saveAs",
           fileName: trimmedName,
@@ -8311,40 +8285,53 @@ export default function Home() {
         setSaveState("error");
         setSaveErrorVisible(true);
         setError("");
+      } finally {
+        finishDocumentSave();
       }
     },
     [
       buildNextSave,
       commitSavedVersion,
-      effectiveSaveState,
+      documentDraftId,
+      fileName,
+      finishDocumentSave,
+      isCurrentSaveDocument,
       libraryFolders,
       saveFileName,
+      showNotice,
     ],
   );
 
   const saveCurrentFile = useCallback(async () => {
+    if (pendingDocumentSavesRef.current.has(documentDraftId)) return;
     const desktop = window.raaviDesktop;
     if (!desktop && activeLibraryFile?.write) {
       const { nextRevision, nextVersions, payload } = buildNextSave();
+      pendingDocumentSavesRef.current.add(documentDraftId);
       setSaveState("saving");
       setSaveErrorVisible(false);
       setError("");
       try {
         await activeLibraryFile.write(payload);
-        commitSavedVersion(
+        const stillActive = commitSavedVersion(
           nextRevision,
           nextVersions,
           "",
           activeLibraryFile.documentType,
           activeLibraryFile.name,
         );
-        setActiveLibrarySignature(`${Date.now()}:${new Blob([content]).size}`);
+        if (stillActive) setActiveLibrarySignature(`${Date.now()}:${new Blob([content]).size}`);
       } catch {
-        closeAfterSaveRequestedRef.current = false;
+        if (!isCurrentSaveDocument()) {
+          showNotice(`ذخیرهٔ «${fileName}» انجام نشد؛ به تب آن برگردید و دوباره ذخیره کنید.`);
+          return;
+        }
         failedSaveOperationRef.current = { kind: "current" };
         setSaveState("error");
         setSaveErrorVisible(true);
         setError("");
+      } finally {
+        finishDocumentSave();
       }
       return;
     }
@@ -8354,6 +8341,7 @@ export default function Home() {
     }
 
     const { nextRevision, nextVersions, payload } = buildNextSave();
+    pendingDocumentSavesRef.current.add(documentDraftId);
     setSaveState("saving");
     setSaveErrorVisible(false);
     setError("");
@@ -8364,8 +8352,8 @@ export default function Home() {
         payload,
       );
       if (!result.saved) {
-        closeAfterSaveRequestedRef.current = false;
-        setSaveState(effectiveSaveState === "dirty" ? "dirty" : "saved");
+        if (!isCurrentSaveDocument()) return;
+        setSaveState("saved");
         setSaveErrorVisible(false);
         failedSaveOperationRef.current = null;
         return;
@@ -8377,12 +8365,16 @@ export default function Home() {
         result.documentType ?? documentType,
       );
     } catch {
-      closeAfterSaveRequestedRef.current = false;
+      if (!isCurrentSaveDocument()) {
+        showNotice(`ذخیرهٔ «${fileName}» انجام نشد؛ به تب آن برگردید و دوباره ذخیره کنید.`);
+        return;
+      }
       failedSaveOperationRef.current = { kind: "current" };
       setSaveState("error");
       setSaveErrorVisible(true);
       setError("");
     } finally {
+      finishDocumentSave();
       window.setTimeout(() => {
         libraryWriteInProgressRef.current = false;
       }, 500);
@@ -8393,9 +8385,13 @@ export default function Home() {
     buildNextSave,
     commitSavedVersion,
     content,
+    documentDraftId,
     documentType,
-    effectiveSaveState,
+    fileName,
+    finishDocumentSave,
+    isCurrentSaveDocument,
     openSaveFileModal,
+    showNotice,
   ]);
 
   const retryFailedSave = useCallback(async () => {
@@ -8408,6 +8404,8 @@ export default function Home() {
   }, [saveAsFile, saveCurrentFile]);
 
   const resetExportDialog = useCallback(() => {
+    exportPreviewRequestRef.current++;
+    cancelPdfPreview();
     pendingExportRef.current = null;
     setExportModalOpen(false);
     setExportStatus("idle");
@@ -8419,12 +8417,12 @@ export default function Home() {
     setExportResultPath("");
     setExportResultRevealable(false);
     setPdfExportActive(false);
-  }, []);
+  }, [cancelPdfPreview]);
 
   const closeExportDialog = useCallback(() => {
-    if (exportStatus === "preparing" || exportStatus === "saving") return;
+    if (exportStatus === "saving" || (exportStatus === "preparing" && exportFormat !== "pdf")) return;
     resetExportDialog();
-  }, [exportStatus, resetExportDialog]);
+  }, [exportStatus, exportFormat, resetExportDialog]);
 
   const openExportDialog = useCallback(() => {
     pendingExportRef.current = null;
@@ -8437,15 +8435,14 @@ export default function Home() {
     setExportResultPath("");
     setExportResultRevealable(false);
     setPdfExportActive(false);
-    setMobileHeaderMenuOpen(false);
+    setHeaderMenuOpen(false);
     setExportModalOpen(true);
-  }, [setMobileHeaderMenuOpen]);
+  }, [setHeaderMenuOpen]);
 
   const commitPreparedExport = useCallback(async () => {
     const pending = pendingExportRef.current;
     if (!pending) return;
     if (pending.requiresReviewConfirmation && !exportReviewConfirmed) return;
-    let cleanupPrintDocument: (() => void) | undefined;
     setExportStatus("saving");
     setExportError("");
     setExportProgress((current) => Math.max(current, 96));
@@ -8486,35 +8483,18 @@ export default function Home() {
         return;
       }
 
-      const stagedPrintDocument = await stagePrintDocument(
-        previewArticleRef.current,
-        pending.fileName,
-      );
-      cleanupPrintDocument = stagedPrintDocument.cleanup;
-      await waitForNextPaint();
-      if (desktop) {
-        const result = await desktop.exportPdf(pending.fileName);
-        if (!result.saved) {
-          pendingExportRef.current = null;
-          setExportStatus("idle");
-          setExportProgress(0);
-          setExportProgressLabel("");
-          setPdfExportActive(false);
-          return;
-        }
-        setPdfExportActive(false);
-        setExportResultPath(
-          result.filePath ?? `Downloads / ${pending.fileName}`,
-        );
-        setExportResultRevealable(Boolean(desktop.revealExport));
-        setExportProgress(100);
-        setExportProgressLabel("خروجی آماده است");
-        setExportStatus("success");
-      } else {
-        window.print();
+      const result = await savePdfPreview(pdfLandscape);
+      if ("browser" in result) {
         resetExportDialog();
-        showNotice("پنجره‌ی چاپ باز شد؛ مقصد را روی «Save as PDF» بگذارید.");
+        return;
       }
+      if (!result.saved) { setExportStatus("preview"); return; }
+      setPdfExportActive(false);
+      setExportResultPath(result.filePath ?? `Downloads / ${pending.fileName}`);
+      setExportResultRevealable(Boolean(desktop?.revealExport));
+      setExportProgress(100);
+      setExportProgressLabel("خروجی آماده است");
+      setExportStatus("success");
     } catch {
       setPdfExportActive(false);
       setExportStatus("error");
@@ -8525,13 +8505,13 @@ export default function Home() {
           ? "پوشهٔ مقصد در دسترس نیست یا مجوز نوشتن تغییر کرده است."
           : "صفحه‌بندی یا ذخیرهٔ PDF کامل نشد؛ مسیر مقصد را بررسی کنید.",
       );
-    } finally {
-      cleanupPrintDocument?.();
     }
-  }, [exportReviewConfirmed, resetExportDialog, showNotice]);
+  }, [exportReviewConfirmed, pdfLandscape, resetExportDialog, savePdfPreview]);
 
-  const startExport = useCallback(async () => {
-    const nextName = exportNameForFormat(fileName, exportFormat);
+  const startExport = useCallback(async (selectedFormat: ExportFormat = exportFormat) => {
+    const request = ++exportPreviewRequestRef.current;
+    cancelPdfPreview();
+    const nextName = exportNameForFormat(fileName, selectedFormat);
     pendingExportRef.current = null;
     setExportStatus("preparing");
     setExportProgress(8);
@@ -8550,7 +8530,7 @@ export default function Home() {
         });
       }
 
-      if (exportFormat === "word") {
+      if (selectedFormat === "word") {
         setExportProgressLabel("در حال خواندن ساختار نوشته…");
         const { createWordExport } = await import("./export/word");
         const result = await createWordExport({
@@ -8597,6 +8577,9 @@ export default function Home() {
         warnings.push(
           ...(await inspectPrintablePreview(previewArticleRef.current)),
         );
+        if (request !== exportPreviewRequestRef.current) return;
+        if (!previewArticleRef.current) throw new Error("PRINT_ARTICLE_UNAVAILABLE");
+        preparePdfPreview(previewArticleRef.current, nextName, pdfLandscape);
         setExportProgress(94);
         pendingExportRef.current = { format: "pdf", fileName: nextName };
       }
@@ -8611,6 +8594,12 @@ export default function Home() {
         pendingExportRef.current.requiresReviewConfirmation =
           uniqueWarnings.length > 0;
       }
+      if (selectedFormat === "pdf") {
+        setExportWarnings(uniqueWarnings);
+        setExportStatus("preview");
+        setExportProgressLabel("");
+        return;
+      }
       if (uniqueWarnings.length > 0) {
         setExportWarnings(uniqueWarnings);
         setExportStatus("review");
@@ -8619,19 +8608,23 @@ export default function Home() {
       }
       await commitPreparedExport();
     } catch {
+      if (request !== exportPreviewRequestRef.current) return;
       pendingExportRef.current = null;
       setPdfExportActive(false);
       setExportStatus("error");
       setExportProgress(0);
       setExportProgressLabel("");
       setExportError(
-        exportFormat === "word"
+        selectedFormat === "word"
           ? "ساخت فایل Word کامل نشد؛ نمودارها و تصاویر سند را بررسی و دوباره تلاش کنید."
           : "پیش‌نمایش چاپ آماده نشد؛ دوباره تلاش کنید.",
       );
     }
   }, [
     annotations,
+    cancelPdfPreview,
+    preparePdfPreview,
+    pdfLandscape,
     commitPreparedExport,
     content,
     exportFormat,
@@ -8640,6 +8633,8 @@ export default function Home() {
   ]);
 
   const changeExportFormat = useCallback((format: ExportFormat) => {
+    exportPreviewRequestRef.current++;
+    cancelPdfPreview();
     pendingExportRef.current = null;
     setExportFormat(format);
     setExportStatus("idle");
@@ -8651,9 +8646,11 @@ export default function Home() {
     setExportResultRevealable(false);
     setExportProgressLabel("");
     setPdfExportActive(false);
-  }, []);
+  }, [cancelPdfPreview]);
 
   const backFromExportReview = useCallback(() => {
+    exportPreviewRequestRef.current++;
+    cancelPdfPreview();
     pendingExportRef.current = null;
     setExportStatus("idle");
     setExportProgress(0);
@@ -8663,7 +8660,7 @@ export default function Home() {
     setExportError("");
     setExportResultPath("");
     setPdfExportActive(false);
-  }, []);
+  }, [cancelPdfPreview]);
 
   const revealExportResult = useCallback(async () => {
     if (!exportResultPath) return;
@@ -8755,8 +8752,7 @@ export default function Home() {
           },
           `«${spec.fileName}» ساخته شد؛ ویرایش را شروع کنید.`,
         );
-        setMobileEditorToolsExpanded(false);
-        setMobilePane("editor");
+        setFocusedPane("editor");
         setNewDocumentModalOpen(false);
         requestAnimationFrame(() =>
           requestAnimationFrame(() => editorRef.current?.focus()),
@@ -8769,7 +8765,7 @@ export default function Home() {
         setNewDocumentCreating(false);
       }
     },
-    [applyOpenedDocument, setMobileEditorToolsExpanded, setMobilePane],
+    [applyOpenedDocument, setFocusedPane],
   );
 
   const saveBeforeCreatingNew = useCallback(() => {
@@ -9062,8 +9058,8 @@ export default function Home() {
     setNewTabWorkspaceOpen(true);
     setLibraryOpen(false);
     setDocumentMenuOpen(false);
-    setMobileHeaderMenuOpen(false);
-  }, [setDocumentMenuOpen, setLibraryOpen, setMobileHeaderMenuOpen]);
+    setHeaderMenuOpen(false);
+  }, [setDocumentMenuOpen, setLibraryOpen, setHeaderMenuOpen]);
 
   const selectDocumentTab = useCallback(
     (tabId: string) => {
@@ -9078,7 +9074,7 @@ export default function Home() {
                 title: fileName,
                 path: activeDocumentPath,
                 draftId: documentDraftId,
-                dirty: effectiveSaveState === "dirty",
+                dirty: !documentIsSaved,
                 snapshot: localDocumentSnapshot,
               }
             : candidate,
@@ -9095,7 +9091,7 @@ export default function Home() {
       applyLocalDocumentSnapshot,
       documentDraftId,
       documentTabs,
-      effectiveSaveState,
+      documentIsSaved,
       fileName,
       localDocumentSnapshot,
       newTabWorkspaceOpen,
@@ -9108,7 +9104,7 @@ export default function Home() {
       if (!tab) return;
       const isDirty =
         tab.dirty ||
-        (tabId === activeDocumentTabId && effectiveSaveState === "dirty");
+        (tabId === activeDocumentTabId && !documentIsSaved);
       if (isDirty && !discardChanges) {
         if (tabId !== activeDocumentTabId) selectDocumentTab(tabId);
         setPendingDocumentClose({
@@ -9168,7 +9164,7 @@ export default function Home() {
       applyLocalDocumentSnapshot,
       documentDraftId,
       documentTabs,
-      effectiveSaveState,
+      documentIsSaved,
       fileName,
       localDocumentSnapshot,
       selectDocumentTab,
@@ -9199,7 +9195,11 @@ export default function Home() {
     (tabId: string, discardChanges = false) => {
       const target = documentTabs.find((candidate) => candidate.id === tabId);
       if (!target) return;
-      const others = documentTabs.filter((candidate) => candidate.id !== tabId);
+      const others = documentTabs.filter((candidate) => candidate.id !== tabId).map(candidate =>
+        candidate.id === activeDocumentTabId
+          ? { ...candidate, dirty: !documentIsSaved, snapshot: localDocumentSnapshot }
+          : candidate,
+      );
       const dirtyOthers = others.filter((candidate) => candidate.dirty);
       if (dirtyOthers.length && !discardChanges) {
         setPendingDocumentClose({
@@ -9241,6 +9241,8 @@ export default function Home() {
       activeDocumentTabId,
       applyLocalDocumentSnapshot,
       documentTabs,
+      documentIsSaved,
+      localDocumentSnapshot,
       showClosedTabRecovery,
       showNotice,
     ],
@@ -9356,7 +9358,7 @@ export default function Home() {
         setSingleEditorMode("live");
         setSplitWorkspaceActive(false);
         setDesktopPaneMode("editor");
-        setMobilePane("editor");
+        setFocusedPane("editor");
         if (template.id === "blank") {
           window.requestAnimationFrame(() => {
             editorRef.current?.setSelectionRange(0, 0, false);
@@ -9380,7 +9382,7 @@ export default function Home() {
       libraryFolders,
       scanConnectedDirectory,
       setDesktopPaneMode,
-      setMobilePane,
+      setFocusedPane,
       setSingleEditorMode,
       setSplitWorkspaceActive,
     ],
@@ -9622,7 +9624,7 @@ export default function Home() {
     }
     const opened = await openLibraryFile(file);
     if (!opened || result.offset === null) return;
-    setMobilePane("editor");
+    setFocusedPane("editor");
     setDesktopPaneMode((current) =>
       current === "preview" ? "split" : current,
     );
@@ -10932,7 +10934,7 @@ export default function Home() {
   };
 
   const jumpToEditorHeading = (offset: number) => {
-    setMobilePane("editor");
+    setFocusedPane("editor");
     setDesktopPaneMode((current) =>
       current === "preview" ? "split" : current,
     );
@@ -10950,11 +10952,26 @@ export default function Home() {
     );
     const previewIsActive =
       readingMode ||
-      mobilePane === "preview" ||
+      focusedPane === "preview" ||
       desktopPaneMode === "preview" ||
       (desktopPaneMode === "split" &&
         lastScrolledPaneRef.current === "preview");
     const navigate = () => {
+      if (splitWorkspaceActive && writingEditorRef.current) {
+        // Both panes have an explicit destination. Ordinary scroll synchronization
+        // must not replace it with the other pane's temporarily measured viewport.
+        outlineScrollGuardUntilRef.current = performance.now() + 1000;
+        pendingScrollSourceRef.current = null;
+        if (scrollSyncFrameRef.current !== null) {
+          window.cancelAnimationFrame(scrollSyncFrameRef.current);
+          scrollSyncFrameRef.current = null;
+        }
+        setEditorCaretOffset(heading.offset);
+        editorRef.current?.setSelectionRange(heading.offset, heading.offset, true);
+        writingEditorRef.current.setSelectionRange(heading.offset, heading.offset, true);
+        writingEditorRef.current.focus();
+        return;
+      }
       if (previewIsActive && readingHeading) {
         readingEditorSelectionRef.current = {
           start: heading.offset,
@@ -10986,11 +11003,17 @@ export default function Home() {
     const result = readingSearchResults[index];
     const article = previewArticleRef.current;
     if (!result || !article) return;
-    const range = rangeFromTextOffsets(article, result.start, result.end);
-    const target = range?.startContainer.parentElement?.closest<HTMLElement>(
+    setActiveReadingSearchIndex(index);
+    const rendered = renderedReadingSearchMatch(article, result, readingSearchQuery);
+    if (!rendered) {
+      pendingReadingHeadingIndexRef.current = null;
+      pendingReadingSearchNavigationRef.current = () => jumpToReadingSearchResult(index);
+      setProgressiveTargetChunk(result.chunkIndex);
+      return;
+    }
+    const target = rendered.range?.startContainer.parentElement?.closest<HTMLElement>(
       "h1, h2, h3, h4, h5, h6, p, li, blockquote, pre, td, th, figcaption",
-    );
-    if (!range || !target) return;
+    ) ?? rendered.block;
 
     cancelReadingRestoreWork();
     readingIntentionalNavigationRef.current = true;
@@ -11371,7 +11394,7 @@ export default function Home() {
       showNotice("نمودار در محل نشانگر به سند اضافه شد.");
       return { ok: true };
     },
-    [content, restoreMermaidWorkspace, showNotice],
+    [content, restoreMermaidWorkspace, showNotice, setContent],
   );
 
   const openFormulaStudio = useCallback(
@@ -11556,7 +11579,7 @@ export default function Home() {
       showNotice("فرمول در محل نشانگر به سند اضافه شد.");
       return { ok: true };
     },
-    [content, restoreFormulaWorkspace, showNotice],
+    [content, restoreFormulaWorkspace, showNotice, setContent],
   );
 
   const changeReaderSize = (delta: -1 | 1) => {
@@ -11780,26 +11803,6 @@ export default function Home() {
     }
   };
 
-  const toggleReadingOutline = () => {
-    const nextOpen = !(libraryOpen && sidebarView === "outline");
-    preserveReadingViewport(() => {
-      setReadingOutlineOpen(nextOpen);
-      if (nextOpen) {
-        setSidebarView("outline");
-        setSidebarDestination("outline");
-        setLibraryOpen(true);
-        if (!window.matchMedia(SIDEBAR_DRAWER_MEDIA_QUERY).matches) {
-          setSidebarCollapsedPreference(false);
-        }
-      } else {
-        setLibraryOpen(false);
-        setReadingOutlineSearchOpen(false);
-        setReadingOutlineQuery("");
-      }
-      setReadingHeaderVisible(true);
-    });
-  };
-
   const restoreVersion = async (version: RaaviVersion) => {
     if (versionRestoreSaving) return;
     const nextRevision =
@@ -11847,7 +11850,7 @@ export default function Home() {
           ...localDocumentSnapshot,
           revision: nextRevision,
           versions: nextVersions,
-          lastSavedSnapshot: currentSnapshot,
+          lastSavedSnapshot: documentSnapshot(content, annotations, imageAssets),
         };
         if (desktop) await desktop.saveLocalDocumentSnapshot(snapshot);
         else await writeLocalDocumentSnapshot(snapshot);
@@ -11855,7 +11858,7 @@ export default function Home() {
 
       setVersions(nextVersions);
       setRevision(nextRevision);
-      setLastSavedSnapshot(currentSnapshot);
+      setLastSavedSnapshot(documentSnapshot(content, annotations, imageAssets));
       setContent(version.content);
       setAnnotations(version.annotations);
       setSaveState("saved");
@@ -11973,15 +11976,12 @@ export default function Home() {
   };
 
   const toggleReadingMode = () => {
-    setMobileEditorToolsExpanded(false);
     if (readingMode) {
       leaveReadingMode();
       return;
     }
     const semanticAnchor = captureDocumentSemanticAnchor();
-    const isMobile = window.matchMedia(MOBILE_LAYOUT_MEDIA_QUERY).matches;
     const shouldOpenOutline =
-      !isMobile &&
       readingPreferencesRef.current.openOutlineOnEnter &&
       readingHeadings.length > 0;
     const editorSelectionStart = editorRef.current?.selectionStart ?? 0;
@@ -12001,9 +12001,7 @@ export default function Home() {
         setReadingHeaderVisible(true);
         setReadingToolsOpen(false);
         setReadingOutlineOpen(shouldOpenOutline);
-        if (isMobile) {
-          setLibraryOpen(false);
-        } else if (shouldOpenOutline) {
+        if (shouldOpenOutline) {
           setSidebarView("outline");
           setSidebarDestination("outline");
           setLibraryOpen(true);
@@ -12011,8 +12009,7 @@ export default function Home() {
         } else {
           setLibraryOpen(false);
         }
-        setMobileEditorToolsExpanded(false);
-        setMobilePane("preview");
+        setFocusedPane("preview");
       },
       { retries: 4 },
     );
@@ -12030,22 +12027,15 @@ export default function Home() {
   };
 
   const focusEditor = () => {
-    const isMobile = window.matchMedia(MOBILE_LAYOUT_MEDIA_QUERY).matches;
     const sidebarIsDrawer = window.matchMedia(
       SIDEBAR_DRAWER_MEDIA_QUERY,
     ).matches;
     const change = () => {
       if (readingMode) setReadingMode(false);
-      setMobilePane("editor");
+      setFocusedPane("editor");
       if (!sidebarIsDrawer) setLibraryOpen(true);
     };
-    if (readingMode && isMobile) {
-      const position = captureCurrentReadingPosition("desk");
-      if (position) commitReadingPosition(position);
-      change();
-    } else {
-      preserveReadingViewport(change);
-    }
+    preserveReadingViewport(change);
     requestAnimationFrame(() => editorRef.current?.focus());
   };
 
@@ -12055,8 +12045,7 @@ export default function Home() {
         lastReadingAnchorRef.current)
       : null;
     setEditorSelectionMenuPosition(null);
-    setMobileEditorToolsExpanded(false);
-    setMobilePane("preview");
+    setFocusedPane("preview");
     if (savedPosition) scheduleReadingRestore(savedPosition);
     requestAnimationFrame(() =>
       previewArticleRef.current?.focus({ preventScroll: true }),
@@ -12348,7 +12337,7 @@ export default function Home() {
 
   const openAiContext = (nextContext: AiFrozenContextDraft) => {
     setAudioTranscriptionSession(null);
-    setAiContext({ ...nextContext, sessionId: crypto.randomUUID() });
+    setAiContext({ ...nextContext, documentId: activeDocumentTabId || documentDraftId, sessionId: crypto.randomUUID() });
     setAiUndoRecord(null);
     setEditorSelectionMenuPosition(null);
     openSidebarView("ai", "ai", "ensure");
@@ -12540,7 +12529,7 @@ export default function Home() {
     if (tableSelection) {
       openAiContext({
         kind: "selection",
-        label: "متن انتخاب‌شده در جدول",
+        label: `خانهٔ جدول · ردیف ${(tableSelection.row + 1).toLocaleString("fa-IR")}، ستون ${(tableSelection.column + 1).toLocaleString("fa-IR")}`,
         content: tableSelection.text,
         editor: "main",
         source: "table",
@@ -12574,6 +12563,12 @@ export default function Home() {
     block: { from: number; to: number; content: string },
     editor: "main" | "writing",
   ) => {
+    const table = (editor === "writing" ? writingEditorRef.current : editorRef.current)?.captureAiTableCell();
+    if (table) {
+      openAiContext({ kind: "selection", label: `خانهٔ جدول · ردیف ${(table.row + 1).toLocaleString("fa-IR")}، ستون ${(table.column + 1).toLocaleString("fa-IR")} · ${fileName}`, content: table.text,
+        editor, source: "table", tableKey: table.key, from: table.start, to: table.end });
+      return;
+    }
     openAiContext({
       kind: "block",
       label: "بلاک فعال",
@@ -12593,6 +12588,7 @@ export default function Home() {
     if (!aiContext || !desktop) {
       throw new Error("ChatGPT در دسترس نیست.");
     }
+    if (!isAiContextCurrent(aiContext)) throw new Error("زمینه تغییر کرده است؛ محدوده را دوباره انتخاب کنید.");
     try {
       if (desktop.runCodexPrompt) return await desktop.runCodexPrompt({
         model: activeChatGPTModel(),
@@ -12968,14 +12964,57 @@ export default function Home() {
   const aiEditor = (context: AiFrozenContext) =>
     context.editor === "writing" ? writingEditorRef.current : editorRef.current;
 
+  const isAiContextCurrent = (context: AiFrozenContext) => {
+    if (context.documentId !== (activeDocumentTabId || documentDraftId)) return false;
+    const editor = aiEditor(context);
+    if (!editor) return false;
+    const table = readAiTableTarget(editor, context);
+    return frozenContextIsCurrent(context, editor.value, table?.text, table?.key);
+  };
+
+  useEffect(() => {
+    const refresh = () => {
+      if (!aiContext) { setAiContextCurrent(false); return; }
+      const editor = aiContext.editor === "writing" ? writingEditorRef.current : editorRef.current;
+      const table = readAiTableTarget(editor, aiContext);
+      setAiContextCurrent(Boolean(editor && aiContext.documentId === (activeDocumentTabId || documentDraftId) && frozenContextIsCurrent(aiContext, editor.value, table?.text, table?.key)));
+    };
+    refresh();
+    document.addEventListener("input", refresh);
+    document.addEventListener("selectionchange", refresh);
+    return () => { document.removeEventListener("input", refresh); document.removeEventListener("selectionchange", refresh); };
+  }, [aiContext, content, activeDocumentTabId, documentDraftId, editorSelectionStats]);
+
+  const reselectAiContext = () => {
+    if (!aiContext) return;
+    const editor = aiEditor(aiContext);
+    if (!editor) return;
+    const table = editor.tableCellSelection;
+    const from = editor.selectionStart;
+    const to = editor.selectionEnd;
+    const block = editor.getBlockRange(from);
+    const range = from !== to ? { from, to } : block;
+    if (!table && !range && aiContext.kind !== "document") return;
+    setAiContext({ ...aiContext, documentId: activeDocumentTabId || documentDraftId,
+      kind: table || from !== to ? "selection" : aiContext.kind === "document" ? "document" : "block",
+      label: `${table ? "خانهٔ جدول" : from !== to ? "متن انتخاب‌شده" : aiContext.kind === "document" ? "کل سند" : "بلاک فعال"} · ${fileName}`,
+      source: table ? "table" : "editor", tableKey: table?.key,
+      content: table?.text ?? (aiContext.kind === "document" && from === to ? editor.value : editor.value.slice(range?.from, range?.to)),
+      from: table?.start ?? range?.from, to: table?.end ?? range?.to,
+      blockFrom: block?.from, blockTo: block?.to,
+      blockContent: block ? editor.value.slice(block.from, block.to) : undefined });
+    setAiUndoRecord(null);
+  };
+
   const applyAiChange = async (
     replacement: string,
     mode: "replace" | "insert-after",
   ): Promise<boolean> => {
     if (!aiContext || aiContext.kind === "document") return false;
+    if (!isAiContextCurrent(aiContext)) return false;
     const editor = aiEditor(aiContext);
     if (!editor) return false;
-    const tableSelection = editor.tableCellSelection;
+    const tableSelection = readAiTableTarget(editor, aiContext);
     if (
       !frozenContextIsCurrent(
         aiContext,
@@ -13038,11 +13077,11 @@ export default function Home() {
       window.setTimeout(resolve, reduceMotion ? 0 : 410);
     });
     const currentEditor = aiEditor(aiContext);
-    if (!currentEditor) {
+    if (!currentEditor || aiContext.documentId !== aiDocumentIdRef.current) {
       setAiApplyMotion(null);
       return false;
     }
-    const latestTableSelection = currentEditor.tableCellSelection;
+    const latestTableSelection = readAiTableTarget(currentEditor, aiContext);
     if (
       !frozenContextIsCurrent(
         aiContext,
@@ -13080,12 +13119,16 @@ export default function Home() {
         announcement: "پیشنهاد زیر بلاک افزوده شد",
       });
     } else if (aiContext.source === "table") {
-      currentEditor.replaceTableCellRange({
+      currentEditor.selectAiTableCell(aiContext.tableKey ?? "", aiContext.from ?? 0, aiContext.to ?? 0);
+      const applied = currentEditor.replaceTableCellRange({
         from: aiContext.from ?? 0,
         to: aiContext.to ?? 0,
         insert: replacement,
+        selectionFrom: aiContext.from ?? 0,
+        selectionTo: (aiContext.from ?? 0) + replacement.length,
         announcement: "پیشنهاد در سلول جایگزین شد",
       });
+      if (!applied) { setAiApplyMotion(null); return false; }
     } else {
       currentEditor.replaceRange({
         from: aiContext.from ?? 0,
@@ -13094,9 +13137,19 @@ export default function Home() {
         announcement: "پیشنهاد در سند جایگزین شد",
       });
     }
+    if (mode === "replace") {
+      const from = aiContext.from ?? 0;
+      const table = currentEditor.tableCellSelection;
+      const block = aiContext.source === "editor" ? currentEditor.getBlockRange(from) : null;
+      setAiContext({ ...aiContext, content: replacement, to: from + replacement.length,
+        tableKey: table?.key ?? aiContext.tableKey,
+        blockFrom: block?.from, blockTo: block?.to,
+        blockContent: block ? currentEditor.value.slice(block.from, block.to) : undefined });
+    }
     setAiUndoRecord({
       editor: aiContext.editor,
       valueAfter: currentEditor.value,
+      contextBefore: aiContext,
     });
     showNotice("تغییر اعمال و در نسخه‌ها ثبت شد");
     window.setTimeout(() => setAiApplyMotion(null), reduceMotion ? 80 : 1_050);
@@ -13109,20 +13162,23 @@ export default function Home() {
       aiUndoRecord.editor === "writing"
         ? writingEditorRef.current
         : editorRef.current;
-    if (!editor || editor.value !== aiUndoRecord.valueAfter) {
+    if (!editor || aiUndoRecord.contextBefore.documentId !== aiDocumentIdRef.current || editor.value !== aiUndoRecord.valueAfter) {
       setAiUndoRecord(null);
       showNotice("پس از تغییر دستی، بازگردانی هوشمند منقضی شد.");
       return;
     }
     editor.undo();
+    if (aiUndoRecord.contextBefore.source === "table" && aiUndoRecord.contextBefore.tableKey) {
+      editor.selectAiTableCell(aiUndoRecord.contextBefore.tableKey, aiUndoRecord.contextBefore.from ?? 0, aiUndoRecord.contextBefore.to ?? 0);
+    }
+    setAiContext(aiUndoRecord.contextBefore);
     setAiUndoRecord(null);
     showNotice("تغییر هوشمند بازگردانی شد");
   };
 
   const focusAnnotationPanel = () => {
     preserveReadingViewport(() => {
-      setMobileEditorToolsExpanded(false);
-      setMobilePane("preview");
+      setFocusedPane("preview");
       setSidebarView("annotations");
       setSidebarDestination("comments");
       setLibraryOpen(true);
@@ -13152,7 +13208,7 @@ export default function Home() {
       return;
     }
     if (topLayer === "mobileMenu") {
-      setMobileHeaderMenuOpen(false);
+      setHeaderMenuOpen(false);
       return;
     }
     if (topLayer === "support") {
@@ -13221,18 +13277,11 @@ export default function Home() {
       setEditorAssistantTab(null);
       return;
     }
-    if (mobileEditorToolsExpanded) {
-      setMobileEditorToolsExpanded(false);
-      return;
-    }
     if (readingMode && libraryOpen) {
       closeSidebarFromUser();
       return;
     }
-    if (isCompactLayout && readingMode && readingOutlineOpen) {
-      toggleReadingOutline();
-      return;
-    }
+
     if (readingMode) leaveReadingMode();
   };
 
@@ -13246,7 +13295,6 @@ export default function Home() {
     activeAnnotationId ||
     annotationPanelOpen ||
     editorAssistantTab ||
-    mobileEditorToolsExpanded ||
     readingMode,
   );
 
@@ -13267,16 +13315,18 @@ export default function Home() {
         singleMode: singleEditorMode,
       });
 
-  const handleMarkdownEditorChange = (nextContent: string) => {
+  const handleMarkdownEditorChange = (change: string | DocumentEdit) => {
+    const getText = () => typeof change === "string" ? change : change.document.toString();
     setAiUndoRecord((record) =>
-      record && nextContent !== record.valueAfter ? null : record,
+      record && getText() !== record.valueAfter ? null : record,
     );
     setEditorSelectionMenuPosition(null);
     setEditorBlockMenu((currentMenu) => {
       if (!currentMenu) return null;
       if (currentMenu.source !== "slash") return null;
+      const nextContent = typeof change === "string" ? change : "";
       const lineEnd = nextContent.indexOf("\n", currentMenu.lineFrom);
-      const activeLine = nextContent.slice(
+      const activeLine = typeof change !== "string" ? change.document.lineAt(Math.min(currentMenu.lineFrom, change.document.length)).text : nextContent.slice(
         currentMenu.lineFrom,
         lineEnd === -1 ? nextContent.length : lineEnd,
       );
@@ -13286,7 +13336,8 @@ export default function Home() {
         ? currentMenu
         : { ...currentMenu, query };
     });
-    setContent(nextContent);
+    if (typeof change === "string") setContent(change);
+    else applyDocumentEdit(change);
     if (saveState === "error") {
       setSaveState("saved");
       setSaveErrorVisible(false);
@@ -13297,7 +13348,7 @@ export default function Home() {
     setSingleEditorMode("source");
     setSplitWorkspaceActive(false);
     setDesktopPaneMode("editor");
-    setMobilePane("editor");
+    setFocusedPane("editor");
     setNotice(
       "نمایش ویرایش روان با خطا روبه‌رو شد؛ متن شما محفوظ است و متن خام فعال شد.",
     );
@@ -13374,7 +13425,6 @@ export default function Home() {
     const selectionEnd = editorRef.current?.selectionEnd ?? selectionStart;
     setReadingMode(false);
     setEditorSelectionMenuPosition(null);
-    setMobileEditorToolsExpanded(false);
     if (mode === "proof") {
       editorModeScrollHoldRef.current = null;
       setSplitWorkspaceActive(true);
@@ -13383,7 +13433,7 @@ export default function Home() {
       }
       setDesktopPaneMode("split");
       setActiveSplitPane("editor");
-      setMobilePane("preview");
+      setFocusedPane("preview");
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
           if (semanticAnchor) restoreDocumentSemanticAnchor(semanticAnchor);
@@ -13417,7 +13467,7 @@ export default function Home() {
     setSplitWorkspaceActive(false);
     setSingleEditorMode(mode);
     setDesktopPaneMode("editor");
-    setMobilePane("editor");
+    setFocusedPane("editor");
     if (editorRef.current) editorRef.current.scrollTop = preservedScrollTop;
     queueMicrotask(() => {
       if (editorRef.current) editorRef.current.scrollTop = preservedScrollTop;
@@ -13471,8 +13521,12 @@ export default function Home() {
       clearAnnotationHover();
       toggleShortcutHelp();
     },
-    "edit.undo": () => editorRef.current?.undo(),
-    "edit.redo": () => editorRef.current?.redo(),
+    "edit.undo": () => {
+      const editor = aiUndoRecord?.editor === "writing" ? writingEditorRef.current : editorRef.current;
+      if (aiUndoRecord && aiUndoRecord.contextBefore.documentId === aiDocumentIdRef.current && editor?.value === aiUndoRecord.valueAfter) undoAiChange();
+      else (splitWorkspaceActive && activeSplitPane === "preview" ? writingEditorRef.current : editorRef.current)?.undo();
+    },
+    "edit.redo": () => (splitWorkspaceActive && activeSplitPane === "preview" ? writingEditorRef.current : editorRef.current)?.redo(),
     "edit.find": () => editorRef.current?.openSearch(),
     "edit.replace": () => editorRef.current?.openReplace(),
     "edit.findNext": () => editorRef.current?.findNext(),
@@ -13778,7 +13832,7 @@ export default function Home() {
         : null;
     const modalReturnTarget =
       source === "menu"
-        ? mobileHeaderMenuButtonRef.current
+        ? headerMenuButtonRef.current
         : source === "palette"
           ? (commandPaletteReturnFocusRef.current ?? activeOpener)
           : activeOpener;
@@ -13916,27 +13970,6 @@ export default function Home() {
       announcement,
     });
   };
-
-  useEffect(() => {
-    if (!isCompactLayout || !splitWorkspaceActive) return;
-    const compactMode: SingleEditorMode =
-      activeSplitPane === "editor" ? "source" : "live";
-    const frame = window.requestAnimationFrame(() => {
-      setSplitWorkspaceActive(false);
-      setSingleEditorMode(compactMode);
-      setDesktopPaneMode("editor");
-      setMobilePane("editor");
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [
-    activeSplitPane,
-    isCompactLayout,
-    setDesktopPaneMode,
-    setMobilePane,
-    setSingleEditorMode,
-    setSplitWorkspaceActive,
-    splitWorkspaceActive,
-  ]);
 
   const prepareEditorBlockInsertion = () => {
     const menu = editorBlockMenu;
@@ -14126,8 +14159,8 @@ export default function Home() {
   };
 
   const closeDesktopHeaderOverflowFromTab = (shiftKey: boolean) => {
-    const trigger = mobileHeaderMenuButtonRef.current;
-    const menu = mobileHeaderMenuRef.current;
+    const trigger = headerMenuButtonRef.current;
+    const menu = headerMenuRef.current;
     const focusable = Array.from(
       document.querySelectorAll<HTMLElement>(
         [
@@ -14152,27 +14185,26 @@ export default function Home() {
         ? (focusable[triggerIndex + (shiftKey ? -1 : 1)] ?? trigger)
         : trigger;
     headerOverflowReturnFocusRef.current = target;
-    setMobileHeaderMenuOpen(false);
+    setHeaderMenuOpen(false);
   };
 
   const handleHeaderOverflowKeyDown = (
     event: ReactKeyboardEvent<HTMLDivElement>,
   ) => {
-    if (!isCompactLayout && event.key === "Tab") {
+    if (event.key === "Tab") {
       event.preventDefault();
       event.stopPropagation();
       closeDesktopHeaderOverflowFromTab(event.shiftKey);
       return;
     }
     if (event.key === "Escape") {
-      headerOverflowReturnFocusRef.current = mobileHeaderMenuButtonRef.current;
+      headerOverflowReturnFocusRef.current = headerMenuButtonRef.current;
       event.preventDefault();
       event.stopPropagation();
-      setMobileHeaderMenuOpen(false);
+      setHeaderMenuOpen(false);
       return;
     }
     if (
-      isCompactLayout ||
       !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
     ) {
       return;
@@ -14342,12 +14374,19 @@ export default function Home() {
     );
   };
 
+  const stable_handleDiagramFullscreenChange = useStableAction(handleDiagramFullscreenChange);
+  const stable_openFormulaStudio = useStableAction(openFormulaStudio);
+  const stable_openAudioTranscription = useStableAction(openAudioTranscription);
+  const stable_openMermaidStudio = useStableAction(openMermaidStudio);
+  const stable_openExternalUrl = useStableAction(openExternalUrl);
+  const markdownReadingMode = (mermaidBlocks.length || formulaBlocks.length || audioBlocks.length) ? readingMode : false;
   const markdownComponents = useMemo<Components>(
     () => ({
-      pre: ({ children, node }) => {
+      pre: function MarkdownPre({ children, node }) {
+        const sourceStart = useMarkdownSourceStart();
         const block = mermaidBlockAtOffset(
           mermaidBlocks,
-          node?.position?.start.offset,
+          node?.position?.start.offset === undefined ? undefined : sourceStart + node.position.start.offset,
         );
         if (block) {
           return (
@@ -14374,9 +14413,9 @@ export default function Home() {
               <MermaidDiagram
                 block={block}
                 theme={pdfExportActive ? "light" : themeMode}
-                onEdit={openMermaidStudio}
-                onFullscreenChange={handleDiagramFullscreenChange}
-                readingMode={readingMode}
+                onEdit={stable_openMermaidStudio}
+                onFullscreenChange={stable_handleDiagramFullscreenChange}
+                readingMode={markdownReadingMode}
                 exporting={pdfExportActive}
                 documentName={fileName}
               />
@@ -14385,10 +14424,11 @@ export default function Home() {
         }
         return <pre {...sourceOffsetAttribute(node)}>{children}</pre>;
       },
-      p: ({ children, node }) => {
+      p: function MarkdownParagraph({ children, node }) {
+        const sourceStart = useMarkdownSourceStart();
         const audio = audioBlockAtOffset(
           audioBlocks,
-          node?.position?.start.offset,
+          node?.position?.start.offset === undefined ? undefined : sourceStart + node.position.start.offset,
         );
         if (audio) {
           return (
@@ -14396,14 +14436,14 @@ export default function Home() {
               descriptor={audio}
               resolveSource={resolveAudioSource}
               onTranscribe={() =>
-                openAudioTranscription(audio.source, audio.fileName)
+                stable_openAudioTranscription(audio.source, audio.fileName)
               }
             />
           );
         }
         const formula = formulaBlockAtOffset(
           formulaBlocks,
-          node?.position?.start.offset,
+          node?.position?.start.offset === undefined ? undefined : sourceStart + node.position.start.offset,
         );
         if (formula) {
           return (
@@ -14425,8 +14465,8 @@ export default function Home() {
             >
               <FormulaDocumentBlock
                 block={formula}
-                readingMode={readingMode}
-                onEdit={openFormulaStudio}
+                readingMode={markdownReadingMode}
+                onEdit={stable_openFormulaStudio}
               />
             </Suspense>
           );
@@ -14470,6 +14510,8 @@ export default function Home() {
           {children}
         </h6>
       ),
+      ul: ({ children, ...props }) => <ul {...props} dir={blockTextDirection(children)}>{children}</ul>,
+      ol: ({ children, ...props }) => <ol {...props} dir={blockTextDirection(children)}>{children}</ol>,
       li: ({ children, className, node }) => (
         <li
           className={className}
@@ -14490,11 +14532,11 @@ export default function Home() {
       table: ({ children, node }) => (
         <table {...sourceOffsetAttribute(node)}>{children}</table>
       ),
-      th: ({ children }) => (
-        <th dir={blockTextDirection(children)}>{children}</th>
+      th: ({ children, node }) => (
+        <th dir={blockTextDirection(children)} {...sourceOffsetAttribute(node)}>{children}</th>
       ),
-      td: ({ children }) => (
-        <td dir={blockTextDirection(children)}>{children}</td>
+      td: ({ children, node }) => (
+        <td dir={blockTextDirection(children)} {...sourceOffsetAttribute(node)}>{children}</td>
       ),
       a: ({ href, ...props }) => {
         const isExternal = /^(?:https?):\/\//i.test(href ?? "");
@@ -14511,7 +14553,7 @@ export default function Home() {
               if (privacyPreferences.warnBeforeExternalLinks) {
                 setExternalLinkCandidate(href);
               } else {
-                void openExternalUrl(href);
+                void stable_openExternalUrl(href);
               }
             }}
           />
@@ -14607,21 +14649,21 @@ export default function Home() {
       },
     }),
     [
+      stable_handleDiagramFullscreenChange,
+      stable_openFormulaStudio,
+      stable_openAudioTranscription,
+      stable_openMermaidStudio,
+      stable_openExternalUrl,
+      resolveAudioSource,
       audioBlocks,
       blockTextDirection,
       imageAssetsById,
       approvedRemoteImages,
       fileName,
       formulaBlocks,
-      handleDiagramFullscreenChange,
       mermaidBlocks,
-      openFormulaStudio,
-      openAudioTranscription,
-      openMermaidStudio,
-      openExternalUrl,
       privacyPreferences,
-      readingMode,
-      resolveAudioSource,
+      markdownReadingMode,
       themeMode,
       pdfExportActive,
     ],
@@ -14638,207 +14680,45 @@ export default function Home() {
   const renderedMarkdownPreview = useMemo(
     () =>
       !progressivePreview ? (
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkHighlight, remarkUnderline]}
-          urlTransform={raaviMarkdownUrlTransform}
-          components={markdownComponents}
-        >
-          {content}
-        </ReactMarkdown>
+        <MemoMarkdown content={content} urlTransform={raaviMarkdownUrlTransform} components={markdownComponents} />
       ) : (
         previewMarkdownChunks
-          .slice(0, pdfExportActive ? undefined : renderedPreviewChunkCount)
-          .map((chunk, index) => (
-            <section
-              className="markdown-render-chunk"
-              data-markdown-chunk={index}
-              data-source-start={chunk.start}
-              key={`${currentContentSignature}-${chunk.start}`}
-            >
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkHighlight, remarkUnderline]}
-                urlTransform={raaviMarkdownUrlTransform}
-                components={markdownComponents}
-              >
-                {chunk.content}
-              </ReactMarkdown>
+          .slice(0, pdfExportActive || deferLargePreview || completePreview ? undefined : renderedPreviewChunkCount)
+          .map((chunk, index) => !deferLargePreview ? (
+            <section className="markdown-render-chunk" data-markdown-chunk={index} data-source-start={chunk.start} key={chunk.start}>
+              <MemoMarkdown content={chunk.content} sourceStart={chunk.start} urlTransform={raaviMarkdownUrlTransform} components={markdownComponents} />
             </section>
+          ) : (
+            <DeferredMarkdownChunk
+              index={index} start={chunk.start} length={chunk.content.length}
+              force={pdfExportActive || completePreview || index === 0 || index === progressiveTargetChunk || Boolean(restoredPreviewSource?.signature === currentContentSignature && (restoredPreviewSource.offset === null || (restoredPreviewSource.offset >= chunk.start && restoredPreviewSource.offset < chunk.end)))}
+              key={chunk.start}
+            >
+              <MemoMarkdown content={chunk.content} sourceStart={chunk.start} urlTransform={raaviMarkdownUrlTransform} components={markdownComponents} />
+            </DeferredMarkdownChunk>
           ))
       ),
     [
       content,
-      currentContentSignature,
       markdownComponents,
       pdfExportActive,
       previewMarkdownChunks,
       progressivePreview,
       renderedPreviewChunkCount,
+      progressiveTargetChunk,
+      restoredPreviewSource,
+      currentContentSignature,
+      deferLargePreview,
+      completePreview,
     ],
   );
-  if (content.length >= 1_000_000) {
-    console.log("[raavi-large-document] parent-render-ready", {
-      chunkCount: previewMarkdownChunks.length,
-      renderedPreviewChunkCount,
-      readingMode,
-    });
-  }
 
-  const effectivePaneMode: DesktopPaneMode = isCompactLayout
-    ? "editor"
-    : desktopPaneMode;
-  const mobileEditorToolsVisible =
-    isCompactLayout &&
-    !readingMode &&
-    mobilePane === "editor" &&
-    mobileEditorToolsExpanded;
+  const effectivePaneMode: DesktopPaneMode = desktopPaneMode;
 
-  useBackLayer("mode:reading", readingMode, leaveReadingMode, isCompactLayout);
-  useBackLayer(
-    "panel:annotations",
-    annotationPanelOpen,
-    () => closeAnnotationPanel(true),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "annotation:active",
-    Boolean(activeAnnotationId),
-    () => setActiveAnnotationId(""),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "annotation:selection",
-    Boolean(selectionDraft),
-    () => {
-      setSelectionDraft(null);
-      setSelectionHighlightRects([]);
-      clearNativeSelection();
-      requestAnimationFrame(() =>
-        previewArticleRef.current?.focus({ preventScroll: true }),
-      );
-    },
-    isCompactLayout,
-  );
-  useBackLayer(
-    "annotation:composer",
-    Boolean(composerKind),
-    cancelAnnotationComposer,
-    isCompactLayout,
-  );
-  useBackLayer(
-    "editor:selection-menu",
-    Boolean(editorSelectionMenuPosition),
-    () => {
-      setEditorSelectionMenuPosition(null);
-      requestAnimationFrame(() => editorRef.current?.focus());
-    },
-    isCompactLayout,
-  );
-  useBackLayer(
-    "editor:assistant",
-    Boolean(editorAssistantTab),
-    () => setEditorAssistantTab(null),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "editor:mobile-tools",
-    mobileEditorToolsVisible,
-    () => setMobileEditorToolsExpanded(false),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:about",
-    aboutModalOpen,
-    () => setAboutModalOpen(false),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:support",
-    supportModalOpen,
-    () => setSupportModalOpen(false),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:shortcuts",
-    shortcutHelpOpen,
-    closeShortcutHelp,
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:shortcut-settings",
-    shortcutSettingsOpen,
-    closeShortcutSettings,
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:save",
-    saveModalOpen,
-    () => setSaveModalOpen(false),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:export",
-    exportModalOpen,
-    closeExportDialog,
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:image",
-    imageModalOpen,
-    () => setImageModalOpen(false),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:quick-open",
-    quickOpenOpen,
-    () => setQuickOpenOpen(false),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:command-palette",
-    commandPaletteOpen,
-    () => setCommandPaletteOpen(false),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:new-document",
-    newDocumentModalOpen,
-    () => {
-      if (!newDocumentCreating) setNewDocumentModalOpen(false);
-    },
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:library",
-    libraryOpen,
-    () => setLibraryOpen(false),
-    libraryIsModal,
-  );
-  useBackLayer(
-    "modal:mobile-menu",
-    mobileHeaderMenuOpen,
-    () => setMobileHeaderMenuOpen(false),
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:mermaid-shell",
-    Boolean(mermaidStudioSession),
-    () => {
-      if (mermaidStudioSession) closeMermaidStudio(mermaidStudioSession);
-    },
-    isCompactLayout,
-  );
-  useBackLayer(
-    "modal:formula-shell",
-    Boolean(formulaStudioSession),
-    () => {
-      if (formulaStudioSession) closeFormulaStudio(formulaStudioSession);
-    },
-    isCompactLayout,
-  );
   const editorPaneCollapsed =
-    !readingMode && !isCompactLayout && desktopPaneMode === "preview";
+    !readingMode && desktopPaneMode === "preview";
   const previewPaneCollapsed =
-    !readingMode && !isCompactLayout && desktopPaneMode === "editor";
+    !readingMode && desktopPaneMode === "editor";
   const workspacePaneStyle = {
     "--preview-pane-track":
       effectivePaneMode === "editor"
@@ -15096,7 +14976,7 @@ export default function Home() {
           : ""
       } ${
         readingMode && !readingHeaderVisible ? "reading-header-is-hidden" : ""
-      } ${mobileHeaderMenuOpen ? "is-overflow-open" : ""} ${
+      } ${headerMenuOpen ? "is-overflow-open" : ""} ${
         saveErrorBannerVisible ? "has-save-error" : ""
       } ${exportModalOpen ? "has-export-dialog" : ""} ${
         modeSwipeTarget ? `is-mode-swipe-to-${modeSwipeTarget}` : ""
@@ -15126,7 +15006,6 @@ export default function Home() {
           shortcutHelpOpen ||
           shortcutSettingsOpen ||
           commandPaletteOpen ||
-          (mobileHeaderMenuOpen && isCompactLayout) ||
           (libraryOpen && libraryIsModal)
             ? true
             : undefined
@@ -15140,7 +15019,15 @@ export default function Home() {
         )}
         <div className="topbar-document-zone" data-tauri-drag-region="">
           <div className="brand-cluster" aria-label="راوی، میز Markdown فارسی">
-            <div className="brand">
+            <button
+              className="brand"
+              type="button"
+              data-command-id="help.about"
+              aria-label="دربارهٔ راوی"
+              aria-haspopup="dialog"
+              title="دربارهٔ راوی"
+              onClick={() => executeCommand("help.about")}
+            >
               <span className="brand-mark" aria-hidden="true">
                 ر
               </span>
@@ -15148,7 +15035,7 @@ export default function Home() {
                 <strong>راوی</strong>
                 <small>میز Markdown فارسی</small>
               </span>
-            </div>
+            </button>
           </div>
           <button
             className="titlebar-command-shortcut"
@@ -15556,20 +15443,18 @@ export default function Home() {
             </span>
           </button>
           <button
-            ref={mobileHeaderMenuButtonRef}
+            ref={headerMenuButtonRef}
             className="button button--quiet shell-action header-overflow-trigger mobile-topbar-menu-trigger topbar-action--overflow"
             type="button"
             data-tooltip="فرمان‌های بیشتر"
             onClick={() => {
-              setMobileEditorToolsExpanded(false);
               headerOverflowReturnFocusRef.current =
-                mobileHeaderMenuButtonRef.current;
-              setMobileHeaderMenuOpen(true);
+                headerMenuButtonRef.current;
+              setHeaderMenuOpen(true);
             }}
             onKeyDown={(event) => {
               if (
-                isCompactLayout ||
-                !mobileHeaderMenuOpen ||
+                !headerMenuOpen ||
                 event.key !== "Tab"
               ) {
                 return;
@@ -15579,8 +15464,8 @@ export default function Home() {
               closeDesktopHeaderOverflowFromTab(event.shiftKey);
             }}
             aria-label="بازکردن فرمان‌های بیشتر"
-            aria-haspopup={isCompactLayout ? "dialog" : "menu"}
-            aria-expanded={mobileHeaderMenuOpen}
+            aria-haspopup={"menu"}
+            aria-expanded={headerMenuOpen}
             aria-controls="header-overflow-menu"
             title="فرمان‌های بیشتر"
           >
@@ -15605,110 +15490,25 @@ export default function Home() {
       />
 
       <AccessibleModal
-        open={mobileHeaderMenuOpen}
+        open={headerMenuOpen}
         isTopLayer={topLayer === "mobileMenu"}
-        onClose={() => setMobileHeaderMenuOpen(false)}
-        dialogRef={mobileHeaderMenuRef}
-        initialFocusRef={
-          isCompactLayout
-            ? mobileHeaderMenuCloseRef
-            : desktopHeaderMenuFirstItemRef
-        }
+        onClose={() => setHeaderMenuOpen(false)}
+        dialogRef={headerMenuRef}
+        initialFocusRef={desktopHeaderMenuFirstItemRef}
         returnFocusRef={headerOverflowReturnFocusRef}
         backdropClassName="mobile-topbar-menu-backdrop header-overflow-backdrop"
         dialogClassName="mobile-topbar-menu header-overflow-menu"
-        labelledBy="mobile-topbar-menu-title"
+        labelledBy="header-overflow-label"
         containerId="header-overflow-menu"
-        containerRole={isCompactLayout ? "dialog" : "menu"}
-        ariaModal={isCompactLayout}
-        trapFocus={isCompactLayout}
+        containerRole={"menu"}
+        ariaModal={false}
+        trapFocus={false}
         onKeyDown={handleHeaderOverflowKeyDown}
       >
-        <div className="mobile-topbar-menu-header header-overflow-header">
-          <div>
-            <span>فرمان‌های تکمیلی</span>
-            <strong id="mobile-topbar-menu-title">فرمان‌های بیشتر</strong>
-          </div>
-          <button
-            ref={mobileHeaderMenuCloseRef}
-            type="button"
-            onClick={() => setMobileHeaderMenuOpen(false)}
-            aria-label="بستن فرمان‌های بیشتر"
-          >
-            <X size={19} aria-hidden="true" />
-          </button>
-        </div>
+
+        <span id="header-overflow-label" className="visually-hidden">فرمان‌های بیشتر</span>
         <div className="mobile-topbar-menu-grid header-overflow-grid">
-          <button
-            className="overflow-mobile-only"
-            type="button"
-            data-command-id="file.open"
-            onClick={() => {
-              setMobileHeaderMenuOpen(false);
-              executeCommand("file.open", undefined, "menu");
-            }}
-          >
-            <Upload size={20} aria-hidden="true" />
-            <span>
-              <strong>بازکردن فایل</strong>
-              <small>از همین دستگاه</small>
-            </span>
-          </button>
-          <button
-            className="overflow-mobile-only"
-            type="button"
-            data-command-id="file.new"
-            disabled={saveState === "saving"}
-            onClick={() => {
-              setMobileHeaderMenuOpen(false);
-              executeCommand("file.new", undefined, "menu");
-            }}
-          >
-            <FilePlus2 size={20} aria-hidden="true" />
-            <span>
-              <strong>سند تازه</strong>
-              <small>شروع یک نوشته</small>
-            </span>
-          </button>
-          <button
-            className="overflow-mobile-only"
-            type="button"
-            data-command-id="view.reading"
-            onClick={() => {
-              setMobileHeaderMenuOpen(false);
-              executeCommand("view.reading", undefined, "menu");
-            }}
-          >
-            <BookOpen size={20} aria-hidden="true" />
-            <span>
-              <strong>حالت مطالعه</strong>
-              <small>خواندن بدون مزاحمت</small>
-            </span>
-          </button>
-          <button
-            className="overflow-mobile-only"
-            type="button"
-            data-command-id="file.save"
-            disabled={saveState === "saving"}
-            onClick={() => {
-              setMobileHeaderMenuOpen(false);
-              executeCommand("file.save", undefined, "menu");
-            }}
-          >
-            <Save size={20} aria-hidden="true" />
-            <span>
-              <strong>
-                {effectiveSaveState === "dirty"
-                  ? "ذخیرهٔ تغییرات"
-                  : "ذخیرهٔ سند"}
-              </strong>
-              <small>
-                {effectiveSaveState === "dirty"
-                  ? "تغییرات هنوز ذخیره نشده‌اند"
-                  : "ساخت نسخهٔ جدید"}
-              </small>
-            </span>
-          </button>
+
           <button
             className="overflow-sidebar-drawer-only"
             type="button"
@@ -15716,8 +15516,8 @@ export default function Home() {
             aria-expanded={libraryOpen}
             aria-controls="library-panel"
             onClick={() => {
-              libraryReturnFocusRef.current = mobileHeaderMenuButtonRef.current;
-              setMobileHeaderMenuOpen(false);
+              libraryReturnFocusRef.current = headerMenuButtonRef.current;
+              setHeaderMenuOpen(false);
               executeCommand("view.sidebar", undefined, "menu");
             }}
           >
@@ -15734,14 +15534,14 @@ export default function Home() {
             data-overflow-action="commands"
             data-command-id="view.commandPalette"
             type="button"
-            role={isCompactLayout ? undefined : "menuitem"}
+            role={"menuitem"}
             aria-label="فرمان‌های راوی"
             aria-keyshortcuts={commandAriaKeyShortcuts(
               "view.commandPalette",
               commandEnvironment,
             )}
             onClick={() => {
-              setMobileHeaderMenuOpen(false);
+              setHeaderMenuOpen(false);
               executeCommand("view.commandPalette", undefined, "menu");
             }}
           >
@@ -15762,7 +15562,7 @@ export default function Home() {
             data-overflow-action="shortcuts"
             data-command-id="help.shortcuts"
             type="button"
-            role={isCompactLayout ? undefined : "menuitem"}
+            role={"menuitem"}
             aria-label="میان‌برهای صفحه‌کلید"
             aria-haspopup="dialog"
             aria-expanded={shortcutHelpOpen}
@@ -15771,7 +15571,7 @@ export default function Home() {
               commandEnvironment,
             )}
             onClick={() => {
-              setMobileHeaderMenuOpen(false);
+              setHeaderMenuOpen(false);
               executeCommand("help.shortcuts", undefined, "menu");
             }}
           >
@@ -15791,13 +15591,13 @@ export default function Home() {
           <button
             data-overflow-action="shortcut-settings"
             type="button"
-            role={isCompactLayout ? undefined : "menuitem"}
+            role={"menuitem"}
             aria-label="تنظیمات"
             aria-haspopup="dialog"
             aria-expanded={shortcutSettingsOpen}
             onClick={() => {
-              const returnTarget = mobileHeaderMenuButtonRef.current;
-              setMobileHeaderMenuOpen(false);
+              const returnTarget = headerMenuButtonRef.current;
+              setHeaderMenuOpen(false);
               openShortcutSettings(returnTarget);
             }}
           >
@@ -15809,21 +15609,21 @@ export default function Home() {
           </button>
           <div
             className="header-overflow-divider"
-            role={isCompactLayout ? undefined : "separator"}
+            role={"separator"}
           />
           <button
             className="topbar-action--export"
             data-overflow-action="export"
             data-command-id="file.export"
             type="button"
-            role={isCompactLayout ? undefined : "menuitem"}
+            role={"menuitem"}
             aria-label="خروجی Word یا PDF"
             aria-keyshortcuts={commandAriaKeyShortcuts(
               "file.export",
               commandEnvironment,
             )}
             onClick={() => {
-              setMobileHeaderMenuOpen(false);
+              setHeaderMenuOpen(false);
               executeCommand("file.export", undefined, "menu");
             }}
           >
@@ -15840,22 +15640,30 @@ export default function Home() {
               {commandShortcutLabel("file.export", commandEnvironment)}
             </kbd>
           </button>
+          {process.env.NODE_ENV !== "production" && <div data-test-only className="header-test-scenarios" role="group" aria-label="سناریوهای تست">
+            <strong>سناریوهای تست</strong>
+            {[{ label: "جدول جمع‌وجور و چندخطی", content: "# آزمون جدول\n\n| شاخص | مقدار | توضیح |\n| --- | --- | --- |\n| طول برگ | ۱۲٫۴ | اندازه‌گیری طول برگ برای بررسی رشد نمونه در چهار روز متوالی و مقایسهٔ نتیجه‌ها انجام شد. |\n| تعداد نمونه | ۲۴ | برگ |" },
+              { label: "جدول عریض", content: "# آزمون جدول عریض\n\n| شاخص | روز ۱ | روز ۲ | روز ۳ | روز ۴ | روز ۵ | روز ۶ | روز ۷ |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| طول برگ | ۱۲٫۴ | ۱۳٫۱ | ۱۳٫۸ | ۱۴٫۲ | ۱۴٫۸ | ۱۵٫۱ | ۱۵٫۴ |" }].map(sample => <button key={sample.label} type="button" role="menuitem" onClick={() => {
+                setHeaderMenuOpen(false);
+                applyOpenedDocument({ name: `${sample.label}.md`, path: "", documentType: "markdown", content: sample.content, annotations: [], assets: [], revision: 1, versions: [], openInReadingMode: false, draftId: crypto.randomUUID() });
+              }}>{sample.label}</button>)}
+          </div>}
           <button
             data-overflow-action="theme"
             data-command-id="view.theme"
             type="button"
-            role={isCompactLayout ? undefined : "menuitem"}
+            role={"menuitem"}
             disabled={Boolean(themeTransition)}
             aria-label={
               themeMode === "light" ? "فعال‌کردن تم تاریک" : "فعال‌کردن تم روشن"
             }
-            aria-pressed={isCompactLayout ? themeMode === "dark" : undefined}
+            aria-pressed={undefined}
             aria-keyshortcuts={commandAriaKeyShortcuts(
               "view.theme",
               commandEnvironment,
             )}
             onClick={() => {
-              setMobileHeaderMenuOpen(false);
+              setHeaderMenuOpen(false);
               executeCommand("view.theme", undefined, "menu");
             }}
           >
@@ -15878,16 +15686,16 @@ export default function Home() {
           </button>
           <div
             className="header-overflow-divider"
-            role={isCompactLayout ? undefined : "separator"}
+            role={"separator"}
           />
           <button
             data-overflow-action="support"
             data-command-id="help.support"
             type="button"
-            role={isCompactLayout ? undefined : "menuitem"}
+            role={"menuitem"}
             aria-label="حمایت از راوی"
             onClick={() => {
-              setMobileHeaderMenuOpen(false);
+              setHeaderMenuOpen(false);
               executeCommand("help.support", undefined, "menu");
             }}
           >
@@ -15901,10 +15709,11 @@ export default function Home() {
             data-overflow-action="about"
             data-command-id="help.about"
             type="button"
-            role={isCompactLayout ? undefined : "menuitem"}
+            role={"menuitem"}
             aria-label="دربارهٔ راوی"
+            aria-haspopup="dialog"
             onClick={() => {
-              setMobileHeaderMenuOpen(false);
+              setHeaderMenuOpen(false);
               executeCommand("help.about", undefined, "menu");
             }}
           >
@@ -15948,7 +15757,6 @@ export default function Home() {
           shortcutHelpOpen ||
           shortcutSettingsOpen ||
           commandPaletteOpen ||
-          (mobileHeaderMenuOpen && isCompactLayout) ||
           (libraryOpen && libraryIsModal)
         }
         isInitialWorkspace={isInitialWorkspace}
@@ -15958,9 +15766,7 @@ export default function Home() {
         saveErrorBannerVisible={saveErrorBannerVisible}
         saveIndicatorRef={saveIndicatorRef}
         saveState={saveState}
-        selectEditorMode={selectEditorMode}
         setDocumentMenuOpen={setDocumentMenuOpen}
-        setMobileEditorToolsExpanded={setMobileEditorToolsExpanded}
         wordCount={stats.words}
       />
 
@@ -15979,7 +15785,6 @@ export default function Home() {
             shortcutHelpOpen ||
             shortcutSettingsOpen ||
             commandPaletteOpen ||
-            (mobileHeaderMenuOpen && isCompactLayout) ||
             (libraryOpen && libraryIsModal)
               ? true
               : undefined
@@ -16013,8 +15818,7 @@ export default function Home() {
           exportModalOpen ||
           shortcutHelpOpen ||
           shortcutSettingsOpen ||
-          commandPaletteOpen ||
-          (mobileHeaderMenuOpen && isCompactLayout)
+          commandPaletteOpen
             ? true
             : undefined
         }
@@ -16046,9 +15850,7 @@ export default function Home() {
               : ""
           } ${
             !readingMode ? `pane-layout-is-${effectivePaneMode}` : ""
-          } ${paneDragging ? "is-resizing-panes" : ""} ${
-            mobileEditorToolsVisible ? "mobile-editor-tools-is-open" : ""
-          } ${isInitialWorkspace ? "workspace-is-empty" : ""} ${
+          } ${paneDragging ? "is-resizing-panes" : ""}  ${isInitialWorkspace ? "workspace-is-empty" : ""} ${
             newTabWorkspaceOpen ? "workspace-is-new-tab" : ""
           }`}
           data-workspace-screen={
@@ -16170,9 +15972,7 @@ export default function Home() {
 
           <section
             ref={editorPaneRef}
-            className={`work-pane editor-pane ${
-              mobilePane !== "editor" ? "is-hidden-mobile" : ""
-            } ${editorPaneCollapsed ? "is-pane-collapsed" : ""}`}
+            className={`work-pane editor-pane  ${editorPaneCollapsed ? "is-pane-collapsed" : ""}`}
             data-pane-state={
               activeSplitPane === "editor" ? "active" : "default"
             }
@@ -16229,7 +16029,6 @@ export default function Home() {
                 <button
                   type="button"
                   data-command-id="edit.bold"
-                  data-mobile-editor-action="bold"
                   className={editorFormatting.bold ? "is-active" : ""}
                   onClick={() => runEditorToolCommand("edit.bold")}
                   aria-label="پررنگ"
@@ -16245,7 +16044,6 @@ export default function Home() {
                 <button
                   type="button"
                   data-command-id="edit.italic"
-                  data-mobile-editor-action="italic"
                   className={editorFormatting.italic ? "is-active" : ""}
                   onClick={() => runEditorToolCommand("edit.italic")}
                   aria-label="مورب"
@@ -16261,7 +16059,6 @@ export default function Home() {
                 <button
                   type="button"
                   data-command-id="edit.link"
-                  data-mobile-editor-action="link"
                   className={editorFormatting.link ? "is-active" : ""}
                   onClick={(event) =>
                     openEditorHelper("link", event.currentTarget)
@@ -16290,7 +16087,6 @@ export default function Home() {
                 <button
                   type="button"
                   data-command-id="edit.task"
-                  data-mobile-editor-action="task"
                   className={
                     editorFormatting.block === "task" ? "is-active" : ""
                   }
@@ -16305,7 +16101,6 @@ export default function Home() {
                   ref={editorToolMenuButtonRef}
                   className="format-tool-overflow"
                   type="button"
-                  data-mobile-editor-action="more"
                   onClick={() => {
                     setEditorBlockMenu(null);
                     setEditorHelper(null);
@@ -16530,6 +16325,8 @@ export default function Home() {
                       openAudioTranscription(audio.source, audio.fileName)
                     }
                     onChange={handleMarkdownEditorChange}
+                    onDocumentChange={handleMarkdownEditorChange}
+                    documentSnapshot={documentTextSnapshot}
                     onScroll={() => {
                       setEditorSelectionMenuPosition(null);
                       setEditorBlockMenu(null);
@@ -17139,9 +16936,7 @@ export default function Home() {
           </div>
 
           <section
-            className={`work-pane preview-pane ${
-              mobilePane !== "preview" ? "is-hidden-mobile" : ""
-            } ${previewPaneCollapsed ? "is-pane-collapsed" : ""}`}
+            className={`work-pane preview-pane  ${previewPaneCollapsed ? "is-pane-collapsed" : ""}`}
             data-pane-state={
               activeSplitPane === "preview" ? "active" : "default"
             }
@@ -17258,6 +17053,8 @@ export default function Home() {
                       openAudioTranscription(audio.source, audio.fileName)
                     }
                     onChange={handleMarkdownEditorChange}
+                    onDocumentChange={handleMarkdownEditorChange}
+                    documentSnapshot={documentTextSnapshot}
                     onScroll={() => {
                       setEditorSelectionMenuPosition(null);
                       setEditorBlockMenu(null);
@@ -17442,7 +17239,7 @@ export default function Home() {
                               role="status"
                               aria-live="polite"
                             >
-                              {renderedPreviewChunkCount <
+                              {deferLargePreview && !completePreview ? <button type="button" onClick={materializeCompletePreview}>نمایش کامل سند</button> : renderedPreviewChunkCount <
                               previewMarkdownChunks.length
                                 ? `در حال آماده‌سازی ادامهٔ سند؛ ${renderedPreviewChunkCount.toLocaleString("fa-IR")} از ${previewMarkdownChunks.length.toLocaleString("fa-IR")} بخش`
                                 : "تمام سند آماده است"}
@@ -17720,6 +17517,8 @@ export default function Home() {
                 <AiChatPanel
                   key={aiContext.sessionId}
                   context={aiContext}
+                  contextCurrent={aiContextCurrent}
+                  onReselect={reselectAiContext}
                   connectionState={codexConnectionState}
                   onCheckConnection={async () => {
                     await checkCodexConnection();
@@ -17963,6 +17762,7 @@ export default function Home() {
               {sidebarView === "outline" &&
                 (readingMode ? (
                   <ReadingDocumentOutlinePane
+                    key={currentDocumentKey}
                     headings={documentEditorHeadings}
                     activeOffset={activeReadingHeadingOffset}
                     searchOpen={readingOutlineSearchOpen}
@@ -17975,6 +17775,7 @@ export default function Home() {
                   />
                 ) : (
                   <DocumentOutlinePane
+                    key={currentDocumentKey}
                     headings={documentEditorHeadings}
                     activeOffset={activeEditorHeadingOffset}
                     searchOpen={readingOutlineSearchOpen}
@@ -18197,9 +17998,15 @@ export default function Home() {
                     inputRef={readingDocumentSearchRef}
                     query={readingSearchQuery}
                     results={readingSearchResults}
+                    total={readingSearch.total}
+                    busy={readingSearch.busy}
+                    error={readingSearch.error}
+                    page={readingSearchPage}
+                    onPageChange={setReadingSearchPage}
                     activeIndex={activeReadingSearchIndex}
-                    onQueryChange={setReadingSearchQuery}
+                    onQueryChange={(query) => { setReadingSearchPage(0); setReadingSearchQuery(query); }}
                     onClear={() => {
+                      setReadingSearchPage(0);
                       setReadingSearchQuery("");
                       setActiveReadingSearchIndex(-1);
                     }}
@@ -18369,7 +18176,7 @@ export default function Home() {
             onApply={applyMermaidStudio}
             onClose={closeMermaidStudio}
             returnFocusRef={mermaidReturnFocusRef}
-            backNavigationEnabled={isCompactLayout}
+            backNavigationEnabled={false}
           />
         </Suspense>
       )}
@@ -18409,7 +18216,7 @@ export default function Home() {
             onApply={applyFormulaStudio}
             onClose={closeFormulaStudio}
             returnFocusRef={formulaReturnFocusRef}
-            backNavigationEnabled={isCompactLayout}
+            backNavigationEnabled={false}
           />
         </Suspense>
       )}
@@ -18427,9 +18234,7 @@ export default function Home() {
                 setNewDocumentError("");
               }}
               returnFocusRef={
-                isCompactLayout
-                  ? mobileHeaderMenuButtonRef
-                  : newDocumentButtonRef
+                newDocumentButtonRef
               }
             />
           }
@@ -18442,7 +18247,7 @@ export default function Home() {
             creating={newDocumentCreating}
             creationError={newDocumentError}
             returnFocusRef={
-              isCompactLayout ? mobileHeaderMenuButtonRef : newDocumentButtonRef
+              newDocumentButtonRef
             }
             onClose={() => {
               if (newDocumentCreating) return;
@@ -18527,7 +18332,16 @@ export default function Home() {
             resultPath={exportResultPath}
             canRevealResult={exportResultRevealable}
             directPdf={commandEnvironment.surface === "electron"}
-            onFormatChange={changeExportFormat}
+            onFormatChange={(format) => { changeExportFormat(format); void startExport(format); }}
+            previewReady={(pdfPreparation.status === "ready" && pdfPreparation.document?.id === pdfRenderedId) || pdfPreparation.status === "browser"}
+            browserPdf={pdfPreparation.status === "browser"}
+            preview={(header, footer) => <PdfPreview settingsHeader={header} settingsFooter={footer} onReady={setPdfRenderedId} preparation={pdfPreparation} landscape={pdfLandscape} onLandscapeChange={value => { if (value !== pdfLandscape) { setPdfLandscape(value); refreshPdfPreview(value); } }} onRetry={() => refreshPdfPreview(pdfLandscape)} />}
+            onInspectWarning={warning => {
+              if (!warning.sourceRange) return;
+              const range = warning.sourceRange;
+              resetExportDialog(); setReadingMode(false); setFocusedPane("editor"); setDesktopPaneMode("editor");
+              requestAnimationFrame(() => requestAnimationFrame(() => { editorRef.current?.focus(); editorRef.current?.setSelectionRange(range.start, range.end, true); }));
+            }}
             onClose={closeExportDialog}
             onStart={() => void startExport()}
             onContinue={() => void commitPreparedExport()}
@@ -18701,7 +18515,7 @@ export default function Home() {
             }}
             onSaveAndClose={() => {
               setPendingDocumentClose(null);
-              closeAfterSaveRequestedRef.current = true;
+              closeAfterSaveRequestedRef.current = documentDraftId;
               void saveCurrentFile();
             }}
           />
@@ -18753,7 +18567,7 @@ export default function Home() {
               title="ابزار ذخیره در حال آماده‌شدن است"
               isTopLayer={topLayer === "save"}
               onClose={() => {
-                closeAfterSaveRequestedRef.current = false;
+                closeAfterSaveRequestedRef.current = null;
                 setSaveModalOpen(false);
               }}
             />
@@ -18773,7 +18587,7 @@ export default function Home() {
             closeRef={saveModalCloseRef}
             returnFocusRef={saveModalReturnFocusRef}
             onClose={() => {
-              closeAfterSaveRequestedRef.current = false;
+              closeAfterSaveRequestedRef.current = null;
               setSaveModalOpen(false);
             }}
             onFileNameChange={setSaveFileName}

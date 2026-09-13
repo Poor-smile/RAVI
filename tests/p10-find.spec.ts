@@ -89,7 +89,8 @@ test("P10 matches Find / Found and keeps local keyboard navigation", async ({
       ).borderRadius,
     };
   });
-  expect(geometry.panel).toEqual({ x: 232, y: 144, width: 760, height: 100 });
+  // D01 adds a 1px border around the 760px editor paper.
+  expect(geometry.panel).toEqual({ x: 233, y: 145, width: 758, height: 100 });
   expect(geometry.field.width).toBe(320);
   expect(geometry.field.height).toBe(84);
   expect(geometry.control.height).toBe(36);
@@ -145,33 +146,4 @@ test("P10 matches Find / Found and keeps local keyboard navigation", async ({
   await expect(largePanel).toBeHidden();
 });
 
-test("P10 mobile Find uses a stacked sheet with 44px targets", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.addInitScript(() => {
-    window.localStorage.clear();
-    window.localStorage.setItem("raavi:theme:v1", "light");
-  });
-  await openWritingDocument(page);
-  await page.keyboard.press("Control+f");
-
-  const panel = page.getByRole("search", { name: "جست‌وجو در سند" });
-  await expect(panel).toBeVisible();
-  const targets = await panel
-    .locator(
-      ".raavi-find-control, .raavi-find-option, .raavi-search-control, .raavi-search-clear, .raavi-search-input",
-    )
-    .evaluateAll((elements) =>
-      elements.map((element) => {
-        const rect = element.getBoundingClientRect();
-        return { width: Math.round(rect.width), height: Math.round(rect.height) };
-      }),
-    );
-  for (const target of targets) {
-    expect(target.width).toBeGreaterThanOrEqual(44);
-    expect(target.height).toBeGreaterThanOrEqual(44);
-  }
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.

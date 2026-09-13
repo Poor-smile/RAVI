@@ -1,5 +1,8 @@
 "use client";
 
+import { editTableSource, tableSourceEditing } from "../editor/table-presentation";
+import type { DocumentEdit, DocumentChange, DocumentTextSnapshot } from "../workspace/document-text";
+
 import {
   defaultKeymap,
   history,
@@ -155,6 +158,8 @@ export type MarkdownCodeEditorHandle = {
   readonly selectionStart: number;
   readonly selectionEnd: number;
   readonly tableCellSelection: TableCellTextSelection | null;
+  captureAiTableCell: () => TableCellTextSelection | null;
+  selectAiTableCell: (key: string, from: number, to: number) => void;
   readonly clientHeight: number;
   readonly scrollHeight: number;
   scrollTop: number;
@@ -227,6 +232,8 @@ type MarkdownCodeEditorProps = {
   writingBlockGutter?: boolean;
   writingBlockMenuOpen?: boolean;
   onChange: (value: string) => void;
+  onDocumentChange?: (edit: DocumentEdit) => void;
+  documentSnapshot?: DocumentTextSnapshot;
   onBlockMenu?: (
     lineFrom: number,
     trigger: HTMLElement,
@@ -1911,6 +1918,8 @@ export const MarkdownCodeEditor = forwardRef<
     writingBlockMenuOpen = false,
     onBlockMenu,
     onChange,
+    onDocumentChange,
+    documentSnapshot,
     onContextChange,
     onLivePreviewFailure,
     onOpenMermaidStudio,
@@ -1969,6 +1978,8 @@ export const MarkdownCodeEditor = forwardRef<
   const initialValueRef = useRef(value);
   const externalUpdateRef = useRef(false);
   const onChangeRef = useRef(onChange);
+  const onDocumentChangeRef = useRef(onDocumentChange);
+  const appliedDocumentRevision = useRef(documentSnapshot?.revision);
   const onBlockMenuRef = useRef(onBlockMenu);
   const onContextChangeRef = useRef(onContextChange);
   const onScrollRef = useRef(onScroll);
@@ -2197,6 +2208,7 @@ export const MarkdownCodeEditor = forwardRef<
   useEffect(() => () => cleanupPointerBlockDrag(), [cleanupPointerBlockDrag]);
 
   onChangeRef.current = onChange;
+  onDocumentChangeRef.current = onDocumentChange;
   onBlockMenuRef.current = onBlockMenu;
   onContextChangeRef.current = onContextChange;
   onScrollRef.current = onScroll;
@@ -2315,6 +2327,10 @@ export const MarkdownCodeEditor = forwardRef<
               key: "Escape",
               run: (view) => {
                 if (currentModeRef.current === "source") return false;
+                if (view.state.field(tableSourceEditing, false)) {
+                  view.dispatch({ effects: editTableSource.of(null) });
+                  return true;
+                }
                 const cleared = clearEditorBlockSelection(view);
                 if (cleared) syncWritingBlockGutter(view);
                 return cleared;
@@ -2473,7 +2489,11 @@ export const MarkdownCodeEditor = forwardRef<
         }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && !externalUpdateRef.current) {
-            onChangeRef.current(update.state.doc.toString());
+            if (onDocumentChangeRef.current) {
+              const changes: DocumentChange[] = [];
+              update.changes.iterChanges((from, to, _fromB, _toB, inserted) => changes.push({ from, to, insert: inserted.toString() }));
+              onDocumentChangeRef.current({ document: update.state.doc, previousLength: update.startState.doc.length, changes });
+            } else onChangeRef.current(update.state.doc.toString());
           }
           if (update.selectionSet) {
             tableCellSelectionRef.current = null;
@@ -3172,6 +3192,16 @@ export const MarkdownCodeEditor = forwardRef<
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
+    const previousRevision = appliedDocumentRevision.current;
+    appliedDocumentRevision.current = documentSnapshot?.revision;
+    if (documentSnapshot?.document === view.state.doc) return;
+    if (documentSnapshot?.changes && previousRevision !== undefined && documentSnapshot.revision === previousRevision + 1 && documentSnapshot.previousLength === view.state.doc.length) {
+      externalUpdateRef.current = true;
+      try {
+        view.dispatch({ changes: documentSnapshot.changes, annotations: Transaction.addToHistory.of(false) });
+      } finally { externalUpdateRef.current = false; }
+      return;
+    }
     const currentValue = view.state.doc.toString();
     if (currentValue === value) return;
 
@@ -3185,7 +3215,7 @@ export const MarkdownCodeEditor = forwardRef<
       annotations: Transaction.addToHistory.of(false),
     });
     externalUpdateRef.current = false;
-  }, [value]);
+  }, [value, documentSnapshot]);
 
   useImperativeHandle(
     ref,
@@ -3220,6 +3250,24 @@ export const MarkdownCodeEditor = forwardRef<
       },
       get clientHeight() {
         return viewRef.current?.scrollDOM.clientHeight ?? 0;
+      },
+      captureAiTableCell() {
+        const active = activeTableCellRef.current;
+        if (!active?.element.isConnected) return null;
+        const element = active.element;
+        if (element.selectionStart === element.selectionEnd) element.setSelectionRange(0, element.value.length);
+        const selection = readTableCellSelection(element);
+        tableCellSelectionRef.current = selection;
+        return selection;
+      },
+      selectAiTableCell(key, from, to) {
+        const [blockFrom, row, column] = key.split(":").map(Number);
+        if (![blockFrom, row, column].every(Number.isInteger)) return;
+        const element = hostRef.current?.querySelector<HTMLTextAreaElement>(`[data-table-from="${blockFrom}"] textarea[data-table-row="${row}"][data-table-column="${column}"]`);
+        if (!element) return;
+        element.setSelectionRange(from, to);
+        tableCellSelectionRef.current = readTableCellSelection(element);
+        activeTableCellRef.current = readActiveTableCell(element);
       },
       get scrollHeight() {
         return viewRef.current?.scrollDOM.scrollHeight ?? 0;
@@ -3355,6 +3403,7 @@ export const MarkdownCodeEditor = forwardRef<
         );
         view.dispatch({
           changes: { from: safeFrom, to: safeTo, insert },
+          annotations: isolateHistory.of("full"),
           selection: { anchor, head },
           effects: announcement
             ? EditorView.announce.of(announcement)
@@ -3381,6 +3430,7 @@ export const MarkdownCodeEditor = forwardRef<
         );
         editor.dataset.renderFormattedPreview = "true";
         editor.setRangeText(insert, safeFrom, safeTo, "preserve");
+        view?.dispatch({ annotations: isolateHistory.of("before") });
         const nextLength = editor.value.length;
         const nextStart = Math.max(
           0,
@@ -3399,8 +3449,12 @@ export const MarkdownCodeEditor = forwardRef<
             inputType: "insertText",
           }),
         );
-        tableCellSelectionRef.current = readTableCellSelection(editor);
-        activeTableCellRef.current = readActiveTableCell(editor);
+        editor.dispatchEvent(new Event("raavi:commit-table-edit"));
+        view?.dispatch({ annotations: isolateHistory.of("after") });
+        const nextEditor = hostRef.current?.querySelector<HTMLTextAreaElement>(`[data-table-from="${current.blockFrom}"] textarea[data-table-row="${current.row}"][data-table-column="${current.column}"]`) ?? editor;
+        nextEditor.setSelectionRange(nextStart, nextEnd);
+        tableCellSelectionRef.current = readTableCellSelection(nextEditor);
+        activeTableCellRef.current = readActiveTableCell(nextEditor);
         if (hostRef.current) {
           hostRef.current.dataset.tableBlockActive = "true";
         }

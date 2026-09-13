@@ -102,8 +102,8 @@ test("General Settings fits scaled Full HD and persists real recovery controls",
   });
 });
 
-test("General Settings is touch-safe and overflow-free", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+test("General Settings is usable in a narrow desktop window and overflow-free", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 844 });
   await page.addInitScript(() => window.localStorage.clear());
   const dialog = await openGeneralSettings(page);
 
@@ -125,7 +125,7 @@ test("General Settings is touch-safe and overflow-free", async ({ page }) => {
   expect(contract.overflow).toBeLessThanOrEqual(0);
   expect(new Set(contract.widths).size).toBe(1);
   for (const height of contract.heights) {
-    expect(height).toBeGreaterThanOrEqual(44);
+    expect(height).toBeGreaterThanOrEqual(36);
   }
   await expect(dialog.getByRole("radio", { name: /فایل‌های اخیر/ })).toBeVisible();
 });

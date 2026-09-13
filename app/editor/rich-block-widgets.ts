@@ -27,6 +27,7 @@ import {
 } from "./rich-blocks";
 import { createStructuralBlockOperations } from "./block-operations";
 import { mixedScriptWordRangeAt } from "./text-selection";
+import { editTableSource } from "./table-presentation";
 
 export type LiveImageResolution =
   | { status: "ready"; source: string }
@@ -229,6 +230,7 @@ type TableCellCaret =
 
 const tableWrapPreferences = new WeakMap<EditorView, boolean>();
 const tableContextMenus = new WeakMap<HTMLElement, HTMLElement>();
+const tableCellCommits = new WeakMap<HTMLElement, { from: number; source: string }>();
 
 type TableCellInlineToken = {
   index: number;
@@ -351,6 +353,16 @@ export class TableBlockWidget extends SourceBlockWidget {
     return other.from === this.from && other.to === this.to && other.source === this.source;
   }
 
+  updateDOM(dom: HTMLElement) {
+    const commit = tableCellCommits.get(dom);
+    tableCellCommits.delete(dom);
+    // Only reuse a grid whose own cell inputs already rendered this commit.
+    // External edits, undo, moved tables and structural changes must rebuild.
+    if (commit?.from !== this.from || commit.source !== this.source) return false;
+    dom.dataset.richBlockTo = String(this.to);
+    return true;
+  }
+
   toDOM(view: EditorView) {
     const editableCell = (value: string) => value.replace(/\\\|/gu, "|");
     const shell = widgetShell(
@@ -367,7 +379,10 @@ export class TableBlockWidget extends SourceBlockWidget {
       rows: this.table.rows.map((row) => row.map(editableCell)),
       alignments: [...this.table.alignments],
     };
-    let committedSource = this.source;
+    // Compare the parsed draft with its own canonical form. Comparing it with
+    // the original Markdown would turn a plain blur into an edit (e.g. ---
+    // becoming :---), destroying the widget and dirtying an untouched file.
+    let committedSource = serializeGfmTable(draft);
     let committedTo = this.to;
     let activeRow = -1;
     let activeColumn = 0;
@@ -511,8 +526,10 @@ export class TableBlockWidget extends SourceBlockWidget {
       const replacedTo = committedTo;
       committedSource = markdown;
       committedTo = this.from + markdown.length;
+      if (!focus) tableCellCommits.set(shell, { from: this.from, source: markdown });
       view.dispatch({
         changes: { from: this.from, to: replacedTo, insert: markdown },
+        annotations: isolateHistory.of("full"),
         effects: EditorView.announce.of(announcement),
       });
       if (focus) focusCell(focus.row, focus.column);
@@ -662,14 +679,16 @@ export class TableBlockWidget extends SourceBlockWidget {
     moreMenu.hidden = true;
     moreMenu.setAttribute("role", "menu");
     const editSource = actionButton("ویرایش متن Markdown", () => {
-      const markdown = serializeGfmTable(draft);
+      const serialized = serializeGfmTable(draft);
+      const changed = serialized !== committedSource;
+      const markdown = changed ? serialized : view.state.sliceDoc(this.from, committedTo);
       view.dispatch({
-        changes: { from: this.from, to: committedTo, insert: markdown },
-        selection: {
-          anchor: this.from,
-          head: Math.min(this.from + markdown.length, this.from + 1),
-        },
-        effects: EditorView.scrollIntoView(this.from, { y: "nearest" }),
+        changes: changed ? { from: this.from, to: committedTo, insert: markdown } : [],
+        selection: { anchor: this.from },
+        effects: [
+          editTableSource.of({ from: this.from, to: this.from + markdown.length }),
+          EditorView.scrollIntoView(this.from, { y: "nearest" }),
+        ],
       });
       view.focus();
     });
@@ -982,6 +1001,7 @@ export class TableBlockWidget extends SourceBlockWidget {
           cellEditor.dataset.editing = "false";
         }
       });
+      editor.addEventListener("raavi:commit-table-edit", () => commit(draft, null));
       editor.addEventListener("blur", (event) => {
         cellEditor.dataset.editing = "false";
         const next = event.relatedTarget;
@@ -1168,6 +1188,7 @@ export class TableBlockWidget extends SourceBlockWidget {
   }
 
   destroy(dom: HTMLElement) {
+    tableCellCommits.delete(dom);
     tableContextMenus.get(dom)?.remove();
     tableContextMenus.delete(dom);
   }

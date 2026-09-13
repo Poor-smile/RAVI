@@ -178,30 +178,12 @@ test("W10 exposes a persistent save failure with dismiss and real retry recovery
     fullPage: true,
   });
 
-  if (process.env.RAAVI_DESKTOP_ONLY !== "1") {
-    await page.setViewportSize({ width: 360, height: 800 });
-    await expect(banner).toBeVisible();
-    const mobileContract = await banner.evaluate((element) => {
-      const title = element.querySelector("strong")!;
-      const detail = element.querySelector("#save-error-description")!;
-      const bounds = element.getBoundingClientRect();
-      return {
-        width: Math.round(bounds.width),
-        height: Math.round(bounds.height),
-        titleWhiteSpace: getComputedStyle(title).whiteSpace,
-        detailWhiteSpace: getComputedStyle(detail).whiteSpace,
-        detailOverflow: getComputedStyle(detail).overflow,
-      };
-    });
-    expect(mobileContract).toMatchObject({
-      width: 340,
-      titleWhiteSpace: "normal",
-      detailWhiteSpace: "normal",
-      detailOverflow: "visible",
-    });
-    expect(mobileContract.height).toBeGreaterThan(68);
-    await page.setViewportSize({ width: 1280, height: 914 });
-  }
+  // The desktop desk has a 1024px minimum; handset access has its own suite.
+  await page.setViewportSize({ width: 1024, height: 800 });
+  await expect(banner).toBeVisible();
+  await expect(banner.getByRole("button", { name: "تلاش دوباره", exact: true })).toBeInViewport();
+  await expect(banner.getByRole("button", { name: "بستن پیام خطای ذخیره", exact: true })).toBeInViewport();
+  await page.setViewportSize({ width: 1280, height: 914 });
   await expect(banner).toHaveCSS("height", "68px");
 
   await banner

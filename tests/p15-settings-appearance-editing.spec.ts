@@ -213,30 +213,4 @@ test("P15 Editing settings persist and drive the real Code surface", async ({
   ).toHaveCount(0);
 });
 
-test("P15 remains touch-safe and overflow-free on mobile", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.addInitScript(() => window.localStorage.clear());
-  await openSettings(page);
-  await page
-    .getByRole("navigation", { name: "دسته‌های تنظیمات" })
-    .getByRole("button", { name: "ظاهر" })
-    .click();
-
-  const contract = await page.evaluate(() => {
-    const targets = document.querySelectorAll<HTMLElement>(
-      ".appearance-theme-card, .appearance-accent-options > button, .appearance-motion-control > button",
-    );
-    return {
-      targetHeights: Array.from(targets, (target) =>
-        Math.round(target.getBoundingClientRect().height),
-      ),
-      overflow:
-        document.documentElement.scrollWidth -
-        document.documentElement.clientWidth,
-    };
-  });
-  expect(contract.overflow).toBeLessThanOrEqual(0);
-  for (const height of contract.targetHeights) {
-    expect(height).toBeGreaterThanOrEqual(44);
-  }
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.

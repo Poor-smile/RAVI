@@ -14,6 +14,7 @@ import {
   type ViewUpdate,
   ViewPlugin,
 } from "@codemirror/view";
+import { editTableSource, tableSourceEditing } from "./table-presentation";
 import { detectBlockTextDirection } from "../markdown/text-direction";
 import { findFormulaBlocks } from "../formula/blocks";
 import {
@@ -44,7 +45,7 @@ import {
   parseGfmTable,
   parseMarkdownImage,
   resolveMarkdownBlockRange,
-  resolveMarkdownBlockRanges,
+  markdownBlockRangesInView,
 } from "./rich-blocks";
 
 export type LivePreviewFailure = {
@@ -375,7 +376,7 @@ export function buildLivePreviewDecorations(view: EditorView) {
   const tree = syntaxTree(view.state);
   let documentFootnotes: ReturnType<typeof footnoteReferences> | null = null;
 
-  for (const block of resolveMarkdownBlockRanges(view.state.doc.toString())) {
+  for (const block of markdownBlockRangesInView(view.state.doc.toString(), ranges)) {
     const isScanned = ranges.some(
       (range) => block.from <= range.to && block.to >= range.from,
     );
@@ -858,7 +859,8 @@ function buildRichBlockDecorations(
           return false;
         }
         if (node.name === "Table") {
-          if (!selectionTouchesRange(view.state, node, view.hasFocus)) {
+          const sourceEditing = view.state.field(tableSourceEditing);
+          if (!sourceEditing || sourceEditing.from >= node.to || sourceEditing.to <= node.from) {
             const source = view.state.sliceDoc(node.from, node.to);
             const table = parseGfmTable(source);
             if (table) {
@@ -954,6 +956,7 @@ function createRichBlockExtension(
 
       update(update: ViewUpdate) {
         if (
+          update.transactions.some(t => t.effects.some(e => e.is(editTableSource))) ||
           update.docChanged ||
           update.viewportChanged ||
           update.selectionSet ||
@@ -1089,6 +1092,7 @@ export function createLivePreviewExtension({
     { decorations: (plugin) => plugin.decorations },
   );
   return [
+    tableSourceEditing,
     ...createRichBlockExtension(richWidgets, onFailure),
     decorationPlugin,
     createLiveLinkPopoverExtension(),

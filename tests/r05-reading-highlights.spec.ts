@@ -384,6 +384,10 @@ test("R05 scroll spy keeps the active highlight synchronized with Reading", asyn
   const target = page.getByText("نشانهٔ پایانی نزدیک انتهای سند قرار دارد.", {
     exact: true,
   });
+  // Real scroll intent cancels pending layout restoration. A synthetic scroll
+  // alone can race initial font/layout settling and is not a user gesture.
+  await page.locator('[data-workspace-screen="reading"]').hover({ position: { x: 200, y: 200 } });
+  await page.mouse.wheel(0, 1);
   await target.evaluate((node) => {
     const workspace = document.querySelector<HTMLElement>(
       '[data-workspace-screen="reading"]',
@@ -400,58 +404,4 @@ test("R05 scroll spy keeps the active highlight synchronized with Reading", asyn
   await expect(rows.nth(1)).toHaveAttribute("aria-current", "location");
 });
 
-test("R05 uses the modal Drawer and 44px supporting targets on mobile", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 375, height: 812 });
-  await openReadingFixture(
-    page,
-    READING_HIGHLIGHTS_FIXTURE,
-    "r05-reading-highlights-mobile",
-    FOUR_HIGHLIGHTS,
-  );
-
-  const drawer = page.locator("#library-panel");
-  const highlightTrigger = drawer.getByRole("button", {
-    name: "هایلایت‌ها",
-    exact: true,
-  });
-  await expect(highlightTrigger).toBeVisible();
-  await highlightTrigger.click();
-  await expect(drawer).toHaveAttribute("role", "dialog");
-  await expect(drawer).toHaveAttribute("aria-modal", "true");
-  await drawer.getByRole("button", { name: "جست‌وجو در هایلایت‌ها" }).click();
-
-  const firstRow = drawer.locator(".reading-highlight-row-main").first();
-  await firstRow.focus();
-  const targets = await page.evaluate(() => {
-    const dismiss = document.querySelector<HTMLElement>(
-      ".reading-highlights-search-control button",
-    )!;
-    const remove = document.querySelector<HTMLElement>(
-      ".reading-highlight-row-delete",
-    )!;
-    const row = document.querySelector<HTMLElement>(
-      ".reading-highlight-row-main",
-    )!;
-    const dismissRect = dismiss.getBoundingClientRect();
-    const removeRect = remove.getBoundingClientRect();
-    const rowRect = row.getBoundingClientRect();
-    return {
-      dismiss: {
-        width: Math.round(dismissRect.width),
-        height: Math.round(dismissRect.height),
-      },
-      remove: {
-        width: Math.round(removeRect.width),
-        height: Math.round(removeRect.height),
-      },
-      rowHeight: Math.round(rowRect.height),
-    };
-  });
-  expect(targets).toEqual({
-    dismiss: { width: 44, height: 44 },
-    remove: { width: 44, height: 44 },
-    rowHeight: 64,
-  });
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.

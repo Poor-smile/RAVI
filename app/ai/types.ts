@@ -2,6 +2,7 @@ export type AiContextKind = "document" | "block" | "selection";
 
 export type AiFrozenContext = {
   sessionId: string;
+  documentId?: string;
   kind: AiContextKind;
   label: string;
   content: string;

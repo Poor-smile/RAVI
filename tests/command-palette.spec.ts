@@ -92,7 +92,8 @@ test.describe("Persian command palette", () => {
         .locator('[data-command-id="view.commandPalette"]'),
     ).toBeVisible();
     await expect(page.locator('[data-command-id="file.export"]')).toBeVisible();
-    await expect(page.locator('[data-command-id="help.about"]')).toBeVisible();
+    await expect(page.locator('.header-overflow-grid [data-command-id="help.about"]')).toBeVisible();
+    await expect(page.locator('.topbar .brand[data-command-id="help.about"]')).toBeVisible();
     await page.keyboard.press("Escape");
 
     await openTestDocument(page);

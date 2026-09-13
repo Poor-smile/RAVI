@@ -74,9 +74,11 @@ function markdownSourceLines(source: string): MarkdownSourceLine[] {
   const lines: MarkdownSourceLine[] = [];
   let from = 0;
   let number = 1;
+  const lineBreaks = /\r\n|\n|\r/gu;
   while (from < source.length) {
-    const breakMatch = /\r\n|\n|\r/gu.exec(source.slice(from));
-    const to = breakMatch ? from + (breakMatch.index ?? 0) : source.length;
+    lineBreaks.lastIndex = from;
+    const breakMatch = lineBreaks.exec(source);
+    const to = breakMatch ? breakMatch.index : source.length;
     const breakTo = breakMatch ? to + breakMatch[0].length : to;
     lines.push({ number, from, to, breakTo, text: source.slice(from, to) });
     number += 1;
@@ -172,7 +174,7 @@ function listEnd(lines: MarkdownSourceLine[], start: number) {
 }
 
 /** Resolves every source character to exactly one complete Markdown block. */
-export function resolveMarkdownBlockRanges(source: string): MarkdownBlockRange[] {
+function scanMarkdownBlockRanges(source: string): MarkdownBlockRange[] {
   const lines = markdownSourceLines(source);
   const ranges: MarkdownBlockRange[] = [];
   let index = 0;
@@ -295,18 +297,41 @@ export function resolveMarkdownBlockRanges(source: string): MarkdownBlockRange[]
   return ranges;
 }
 
+let lastBlockSource: string | null = null;
+let lastBlockRanges: MarkdownBlockRange[] = [];
+
+export function resolveMarkdownBlockRanges(source: string): MarkdownBlockRange[] {
+  // Edit planners receive detached records so adjusting a range cannot corrupt
+  // subsequent selection/navigation lookups in the one-document cache.
+  return cachedMarkdownBlockRanges(source).map(range => ({ ...range }));
+}
+
+export function markdownBlockRangesInView(source: string, visible: readonly { from: number; to: number }[]) {
+  return cachedMarkdownBlockRanges(source)
+    .filter(block => visible.some(range => block.from <= range.to && block.to >= range.from))
+    .map(block => ({ ...block }));
+}
+
+function cachedMarkdownBlockRanges(source: string) {
+  if (lastBlockSource !== source) {
+    lastBlockRanges = scanMarkdownBlockRanges(source);
+    lastBlockSource = source;
+  }
+  return lastBlockRanges;
+}
+
 export function resolveMarkdownBlockRange(
   source: string,
   position: number,
 ): MarkdownBlockRange {
   const safePosition = Math.max(0, Math.min(position, source.length));
-  const ranges = resolveMarkdownBlockRanges(source);
-  return (
+  const ranges = cachedMarkdownBlockRanges(source);
+  return { ...(
     ranges.find((range, index) => {
       const next = ranges[index + 1];
       return safePosition >= range.from && (!next || safePosition < next.from);
     }) ?? ranges[ranges.length - 1]
-  );
+  ) };
 }
 
 export function resolveAdjacentMarkdownBlockRange(

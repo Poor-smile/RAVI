@@ -536,12 +536,19 @@ async function selectParagraph(page: Page, index: number) {
 
 async function approveAuditRemoteImages(page: Page) {
   const approve = page.getByRole("button", { name: "اجازه و بارگیری" });
-  while ((await approve.count()) > 0) {
-    await approve
-      .first()
-      .evaluate((button: HTMLButtonElement) => button.click());
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    // Approving an origin can remove its other buttons between count() and
+    // evaluate(). Observe and click in one DOM turn; image assertions follow.
+    const clicked = await approve.evaluateAll(buttons => {
+      const button = buttons[0] as HTMLButtonElement | undefined;
+      if (!button) return false;
+      button.click();
+      return true;
+    });
+    if (!clicked) return;
     await page.waitForTimeout(40);
   }
+  throw new Error("Remote image approval did not settle.");
 }
 
 async function launchAuditApp(
@@ -549,7 +556,7 @@ async function launchAuditApp(
   userDataPath: string,
   documentPath?: string,
 ): Promise<{ app: ElectronApplication; page: Page }> {
-  const executablePath = process.env.RAAVI_AUDIT_EXECUTABLE;
+  const executablePath = process.env.RAAVI_AUDIT_EXECUTABLE ?? process.env.RAAVI_RELEASE_EXECUTABLE;
   const args = [
     ...(executablePath ? [] : [path.join(projectRoot, "desktop", "main.mjs")]),
     `--user-data-dir=${userDataPath}`,
@@ -558,7 +565,12 @@ async function launchAuditApp(
   const app = await electron.launch({ cwd: projectRoot, executablePath, args, timeout: 20_000 });
   try {
     expect(await app.evaluate(({ app }) => app.getPath("userData"))).toBe(userDataPath);
-    return { app, page: await waitForRaaviWindow(app) };
+    const page = await waitForRaaviWindow(app);
+    // Hydration precedes the asynchronous native file/history read. Measure
+    // the requested document only after its startup overlay is dismissed.
+    const main = await app.browserWindow(page);
+    await expect.poll(() => main.evaluate(window => window.contentView.children.length), { timeout: 30_000 }).toBe(0);
+    return { app, page };
   } catch (error) {
     await app.close();
     throw error;
@@ -567,6 +579,36 @@ async function launchAuditApp(
 
 test.describe("reading continuity audit", () => {
   test.skip(process.platform !== "win32", "The packaged desktop target is Windows.");
+
+  test("restores the exact late paragraph with a recovered comment composer", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'raavi-anchor-focused-'));
+    const profile = path.join(root, 'profile');
+    const file = path.join(root, 'anchor.md');
+    const media = await startAuditMediaServer();
+    await writeFile(file, longReadingDocument(media.baseUrl));
+    let app: ElectronApplication | null = null;
+    try {
+      const first = await launchAuditApp(process.cwd(), profile, file); app = first.app;
+      await ensureAuditChaptersRendered(first.page);
+      await selectParagraph(first.page, 210);
+      await commitAuditScrollAsUserPosition(first.page);
+      await first.page.getByRole('button', { name: 'نظر', exact: true }).click();
+      await first.page.locator('[data-editable-kind="composer"]').fill('حفظ محل دقیق مطالعه');
+      await first.page.waitForTimeout(700);
+      const before = await first.page.evaluate(async () => (await window.raaviDesktop!.getLocalDocumentSnapshot())?.readingPositions);
+      await app.close(); app = null;
+      const { createSnapshotStorage } = await import('../desktop/snapshot-storage.mjs');
+      const session = await createSnapshotStorage(path.join(profile, 'state-store')).read(path.join(profile, 'document-session.json'));
+      const savedKey = Object.keys(before ?? {}).find(key => key.startsWith('file:'))!;
+      expect(session.tabs[0].snapshot.readingPositions[savedKey].anchor.textHash).toBe(before?.[savedKey].anchor.textHash);
+      const second = await launchAuditApp(process.cwd(), profile); app = second.app;
+      await ensureAuditChaptersRendered(second.page); await second.page.waitForTimeout(1800);
+      const after = await second.page.evaluate(async () => (await window.raaviDesktop!.getLocalDocumentSnapshot())?.readingPositions);
+      const key = Object.keys(before ?? {}).find(key => key.startsWith('file:'))!;
+      expect(after?.[key].anchor.textHash).toBe(before?.[key].anchor.textHash);
+      expect(after?.[key].anchor.sourceOffset).toBe(before?.[key].anchor.sourceOffset);
+    } finally { await app?.close(); await closeAuditMediaServer(media.server); await rm(root, { recursive: true, force: true }); }
+  });
 
   test("preserves the semantic anchor while leaving reading mode", async () => {
     const projectRoot = path.resolve(
@@ -1126,9 +1168,19 @@ test.describe("reading continuity audit", () => {
       const fullscreenButton = page
         .getByRole("button", { name: "نمایش تمام‌صفحهٔ نمودار" })
         .first();
-      await fullscreenButton.scrollIntoViewIfNeeded();
+      // Real navigation supersedes the anchor restored by cancelling a comment.
+      // Programmatic scrollIntoView alone intentionally does not signal intent.
+      await page.mouse.move(740, 420);
+      await page.mouse.wheel(0, -160);
+      await expect(async () => {
+        await fullscreenButton.scrollIntoViewIfNeeded();
+        await page.waitForTimeout(120);
+        await expect(fullscreenButton).toBeInViewport({ timeout: 250 });
+      }).toPass({ timeout: 5_000 });
       const beforeDiagramFullscreen = await readingMetric(page);
-      await fullscreenButton.click();
+      // Measure fullscreen restoration separately from Playwright's automatic
+      // click scrolling, which otherwise changes the position after baseline.
+      await fullscreenButton.evaluate((button: HTMLButtonElement) => button.click());
       await expect(
         page.getByRole("button", { name: "بازگشت به سند" }),
       ).toBeVisible();
@@ -1185,8 +1237,7 @@ test.describe("reading continuity audit", () => {
 
       await setReadingProgress(page, 0.52);
       const beforeNarrowViewport = await readingMetric(page);
-      const desktopOnly = process.env.RAAVI_DESKTOP_ONLY === "1";
-      await page.setViewportSize({ width: desktopOnly ? 1024 : 780, height: 820 });
+      await page.setViewportSize({ width: 1024, height: 820 });
       await page.waitForTimeout(480);
       results.push(
         compareScenario(
@@ -1195,30 +1246,6 @@ test.describe("reading continuity audit", () => {
           await readingMetric(page),
         ),
       );
-
-      if (!desktopOnly) {
-        const beforePortraitViewport = await readingMetric(page);
-        await page.setViewportSize({ width: 390, height: 844 });
-        await page.waitForTimeout(520);
-        results.push(
-          compareScenario(
-            "تغییر به نمای موبایل عمودی",
-            beforePortraitViewport,
-            await readingMetric(page),
-          ),
-        );
-
-        const beforeLandscapeViewport = await readingMetric(page);
-        await page.setViewportSize({ width: 844, height: 390 });
-        await page.waitForTimeout(520);
-        results.push(
-          compareScenario(
-            "چرخش شبیه‌سازی‌شده به نمای افقی",
-            beforeLandscapeViewport,
-            await readingMetric(page),
-          ),
-        );
-      }
 
       const beforeWideViewport = await readingMetric(page);
       await page.setViewportSize({ width: 1368, height: 820 });
@@ -1265,8 +1292,13 @@ test.describe("reading continuity audit", () => {
         ),
       );
 
+      const beforeQuitPositions = await page.evaluate(async () => (await window.raaviDesktop!.getLocalDocumentSnapshot())?.readingPositions);
+      const beforeQuitAnchor = Object.values(beforeQuitPositions ?? {}).find(record => record.documentKey.startsWith('file:'))?.anchor;
       await firstApp.close();
       firstApp = null;
+      const diskPositions = JSON.parse(await (await import('node:fs/promises')).readFile(path.join(userDataPath, 'reading-positions.json'), 'utf8'));
+      const persistedAnchor = Object.values(diskPositions as Record<string, { documentKey: string; anchor: { textHash?: string } }>).find(record => record.documentKey.startsWith('file:'))!;
+      expect(persistedAnchor.anchor.textHash).toBe(beforeQuitAnchor?.textHash);
       const restored = await launchAuditApp(projectRoot, userDataPath);
       restoredApp = restored.app;
       await restored.page.waitForTimeout(1_200);
@@ -1274,6 +1306,10 @@ test.describe("reading continuity audit", () => {
       const restoredHeadingCount = await restored.page
         .locator(".markdown-body h2")
         .count();
+      const afterQuitPositions = await restored.page.evaluate(async () => (await window.raaviDesktop!.getLocalDocumentSnapshot())?.readingPositions);
+      const afterQuitAnchor = Object.values(afterQuitPositions ?? {}).find(record => record.documentKey.startsWith('file:'))?.anchor;
+      expect(afterQuitAnchor?.textHash, 'complete paragraph identity must survive quit, including its chapter number').toBe(beforeQuitAnchor?.textHash);
+      expect(afterQuitAnchor?.sourceOffset).toBe(beforeQuitAnchor?.sourceOffset);
       expect(restoredHeadingCount).toBe(AUDIT_CHAPTER_COUNT);
       await expect(
         restored.page.locator(".annotation-toolbar.is-composing"),

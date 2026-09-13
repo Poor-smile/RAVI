@@ -60,7 +60,7 @@ test("W14 keeps structural block selection separate from text selection and rest
     };
   });
   expect(contract).toEqual({
-    width: 760,
+    width: 758,
     height: 34,
     background: "rgb(233, 239, 255)",
     radius: "6px",

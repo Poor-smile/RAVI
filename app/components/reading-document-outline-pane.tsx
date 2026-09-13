@@ -32,6 +32,9 @@ function normalizeOutlineQuery(value: string) {
     .toLocaleLowerCase("fa-IR");
 }
 
+const outlineNumberFormat = new Intl.NumberFormat("fa-IR", { useGrouping: false });
+const outlineTopLevelNumberFormat = new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2, useGrouping: false });
+
 function numberOutlineHeadings(
   headings: readonly ReadingDocumentOutlineHeading[],
 ): NumberedOutlineHeading[] {
@@ -57,10 +60,7 @@ function numberOutlineHeadings(
     const number = counters
       .slice(0, normalizedLevel)
       .map((value) =>
-        value.toLocaleString("fa-IR", {
-          minimumIntegerDigits: normalizedLevel === 1 ? 2 : 1,
-          useGrouping: false,
-        }),
+        (normalizedLevel === 1 ? outlineTopLevelNumberFormat : outlineNumberFormat).format(value),
       )
       .join("٫");
     return { ...heading, normalizedLevel, number };
@@ -106,18 +106,19 @@ export function ReadingDocumentOutlinePane({
     [normalizedQuery, numberedHeadings],
   );
 
+  const activeIndex = activeOffset === null ? -1 : visibleHeadings.findIndex(
+    (heading) => heading.offset === activeOffset,
+  );
   useEffect(() => {
-    if (activeOffset === null) return;
-    const activeIndex = visibleHeadings.findIndex(
-      (heading) => heading.offset === activeOffset,
-    );
     if (activeIndex < 0) return;
     const activeRow =
       listRef.current?.querySelectorAll<HTMLButtonElement>(".sidebar-row")[
         activeIndex
       ];
     activeRow?.scrollIntoView({ block: "nearest" });
-  }, [activeOffset, visibleHeadings]);
+    // Typing before a heading shifts its source offset, but does not move the
+    // active row. Only navigation or a changed list needs to reveal it again.
+  }, [activeIndex, normalizedQuery, visibleHeadings.length]);
 
   const moveRowFocus = (event: KeyboardEvent<HTMLElement>) => {
     if (!(event.target instanceof HTMLButtonElement)) return;
@@ -201,9 +202,9 @@ export function ReadingDocumentOutlinePane({
             aria-label="تیترهای همین سند"
             onKeyDown={moveRowFocus}
           >
-            {visibleHeadings.map((heading) => (
+            {visibleHeadings.map((heading, index) => (
               <SidebarRow
-                key={`${heading.offset}-${heading.text}`}
+                key={`${index}-${heading.text}`}
                 label={heading.text}
                 meta={heading.number}
                 active={heading.offset === activeOffset}

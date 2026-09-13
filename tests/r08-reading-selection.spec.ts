@@ -352,60 +352,7 @@ test("R08 supports RTL keyboard flow, every dismissal path, and real actions", a
   await expect(page.locator(".reading-highlight-row")).toHaveCount(1);
 });
 
-test("R08 keeps both actions touch-safe and inside the mobile Reading workspace", async ({
-  page,
-}) => {
-  await openReadingFixture(page, {
-    viewport: { width: 375, height: 812 },
-  });
-  await selectFragment(page);
-  const menu = page.getByRole("toolbar", {
-    name: "ابزار متن انتخاب‌شده",
-  });
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole("button")).toHaveCount(2);
-
-  const contract = await page.evaluate(() => {
-    const menu = document.querySelector<HTMLElement>(
-      ".reading-selection-menu",
-    )!;
-    const workspace = document.querySelector<HTMLElement>(
-      '[data-workspace-screen="reading"]',
-    )!;
-    const buttons = menu.querySelectorAll<HTMLElement>("button");
-    const menuRect = menu.getBoundingClientRect();
-    const workspaceRect = workspace.getBoundingClientRect();
-    return {
-      menu: {
-        x: Math.round(menuRect.x),
-        right: Math.round(menuRect.right),
-        width: Math.round(menuRect.width),
-        height: Math.round(menuRect.height),
-      },
-      workspace: {
-        x: Math.round(workspaceRect.x),
-        right: Math.round(workspaceRect.right),
-      },
-      actions: Array.from(buttons, (button) => {
-        const rect = button.getBoundingClientRect();
-        return {
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        };
-      }),
-    };
-  });
-
-  expect(contract.menu.width).toBeGreaterThanOrEqual(240);
-  expect(contract.menu.width).toBeLessThanOrEqual(248);
-  expect(contract.menu.height).toBe(60);
-  expect(contract.menu.x).toBeGreaterThanOrEqual(contract.workspace.x + 8);
-  expect(contract.menu.right).toBeLessThanOrEqual(contract.workspace.right - 8);
-  expect(contract.actions).toEqual([
-    { width: 108, height: 44 },
-    { width: 108, height: 44 },
-  ]);
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.
 
 for (const theme of ["light", "dark"] as const) {
   test(`comment composer is a centered keyboard modal and retains the reading anchor in ${theme}`, async ({ page }) => {

@@ -109,13 +109,13 @@ test("W05 matches the complete block menu and preserves keyboard editing flow", 
   });
 
   expect(geometry.menu).toEqual({
-    x: 680,
-    y: 170,
+    x: 679,
+    y: 171,
     width: 320,
     height: 378,
   });
-  expect(geometry.gutter).toEqual({ x: 1000, y: 322, width: 58, height: 28 });
-  expect(geometry.trigger).toEqual({ x: 1000, y: 322, width: 28, height: 28 });
+  expect(geometry.gutter).toEqual({ x: 999, y: 323, width: 58, height: 28 });
+  expect(geometry.trigger).toEqual({ x: 999, y: 323, width: 28, height: 28 });
   expect(new Set(geometry.itemHeights)).toEqual(new Set([26]));
   expect(
     geometry.itemContentPositions.every(({ titleX, aliasX }) => titleX > aliasX),

@@ -30,6 +30,7 @@ function hashText(value: string) {
  */
 export function findFormulaBlocks(markdown: string): FormulaBlock[] {
   const blocks: FormulaBlock[] = [];
+  if (!markdown.includes("$$")) return blocks;
   const lineExpression = /(^|\n)([ \t]*\$\$[ \t]*\r?\n)([\s\S]*?)(\r?\n[ \t]*\$\$[ \t]*)(?=\n|$)/gu;
 
   for (const match of markdown.matchAll(lineExpression)) {

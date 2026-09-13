@@ -621,6 +621,7 @@ export function MermaidSimpleBuilder({
   onChooseKind: (draft: SimpleDiagramDraft | null) => void;
   onPreviewChange?: (preview: MermaidDiagramPreview | null) => void;
 }) {
+  const [selectedSeries, setSelectedSeries] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const historyKey = draft?.kind ?? "none";
   const [history, setHistory] = useState<{ key: string; undo: SimpleDiagramDraft[]; redo: SimpleDiagramDraft[] }>({ key: historyKey, undo: [], redo: [] });
@@ -671,6 +672,18 @@ export function MermaidSimpleBuilder({
   const settings = settingControls(draft.kind);
   const issues = validateSimpleDiagramDraft(draft);
   const summaries = structureSummary(draft);
+  const seriesNames = [...new Set(draft.rows.map(row => String(row.meta.series || "سری ۱")))];
+  const currentSeries = seriesNames.includes(selectedSeries) ? selectedSeries : seriesNames[0];
+  const Overview = draft.kind === "xychart" ? "details" : "div";
+  const updateSeries = (key: string, value: string | boolean) => {
+    commit({ ...draft, rows: draft.rows.map(row => String(row.meta.series || "سری ۱") === currentSeries ? { ...row, meta: { ...row.meta, [key]: value } } : row) });
+    if (key === "series") setSelectedSeries(String(value));
+  };
+  const addPoint = () => {
+    const point = createSimpleDiagramRow(draft.kind, nextRowId());
+    const source = draft.rows.find(row => String(row.meta.series || "سری ۱") === currentSeries);
+    commit({ ...draft, rows: [...draft.rows, draft.kind === "xychart" && source ? { ...point, meta: { ...source.meta } } : point] });
+  };
   const issueFor = (rowId: string | undefined, field: SimpleDiagramIssue["field"]) => issues.find((issue) => issue.rowId === rowId && issue.field === field)?.message;
   const updateRow = (id: string, field: "first" | "second" | "value", value: string) => commit({ ...draft, rows: draft.rows.map((item) => item.id === id ? { ...item, [field]: value } : item) });
   const updateRowMeta = (id: string, key: string, value: string | boolean) => commit({ ...draft, rows: draft.rows.map((item) => item.id === id ? { ...item, meta: { ...item.meta, [key]: value } } : item) });
@@ -704,6 +717,8 @@ export function MermaidSimpleBuilder({
         </div>
       </header>
 
+      <Overview className={draft.kind === "xychart" ? "xy-overview-settings" : "diagram-overview-settings"}>
+      {draft.kind === "xychart" && <summary>تنظیمات کلی نمودار</summary>}
       {option?.showTitle && (
         <label className="mermaid-form-title"><span>عنوان نمودار</span><input value={draft.title} onChange={(event) => commit({ ...draft, title: event.target.value })} data-editable-kind="generic" dir="auto" maxLength={180} /></label>
       )}
@@ -735,24 +750,45 @@ export function MermaidSimpleBuilder({
         </details>
       )}
 
+      </Overview>
       {issues.length > 0 && (
-        <div className="mermaid-form-issues" role="status" aria-live="polite"><AlertCircle size={18} aria-hidden="true" /><span><strong>{issues.length.toLocaleString("fa-IR")} مورد نیاز به اصلاح است.</strong> پیام هر مورد کنار همان فیلد نمایش داده شده است.</span></div>
+        <div className="mermaid-form-issues" role="status" aria-live="polite"><AlertCircle size={18} aria-hidden="true" /><span><strong>{issues.length.toLocaleString("fa-IR")} مورد نیاز به اصلاح است.</strong><ul>{issues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul></span></div>
       )}
 
       {summaries.length > 0 && (
         <details className="mermaid-structure-outline"><summary>نمای ساختار <small>{summaries.length.toLocaleString("fa-IR")} ردیف</small></summary><ol>{summaries.map((summary, index) => <li key={`${draft.rows[index]?.id}-summary`}>{summary}</li>)}</ol></details>
       )}
 
+      {draft.kind === "xychart" && <section className="xy-series-controls" aria-label="سری‌های نمودار XY">
+        <div className="xy-series-tabs" role="group" aria-label="سری جاری">{seriesNames.map(name => <button type="button" key={name} aria-pressed={currentSeries === name} onClick={() => setSelectedSeries(name)}>{name} · {draft.rows.filter(row => String(row.meta.series || "سری ۱") === name).length.toLocaleString("fa-IR")} نقطه</button>)}</div>
+        <label>نام سری <input value={currentSeries} onChange={event => updateSeries("series", event.target.value)} /></label>
+        <details className="xy-series-style"><summary>تنظیمات سری · نوع و رنگ</summary><div>
+        <label>نوع سری <select value={String(draft.rows.find(row => String(row.meta.series || "سری ۱") === currentSeries)?.meta.seriesType || "line")} onChange={event => updateSeries("seriesType", event.target.value)}><option value="line">خطی</option><option value="bar">ستونی</option></select></label>
+        <label>رنگ سری <input dir="ltr" placeholder="#2557e5" value={String(draft.rows.find(row => String(row.meta.series || "سری ۱") === currentSeries)?.meta.color || "")} onChange={event => updateSeries("color", event.target.value)} /></label>
+        </div></details>
+        <button type="button" onClick={() => {
+          let index = seriesNames.length + 1;
+          while (seriesNames.includes(`سری ${index}`)) index++;
+          const name = `سری ${index}`;
+          const point = createSimpleDiagramRow("xychart", nextRowId());
+          commit({ ...draft, rows: [...draft.rows, { ...point, meta: { ...point.meta, series: name } }] }); setSelectedSeries(name);
+        }}><Plus size={16} aria-hidden="true" /> افزودن سری</button>
+      </section>}
       <div className={`mermaid-form-table ${fields.value ? "has-value" : "without-value"} ${fields.value && !numericValue ? "value-is-text" : "value-is-compact"} is-${draft.kind}`}>
         <div className="mermaid-form-table-head" aria-hidden="true"><span>{fields.first}</span>{fields.second && <span>{fields.second}</span>}{fields.value && <span>{fields.value}</span>}<span /></div>
-        {draft.rows.map((item, index) => {
-          const extras = rowControls(draft.kind, draft, item);
+        {draft.rows.filter(item => draft.kind !== "xychart" || String(item.meta.series || "سری ۱") === currentSeries).map((item) => {
+          const index = draft.rows.findIndex(row => row.id === item.id);
+          const extras = rowControls(draft.kind, draft, item).filter(spec => draft.kind !== "xychart" || !["series", "seriesType", "color"].includes(spec.key));
           const detailsCopy = rowDetailsCopy(draft.kind, extras.length);
           const firstError = issueFor(item.id, "first");
           const secondError = issueFor(item.id, "second");
           const valueError = issueFor(item.id, "value");
           return (
             <div className={`mermaid-form-row-shell${draggingId === item.id ? " is-dragging" : ""}`} key={item.id} onDragOver={(event) => event.preventDefault()} onDrop={() => { if (draggingId) moveRowTo(draggingId, item.id); setDraggingId(null); }}>
+              {draft.kind === "xychart" && <label className="xy-point-series">سری نقطهٔ {item.first || (index + 1).toLocaleString("fa-IR")}<select aria-label={`انتقال نقطه ${item.first || index + 1} به سری`} value={String(item.meta.series || "سری ۱")} onChange={event => {
+                const target = draft.rows.find(row => String(row.meta.series || "سری ۱") === event.target.value);
+                commit({ ...draft, rows: draft.rows.map(row => row.id === item.id ? { ...row, meta: { ...row.meta, series: event.target.value, seriesType: target?.meta.seriesType || "line", color: target?.meta.color || "" } } : row) });
+              }}>{seriesNames.map(name => <option key={name}>{name}</option>)}</select></label>}
               <div className="mermaid-form-row">
                 <label className={firstError ? "has-error" : ""}><span className="visually-hidden">{fields.first}، ردیف {(index + 1).toLocaleString("fa-IR")}</span><input value={item.first} onChange={(event) => updateRow(item.id, "first", event.target.value)} placeholder={fields.first} data-editable-kind="generic" dir="auto" maxLength={160} aria-invalid={Boolean(firstError)} aria-describedby={firstError ? `${item.id}-first-error` : undefined} />{firstError && <small id={`${item.id}-first-error`} className="mermaid-inline-error">{firstError}</small>}</label>
                 {fields.second && <label className={secondError ? "has-error" : ""}><span className="visually-hidden">{fields.second}، ردیف {(index + 1).toLocaleString("fa-IR")}</span><input value={item.second} onChange={(event) => updateRow(item.id, "second", event.target.value)} placeholder={fields.second} inputMode={fields.valueInput === "date" ? "numeric" : undefined} data-editable-kind="generic" dir={fields.valueInput === "date" ? "ltr" : "auto"} maxLength={200} aria-invalid={Boolean(secondError)} aria-describedby={secondError ? `${item.id}-second-error` : undefined} />{secondError && <small id={`${item.id}-second-error`} className="mermaid-inline-error">{secondError}</small>}</label>}
@@ -795,7 +831,7 @@ export function MermaidSimpleBuilder({
         })}
       </div>
 
-      <button type="button" className="mermaid-form-add" onClick={() => commit({ ...draft, rows: [...draft.rows, createSimpleDiagramRow(draft.kind, nextRowId())] })}><Plus size={17} aria-hidden="true" />{fields.add}</button>
+      <button type="button" className="mermaid-form-add" onClick={addPoint}><Plus size={17} aria-hidden="true" />{draft.kind === "xychart" ? `افزودن نقطه به ${currentSeries}` : fields.add}</button>
 
       {ADVANCED_ONLY[draft.kind] && <p className="mermaid-advanced-note"><span>فقط در حالت پیشرفته</span>{ADVANCED_ONLY[draft.kind]}</p>}
       <p className="mermaid-form-footnote">تغییرها همان لحظه در پیش‌نمایش دیده می‌شوند؛ متن اصلی فارسی ذخیره می‌شود و تبدیل‌های عددی فقط هنگام رندر انجام می‌شوند.</p>

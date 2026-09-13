@@ -2,6 +2,8 @@ import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
+import { markdownWorkerPlugin } from "./build/markdown-worker-plugin";
+import { micromarkLinearDataPlugin } from "./build/micromark-linear-data-plugin";
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
@@ -51,6 +53,7 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    worker: { plugins: () => [markdownWorkerPlugin(), micromarkLinearDataPlugin()] },
     build: {
       // The app shell is intentionally broad; feature chunks have stricter,
       // release-blocking budgets in app/release/client-chunk-budgets.json.
@@ -76,6 +79,7 @@ export default defineConfig(async () => {
       },
     },
     plugins: [
+      micromarkLinearDataPlugin(),
       vinext(),
       sites(),
       cloudflare({

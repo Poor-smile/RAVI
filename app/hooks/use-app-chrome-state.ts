@@ -8,15 +8,13 @@ import { useState } from "react";
  * for titlebar and command-bar popovers.
  */
 export function useAppChromeState() {
-  const mobileHeaderMenu = useState(false);
+  const headerMenu = useState(false);
   const documentMenu = useState(false);
-  const mobileEditorTools = useState(false);
   const editorToolMenu = useState(false);
 
   return [
-    mobileHeaderMenu,
+    headerMenu,
     documentMenu,
-    mobileEditorTools,
     editorToolMenu,
   ] as const;
 }

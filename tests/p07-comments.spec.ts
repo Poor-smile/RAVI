@@ -288,8 +288,7 @@ test("P07 assembles the independent editable Comments panel from Figma", async (
   await expect(sidebar).toHaveClass(/is-collapsed/);
   await expect(trigger).toBeFocused();
 
-  if (process.env.RAAVI_DESKTOP_ONLY === "1") return;
-  await page.setViewportSize({ width: 375, height: 812 });
+  await page.setViewportSize({ width: 1024, height: 812 });
   const overflow = page.getByRole("button", {
     name: "بازکردن فرمان‌های بیشتر",
   });
@@ -300,7 +299,7 @@ test("P07 assembles the independent editable Comments panel from Figma", async (
   await expect(sidebar).toHaveAttribute("role", "dialog");
   await sidebar.getByRole("button", { name: "جست‌وجو در نظرات" }).click();
   await jumps.first().focus();
-  const mobileTargets = await page.evaluate(() => {
+  const compactTargets = await page.evaluate(() => {
     const size = (selector: string) => {
       const bounds = document
         .querySelector<HTMLElement>(selector)!
@@ -318,12 +317,12 @@ test("P07 assembles the independent editable Comments panel from Figma", async (
       row: size(".reading-comment-row"),
     };
   });
-  expect(mobileTargets).toMatchObject({
-    searchDismiss: { width: 44, height: 44 },
-    deleteAction: { width: 44, height: 44 },
-    jump: { height: 44 },
-    body: { height: 44 },
-    row: { height: 88 },
+  expect(compactTargets).toMatchObject({
+    searchDismiss: { width: 32, height: 32 },
+    deleteAction: { width: 36, height: 36 },
+    jump: { height: 24 },
+    body: { height: 24 },
+    row: { height: 64 },
   });
   await page.keyboard.press("Escape");
   await expect(sidebar).toBeHidden();

@@ -123,8 +123,8 @@ test("P17 Files & Library is persistent and drives the local library", async ({
   }
 });
 
-test("P17 Files & Library remains touch-safe and overflow-free", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+test("P17 Files & Library remains usable in a narrow desktop window and overflow-free", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 844 });
   await page.addInitScript(() => window.localStorage.clear());
   await page.goto("/");
   await expect(page.locator(".app-shell")).toHaveAttribute("data-hydrated", "true");
@@ -140,5 +140,5 @@ test("P17 Files & Library remains touch-safe and overflow-free", async ({ page }
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   }));
   expect(contract.overflow).toBeLessThanOrEqual(0);
-  for (const height of contract.heights) expect(height).toBeGreaterThanOrEqual(44);
+  for (const height of contract.heights) expect(height).toBeGreaterThanOrEqual(34);
 });

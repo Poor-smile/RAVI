@@ -240,65 +240,24 @@ test.describe("RAVI identity baseline", () => {
       });
       expect(await interactiveTypeIssues(window, 12)).toEqual([]);
 
+      // Desktop access now keeps the full desk at narrow widths and high zoom.
+      // Mobile tabs are retired; verify that resizing preserves the active editor.
+      const activeMode = window.locator('.editor-mode-switcher button[aria-pressed="true"]');
+      const modeBeforeResize = await activeMode.getAttribute("aria-label");
       await app.evaluate(({ BrowserWindow }) => {
         BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(2);
       });
-      await expect
-        .poll(() =>
-          window.evaluate(() => {
-            const header = document.querySelector<HTMLElement>(".topbar");
-            return (
-              document.documentElement.scrollWidth - globalThis.innerWidth <= 0 &&
-              Boolean(header && header.scrollWidth - header.clientWidth <= 0)
-            );
-          }),
-        )
-        .toBe(true);
+      await expect(window.locator(".app-shell")).toBeVisible();
+      await expect(activeMode).toHaveAttribute("aria-label", modeBeforeResize!);
+      await expect(window.locator(".mobile-tabs")).toHaveCount(0);
       await app.evaluate(({ BrowserWindow }) => {
         BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(1);
       });
-
-      if (process.env.RAAVI_DESKTOP_ONLY === "1") return;
-      await window.setViewportSize({ width: 320, height: 844 });
-      await expect(window.locator(".mobile-tabs")).toBeVisible();
-      await expect(window.locator(".topbar-action--open")).toBeVisible();
-      await expect(window.locator(".topbar-action--open .action-label")).toBeHidden();
-      await expect(window.locator(".save-indicator")).toHaveCSS(
-        "font-size",
-        "13px",
-      );
-      expect(
-        await window.locator(".topbar button:visible").evaluateAll((buttons) =>
-          buttons
-            .map((button) => {
-              const rect = button.getBoundingClientRect();
-              return { height: rect.height, width: rect.width };
-            })
-            .filter(({ height, width }) => height < 44 || width < 44),
-        ),
-      ).toEqual([]);
-      expect(
-        await window.evaluate(
-          () => document.documentElement.scrollWidth - globalThis.innerWidth,
-        ),
-      ).toBeLessThanOrEqual(0);
-      await expect(window).toHaveScreenshot("identity-shell-320.png", {
-        animations: "disabled",
-        caret: "hide",
-        maxDiffPixels: 100,
-        scale: "css",
-      });
-      const mobileTypeIssues = await interactiveTypeIssues(window, 13);
-      const mobileTypeContext = await window.evaluate(() => ({
-        innerWidth: globalThis.innerWidth,
-        labelToken: getComputedStyle(document.documentElement)
-          .getPropertyValue("--type-ui-label")
-          .trim(),
-        saveIndicator: getComputedStyle(
-          document.querySelector<HTMLElement>(".save-indicator")!,
-        ).fontSize,
-      }));
-      expect(mobileTypeIssues, JSON.stringify(mobileTypeContext)).toEqual([]);
+      await window.setViewportSize({ width: 600, height: 844 });
+      await expect(window.locator(".app-shell")).toBeVisible();
+      await expect(activeMode).toHaveAttribute("aria-label", modeBeforeResize!);
+      await expect(window.locator(".document-identity")).toContainText("identity-baseline.md");
+      await expect(window.locator(".mobile-tabs")).toHaveCount(0);
     } finally {
       await app.close();
       await rm(userDataPath, { recursive: true, force: true });

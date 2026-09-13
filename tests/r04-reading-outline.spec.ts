@@ -299,14 +299,16 @@ test("R04 scroll spy keeps the active outline row synchronized with Reading", as
     .toBeLessThan(80);
 });
 
-test("R04 keeps skipped heading levels distinct and exposes 44px mobile targets", async ({
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.
+
+test("R04 keeps skipped heading levels distinct in the desktop outline", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 375, height: 812 });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await openReadingFixture(
     page,
     READING_OUTLINE_GAP_FIXTURE,
-    "r04-reading-outline-mobile",
+    "r04-reading-outline-desktop",
   );
 
   const drawer = page.locator("#library-panel");
@@ -316,8 +318,7 @@ test("R04 keeps skipped heading levels distinct and exposes 44px mobile targets"
   });
   await outlineTrigger.click();
 
-  await expect(drawer).toHaveAttribute("role", "dialog");
-  await expect(drawer).toHaveAttribute("aria-modal", "true");
+  await expect(drawer).toHaveAttribute("role", "complementary");
   const rows = drawer.locator(".reading-document-outline-list .sidebar-row");
   await expect(rows).toHaveCount(3);
   await expect(rows.nth(0).locator(".sidebar-row-meta")).toHaveText("۰۱");
@@ -328,28 +329,6 @@ test("R04 keeps skipped heading levels distinct and exposes 44px mobile targets"
   const dismissSearch = drawer.getByRole("button", {
     name: "بستن جست‌وجوی فهرست",
   });
-  const targets = await page.evaluate(() => {
-    const dismiss = document.querySelector<HTMLElement>(
-      ".reading-outline-search-control button",
-    )!;
-    const row = document.querySelector<HTMLElement>(
-      ".reading-document-outline-list .sidebar-row",
-    )!;
-    const dismissRect = dismiss.getBoundingClientRect();
-    const rowRect = row.getBoundingClientRect();
-    return {
-      dismiss: {
-        width: Math.round(dismissRect.width),
-        height: Math.round(dismissRect.height),
-      },
-      rowHeight: Math.round(rowRect.height),
-    };
-  });
-  expect(targets).toEqual({
-    dismiss: { width: 44, height: 44 },
-    rowHeight: 44,
-  });
-
   await dismissSearch.click();
   await expect(
     drawer.getByRole("searchbox", {

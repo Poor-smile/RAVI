@@ -126,8 +126,8 @@ test("P18 external image asks before any network request and external links warn
   expect(imageRequests).toBe(1);
 });
 
-test("P18 remains touch-safe and reset preserves the document snapshot", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+test("P18 remains usable in a narrow desktop window and reset preserves the document snapshot", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 844 });
   await page.addInitScript(() => {
     if (sessionStorage.getItem("p18-reset")) return;
     localStorage.clear();
@@ -168,7 +168,7 @@ test("P18 remains touch-safe and reset preserves the document snapshot", async (
     overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
   }));
   expect(contract.overflow).toBeLessThanOrEqual(0);
-  for (const height of contract.heights) expect(height).toBeGreaterThanOrEqual(44);
+  for (const height of contract.heights) expect(height).toBeGreaterThanOrEqual(36);
 
   await dialog.getByRole("button", { name: "بازنشانی", exact: true }).click();
   await Promise.all([

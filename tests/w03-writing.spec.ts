@@ -107,16 +107,16 @@ test("W03 assembles the viewport-sized 760px writing document, live blocks, gutt
     width: 760,
     height: 754,
   });
-  expect(geometry.firstBlock.y - geometry.document.y).toBe(32);
+  expect(geometry.firstBlock.y - geometry.document.y).toBe(33);
   expect(geometry.radius).toBe("14px");
-  expect(geometry.gutter.x).toBe(1000);
-  expect(geometry.gutter.y).toBe(322);
+  expect(geometry.gutter.x).toBe(999);
+  expect(geometry.gutter.y).toBe(323);
   expect(geometry.gutter.width).toBe(58);
   expect(geometry.gutter.height).toBe(28);
   expect(geometry.activeBlock).toEqual({
-    x: 232,
-    y: 338,
-    width: 760,
+    x: 233,
+    y: 339,
+    width: 758,
     height: 34,
   });
   expect(geometry.bodyFontSize).toBe("12px");
@@ -126,7 +126,7 @@ test("W03 assembles the viewport-sized 760px writing document, live blocks, gutt
   expect(geometry.saveRadius).toBe("4px");
   expect(geometry.status).toEqual({
     x: 502,
-    y: 869,
+    y: 868,
     width: 220,
     height: 20,
   });
@@ -160,7 +160,7 @@ test("W03 assembles the viewport-sized 760px writing document, live blocks, gutt
   await expect(documentMenu).toBeHidden();
   await expect(documentMenuTrigger).toBeFocused();
 
-  await page.setViewportSize({ width: 850, height: 914 });
+  await page.setViewportSize({ width: 1024, height: 914 });
   const narrowGeometry = await page.evaluate(() => {
     const workspace = document.querySelector<HTMLElement>(
       '[data-workspace-screen="writing"]',
@@ -178,7 +178,7 @@ test("W03 assembles the viewport-sized 760px writing document, live blocks, gutt
       gutterRight: Math.round(gutter.right),
     };
   });
-  expect(narrowGeometry.documentWidth).toBeLessThan(760);
+  expect(narrowGeometry.documentWidth).toBeLessThanOrEqual(760);
   expect(narrowGeometry.gutterRight).toBeLessThanOrEqual(
     narrowGeometry.workspaceRight,
   );
@@ -218,13 +218,13 @@ test("W03 assembles the viewport-sized 760px writing document, live blocks, gutt
       viewportHeight: 720,
       documentHeight: 560,
       documentBottomGap: 16,
-      statusBottomGap: 25,
+      statusBottomGap: 26,
     },
     {
       viewportHeight: 1200,
       documentHeight: 1040,
       documentBottomGap: 16,
-      statusBottomGap: 25,
+      statusBottomGap: 26,
     },
   ]);
 

@@ -182,7 +182,7 @@ const BASE_COMMAND_REGISTRY: CommandBaseDefinition[] = [
     title: "ذخیره نسخه",
     group: "file",
     bindings: [{ code: "KeyS", primary: true }],
-    allowInEditable: ["editor", "annotationBody", "saveName"],
+    allowInEditable: true,
     showInHelp: true,
   },
   {

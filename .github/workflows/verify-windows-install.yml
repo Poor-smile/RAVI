@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       allow_unsigned:
-        description: Explicitly test the labelled unsigned 2.4.5 release without claiming valid Authenticode
+        description: Explicitly test the labelled unsigned 2.4.6 release without claiming valid Authenticode
         required: true
         default: false
         type: boolean
@@ -38,7 +38,7 @@ jobs:
         run: |
           $stage = Join-Path $env:RUNNER_TEMP 'raavi-install-test'
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
-          Copy-Item -LiteralPath 'tests/fixtures/windows-release-2.4.5.json' -Destination (Join-Path $stage 'contract.json')
+          Copy-Item -LiteralPath 'tests/fixtures/windows-release-2.4.6.json' -Destination (Join-Path $stage 'contract.json')
           $contract = Get-Content -LiteralPath (Join-Path $stage 'contract.json') -Raw | ConvertFrom-Json
           foreach ($entry in @($contract.candidate, $contract.previous)) {
             gh release download "v$($entry.version)" --repo Poor-smile/RAVI --pattern $entry.file --dir $stage
@@ -57,7 +57,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: raavi-windows-install-upgrade-2.4.5
+          name: raavi-windows-install-upgrade-2.4.6
           path: ${{ runner.temp }}/raavi-install-evidence
           if-no-files-found: warn
           retention-days: 30

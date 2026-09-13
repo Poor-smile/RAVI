@@ -88,7 +88,6 @@ test("W09 opens the exact compact overflow menu with real commands and keyboard 
     return {
       geometry: {
         menu: rect(".header-overflow-menu"),
-        header: rect(".header-overflow-header"),
         grid: rect(".header-overflow-grid"),
         firstItem: rect(
           '.header-overflow-grid [data-overflow-action="commands"]',
@@ -111,8 +110,6 @@ test("W09 opens the exact compact overflow menu with real commands and keyboard 
         trigger: style(".header-overflow-trigger").backgroundColor,
       },
       type: {
-        titleSize: style(".header-overflow-header strong").fontSize,
-        titleLineHeight: style(".header-overflow-header strong").lineHeight,
         itemSize: firstItemLabelStyle.fontSize,
         shortcutSize: shortcutStyle.fontSize,
         shortcutLineHeight: shortcutStyle.lineHeight,
@@ -125,12 +122,11 @@ test("W09 opens the exact compact overflow menu with real commands and keyboard 
 
   expect(contract.geometry).toEqual({
     menu: { x: 16, y: 96, width: 320, height: 294 },
-    header: { x: 20, y: 100, width: 312, height: 36 },
-    grid: { x: 20, y: 140, width: 312, height: 246 },
-    firstItem: { x: 20, y: 140, width: 312, height: 36 },
-    firstDivider: { x: 24, y: 260, width: 304, height: 1 },
+    grid: { x: 20, y: 100, width: 312, height: 246 },
+    firstItem: { x: 20, y: 100, width: 312, height: 36 },
+    firstDivider: { x: 24, y: 220, width: 304, height: 1 },
     document: { x: 232, y: 144, width: 760, height: 754 },
-    status: { x: 502, y: 869, width: 220, height: 20 },
+    status: { x: 502, y: 868, width: 220, height: 20 },
   });
   expect(contract.surface).toEqual({
     background: "rgb(24, 30, 26)",
@@ -146,8 +142,6 @@ test("W09 opens the exact compact overflow menu with real commands and keyboard 
     trigger: "rgb(20, 26, 22)",
   });
   expect(contract.type).toEqual({
-    titleSize: "12px",
-    titleLineHeight: "18px",
     itemSize: "12px",
     shortcutSize: "13px",
     shortcutLineHeight: "23px",

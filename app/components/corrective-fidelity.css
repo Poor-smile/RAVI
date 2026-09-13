@@ -1,0 +1,113 @@
+/* REM-04: scoped tokens and shared controls from the corrective Figma contract. */
+@font-face { font-family: Vazirmatn; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/Vazirmatn-Regular.ttf') format('truetype'); }
+@font-face { font-family: Vazirmatn; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/Vazirmatn-Bold.ttf') format('truetype'); }
+:root { --font-corrective: Vazirmatn, Tahoma, sans-serif; }
+:root .ai-chat-panel, :root .export-modal, :root .mermaid-form-builder { font-family: var(--font-corrective); }
+:root .ai-chat-panel :is(button,input,textarea,select),:root .export-modal :is(button,input,select),:root .mermaid-form-builder :is(button,input,select) { font-family: inherit; }
+:root .ai-chat-panel { background: var(--paper-50); padding: 0; gap: 8px; }
+:root .app-shell.is-new-ui #sidebar-pane-content.is-sidebar-ai { padding: 0; }
+:root .ai-context-details { border: 0; border-radius: 6px; background: var(--proof-blue-soft); }
+:root .ai-context-details summary { box-sizing: border-box; height: 44px; min-height: 44px; padding: 0 14px; color: var(--proof-blue); }
+:root .ai-context-details summary .ai-context-kind { flex: none; display: flex; }
+:root .ai-context-details summary .ai-context-summary { display: grid; gap: 0; }
+:root .ai-context-summary strong { font-size: 12px; line-height: 18px; font-weight: 700; }
+:root .ai-context-details summary small { overflow: hidden; text-overflow: ellipsis; font-size: 11px; line-height: 17px; color: var(--ink-950); }
+:root .ai-context-details[open] .ai-context-chevron { transform: rotate(180deg); }
+:root .ai-context-details pre { margin: 0; padding: 8px 14px 14px; font-size: 13px; line-height: 1.8; }
+:root .ai-context-details p { margin: 0; padding: 8px 14px 0; }
+:root .ai-context-details.is-stale { background: var(--error-soft); }
+:root .ai-context-details.is-stale summary { color: var(--error); }
+:root .ai-context-conflict { padding: 14px; border: 1px solid var(--error); background: var(--error-soft); border-radius: 6px; }
+:root .ai-context-conflict strong { display: flex; align-items: center; gap: 8px; }
+:root .ai-chat-scroll { padding: 6px 14px; }
+:root .ai-message.is-user { padding: 0; max-width: 100%; background: transparent; }
+:root .ai-change-review { gap: 14px; }
+:root .ai-change-review > div { padding: 14px; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper-100); }
+:root .ai-change-review > .ai-review-proposal { border-color: var(--proof-blue); background: var(--input-bg); }
+:root .ai-change-review strong { display: block; color: var(--ink-700); font-size: 11px; line-height: 17px; font-weight: 700; }
+:root .ai-review-proposal strong { color: var(--proof-blue); }
+:root .ai-change-review pre { border: 0; padding: 8px 0 0; background: transparent; font: 400 16px/2 var(--font-corrective); }
+:root .ai-change-review small { font-size: 11px; }
+:root .ai-result-actions > button { min-height: 36px; font-weight: 700; }
+:root .ai-result-actions > button.is-primary { color: var(--proof-blue); background: var(--proof-blue-soft); border: 1px solid var(--focus-ring); }
+:root .ai-input-placeholder { flex-wrap: nowrap; color: var(--ink-950); font-weight: 400; }
+:root .ai-input-placeholder kbd { flex: none; font-family: 'Cascadia Code', Consolas, monospace; }
+:root .ai-composer-shell { padding: 8px; }
+:root .ai-context-details summary:focus-visible, :root .xy-overview-settings summary:focus-visible, :root .xy-series-style summary:focus-visible, :root .export-modal :is(button,select,input):focus-visible, :root .xy-series-tabs button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+:root .export-backdrop--idle { background: transparent; align-items: flex-start; justify-content: flex-start; padding: 0; }
+:root .export-modal--idle { position: fixed; inset-block-start: 88px; inset-inline-end: auto; left: 242px; width: 320px; max-width: calc(100vw - 24px); border-radius: 6px; padding: 8px 4px; box-shadow: 0 12px 32px #0003; }
+:root .export-modal--idle .export-modal-header { height: 32px; min-height: 32px; padding: 0 10px; display: flex; justify-content: flex-end; }
+:root .export-modal--idle .export-modal-header strong { font-size: 12px; line-height: 18px; color: var(--ink-700); }
+:root .export-modal--idle .export-modal-header :is(button,.export-modal-mark),:root .export-modal--idle :is(.export-modal-divider,.export-modal-actions) { display: none; }
+:root .export-modal--idle .export-modal-body { padding: 0; }
+:root .export-format-choice { gap: 0; }
+:root .export-format-choice button { box-sizing: border-box; min-height: 36px; height: 36px; width: 100%; padding: 0 10px; font-size: 12px; line-height: 18px; font-weight: 700; border-radius: 4px; }
+:root .export-format-choice button:hover { background: var(--paper-200); }
+:root .export-modal .export-format-choice button { font: 700 12px/18px var(--font-corrective); }
+:root .app-shell .export-modal .export-format-choice button { font-size: 12px; }
+:root .app-shell .ai-chat-panel .ai-context-details .ai-context-summary strong { font: 700 12px/18px var(--font-corrective); }
+:root .app-shell .ai-chat-panel .ai-context-details .ai-context-summary small { font: 700 11px/17px var(--font-corrective); }
+:root .app-shell .ai-chat-panel .ai-result-actions > button, :root .app-shell .mermaid-form-builder .xy-series-tabs button { font: 700 12px/18px var(--font-corrective); }
+:root .export-modal--review { width: min(600px, calc(100vw - 32px)); }
+:root .export-warning-locate { display: flex; margin-block-start: 8px; margin-inline-start: auto; min-height: 36px; padding: 6px 14px; color: var(--ink-950); background: var(--paper-200); border: 0; border-radius: 4px; cursor: pointer; }
+
+:root .export-backdrop--preview { top: 92px; right: 56px; padding: 0; background: var(--editor-workspace-bg); align-items: stretch; }
+:root .export-modal--preview { width: 100%; max-width: none; height: 100%; max-height: none; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; background: var(--editor-workspace-bg); }
+/* The document remains white; preview chrome inherits the active application theme. */
+:root .export-modal--preview {
+ --ink-950: inherit; --ink-900: inherit; --ink-700: inherit; --ink-500: inherit;
+ --paper-50: inherit; --paper-100: inherit; --paper-200: inherit;
+ --proof-blue: inherit; --proof-blue-dark: inherit; --proof-blue-soft: inherit;
+ --focus-ring: inherit; --rule: inherit; --shadow-color: inherit;
+ color: var(--ink-950); color-scheme: inherit;
+}
+:root[data-theme="dark"] .export-modal--preview { color-scheme: dark; }
+:root .pdf-preview { min-height: 0; height: 100%; display: grid; direction: rtl; grid-template-columns: 344px minmax(0,1fr); gap: 24px; padding: 36px 12px; box-sizing: border-box; }
+:root .pdf-preview-settings { box-sizing: border-box; min-height: 0; padding: 24px; display: flex; flex-direction: column; align-items: stretch; gap: 18px; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper-50); color: var(--ink-950); overflow-y: auto; font-size: 13px; }
+:root .pdf-preview-settings > strong { font-size: 14px; line-height: 22px; }
+:root .pdf-preview-settings > strong:first-child { display: flex; gap: 8px; align-items: center; }
+:root .pdf-preview-settings > p { border-block-start: 1px solid var(--rule); margin: 0; padding-block-start: 14px; color: var(--ink-700); font-size: 12px; line-height: 1.8; }
+:root .pdf-preview-orientation { display: flex; gap: 8px; }
+:root .pdf-preview-orientation button, :root .pdf-preview-controls :is(button,select) { min-height: 36px; border: 1px solid transparent; border-radius: 4px; padding: 6px 14px; color: var(--ink-950); background: var(--paper-200); font: 700 12px/18px var(--font-corrective); cursor: pointer; }
+:root .pdf-preview-orientation button[aria-pressed=true] { border-color: var(--focus-ring); color: var(--proof-blue); background: var(--proof-blue-soft); }
+:root .pdf-settings-footer { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin-block-start: auto; padding-block-start: 20px; }
+:root .pdf-settings-footer .button { box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; padding: 6px 10px; font-size: 12px; line-height: 18px; }
+:root .export-modal--preview .pdf-settings-footer .button { height: 36px; min-height: 36px; }
+:root .pdf-settings-footer .button--primary { border: 1px solid var(--focus-ring); color: var(--proof-blue); background: var(--proof-blue-soft); }
+:root .pdf-change-format { min-height: 30px; padding: 4px; border: 0; color: var(--ink-700); background: transparent; font-size: 11px; cursor: pointer; }
+:root .pdf-preview-consent { display: flex; gap: 6px; align-items: start; font-size: 12px; }
+:root .pdf-preview-warnings { margin: 0; padding-inline-start: 18px; font-size: 12px; line-height: 1.8; }
+:root .pdf-preview-document { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+:root .pdf-preview-controls { flex: none; justify-content: center; padding: 0 0 18px; }
+:root .pdf-preview-controls button { padding-inline: 10px; }
+:root .export-modal--preview :is(.pdf-preview-controls,.pdf-settings-footer) button:disabled { opacity: 1; color: var(--ink-500); background: var(--paper-100); border-color: var(--rule); cursor: not-allowed; }
+:root .export-modal--preview :is(button,select,input):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+:root .pdf-preview-scroll { flex: 1; min-height: 0; max-height: none; padding: 0 8px 16px; background: transparent; }
+:root .pdf-preview-canvas { outline: 1px solid #888; }
+:root .pdf-browser-note,:root .pdf-preview-error { border: 1px solid var(--rule); border-radius: 6px; background: var(--paper-50); font-size: 14px; }
+
+:root .xy-overview-settings { padding-block: 8px; border-block-end: 1px solid var(--rule); }
+:root .xy-overview-settings > summary,:root .xy-series-style > summary { cursor: pointer; min-height: 36px; padding: 8px; font-size: 12px; font-weight: 700; }
+:root .xy-overview-settings[open] { display: grid; gap: 12px; }
+:root .xy-series-controls { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: start; padding-block: 8px; }
+:root .xy-series-tabs { display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1; }
+:root .xy-series-tabs button { font-size: 12px; font-weight: 700; min-height: 36px; border: 1px solid transparent; background: var(--paper-200); }
+:root .xy-series-tabs button[aria-pressed=true] { background: var(--proof-blue-soft); color: var(--proof-blue); border-color: var(--focus-ring); }
+:root .xy-series-controls > button { grid-column: 2; grid-row: 1; }
+:root .xy-series-controls > label,:root .xy-series-style { grid-column: 1 / -1; }
+:root .xy-series-style > div { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+:root .xy-series-controls > label { gap: 6px; }
+:root .xy-series-style > summary { width: fit-content; background: var(--paper-200); border-radius: 4px; }
+:root .xy-point-series { margin-block: 6px; }
+:root .editor-pane .cm-editor, :root .writing-pane .cm-editor { background: var(--editor-surface-bg); }
+:root .app-shell.is-new-ui .workspace:is([data-workspace-screen="writing"], [data-workspace-screen="code"]) .editor-pane .cm-editor { background: var(--editor-surface-bg); }
+:root .pdf-settings-footer .button--quiet { color: var(--ink-950); background: var(--paper-200); border: 1px solid transparent; opacity: 1; }
+:root .editor-pane .cm-scroller, :root .writing-pane .cm-scroller { background: transparent; }
+:root .app-shell.is-new-ui .workspace:is([data-workspace-screen="writing"], [data-workspace-screen="code"]) .editor-pane .cm-scroller { background: transparent; }
+@media (max-width: 900px) {
+ :root .export-modal--idle { left: 12px; }
+ :root .pdf-preview { grid-template-columns: 280px minmax(0,1fr); gap: 12px; padding: 16px; }
+ :root .pdf-preview-settings { padding: 16px; }
+ :root .ai-input-placeholder { font-size: 11px; }
+}

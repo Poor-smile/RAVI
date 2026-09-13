@@ -12,7 +12,7 @@ export default defineConfig({
   reporter: [["line"]],
   use: {
     baseURL: externalBaseURL ?? "http://127.0.0.1:3144",
-    viewport: { width: 375, height: 844 },
+    viewport: { width: 1280, height: 900 },
     trace: "retain-on-failure",
   },
   webServer: externalBaseURL

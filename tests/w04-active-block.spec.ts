@@ -112,20 +112,20 @@ test("W04 aligns a filled active block, its gutter and selection status", async 
     height: 754,
   });
   expect(geometry.activeBlock).toEqual({
-    x: 232,
-    y: 276,
-    width: 760,
+    x: 233,
+    y: 277,
+    width: 758,
     height: 34,
   });
   expect(geometry.gutter).toEqual({
-    x: 1000,
-    y: 276,
+    x: 999,
+    y: 277,
     width: 58,
     height: 28,
   });
   expect(geometry.status).toEqual({
     x: 502,
-    y: 869,
+    y: 868,
     width: 220,
     height: 20,
   });

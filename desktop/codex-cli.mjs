@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { isMainThread } from "node:worker_threads";
+import { runNativeTask } from "./native-task-runner.mjs";
 
 const MAX_CONTEXT_LENGTH = 480_000;
 const MAX_PROMPT_LENGTH = 24_000;
@@ -296,6 +298,7 @@ export async function resolveCodexCommand() {
 }
 
 export async function getCodexConnectionStatus() {
+  if (isMainThread) return runNativeTask("codex-status");
   const command = await resolveCodexCommand();
   if (!command) return { state: "cli_missing" };
   try {

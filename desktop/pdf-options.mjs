@@ -1,9 +1,9 @@
 const PDF_MARGIN_INCHES = 0.55;
 
-export function desktopPdfOptions() {
+export function desktopPdfOptions(landscape = false) {
   return {
     pageSize: "A4",
-    landscape: false,
+    landscape: landscape === true,
     displayHeaderFooter: false,
     printBackground: true,
     preferCSSPageSize: true,

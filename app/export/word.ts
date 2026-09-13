@@ -26,6 +26,8 @@ import { raaviImageAssetId } from "../raavi";
 import { findMermaidBlocks } from "../mermaid/blocks";
 import { scheduleMermaidRender } from "../mermaid/render-service";
 import { extractWordFrontmatter } from "./frontmatter";
+import { findFormulaBlocks, type FormulaBlock } from "../formula/blocks";
+import { createWordFormula } from "./word-formula";
 
 type AstNode = {
   type: string;
@@ -80,6 +82,7 @@ export type WordExportStage =
 export type WordExportWarning = {
   kind: "diagram" | "image" | "unsupported";
   message: string;
+  sourceRange?: { start: number; end: number };
 };
 
 export type WordExportResult = {
@@ -590,6 +593,7 @@ type ConvertContext = {
   fallbackDirection: TextDirection;
   images: Map<string, WordImage>;
   diagrams: Map<number, WordImage>;
+  formulas: FormulaBlock[];
   warnings: WordExportWarning[];
 };
 
@@ -699,6 +703,15 @@ async function convertTable(node: AstNode, context: ConvertContext) {
 }
 
 async function convertBlock(node: AstNode, context: ConvertContext): Promise<FileChild[]> {
+  const formula = context.formulas.find(block => block.startOffset === node.position?.start?.offset);
+  if (formula) {
+    try {
+      return [new Paragraph({ children: [createWordFormula(formula.latex)], alignment: AlignmentType.CENTER, spacing: { before: 160, after: 220 } })];
+    } catch {
+      context.warnings.push({ kind: "unsupported", sourceRange: { start: formula.startOffset, end: formula.endOffset }, message: `فرمول خط ${formula.startLine.toLocaleString("fa-IR")} در Word پشتیبانی نمی‌شود و به‌صورت کد خام می‌آید؛ برای حفظ نمایش، PDF را انتخاب کنید.` });
+      return [new Paragraph({ children: [new TextRun({ text: formula.raw, font: "Cascadia Code", rightToLeft: false })] })];
+    }
+  }
   const text = nodeText(node);
   const direction = blockDirection(text, context.fallbackDirection);
 
@@ -921,11 +934,19 @@ export async function createWordExport({
     fallbackDirection,
     diagrams,
     images,
+    formulas: findFormulaBlocks(documentMarkdown),
     warnings,
   };
   const children: FileChild[] = [];
   for (const child of tree.children ?? []) {
     children.push(...(await convertBlock(child, context)));
+  }
+  const sourceOffset = markdown.length - documentMarkdown.length;
+  if (sourceOffset) for (const warning of warnings) {
+    if (!warning.sourceRange) continue;
+    warning.sourceRange = { start: warning.sourceRange.start + sourceOffset, end: warning.sourceRange.end + sourceOffset };
+    const sourceLine = markdown.slice(0, warning.sourceRange.start).split("\n").length;
+    warning.message = warning.message.replace(/^فرمول خط \S+/u, `فرمول خط ${sourceLine.toLocaleString("fa-IR")}`);
   }
 
   onProgress?.("document", 0, 1);

@@ -1,0 +1,11 @@
+import { writeFile, mkdir } from 'node:fs/promises';
+import { createWordExport } from '../app/export/word';
+import { FORMULA_ACADEMIC_CORPUS } from '../tests/fixtures/formula-academic-corpus';
+const directory=process.env.RAAVI_WORD_OUTPUT ?? 'outputs/rem-02'; await mkdir(directory,{recursive:true});
+const markdown='# آزمون فرمول‌های علمی راوی\n\nاین سند برای بررسی حفظ ساختار و متن فارسی در Word است.\n\n'+FORMULA_ACADEMIC_CORPUS.map(sample=>`## ${sample.id}\n\nمتن قبل از فرمول\n\n$$\n${sample.latex}\n$$\n\nمتن بعد از فرمول`).join('\n\n')+'\n\n| شاخص | نتیجه |\n| --- | --- |\n| تعداد نمونه | '+FORMULA_ACADEMIC_CORPUS.length+' |';
+const result=await createWordExport({markdown,fileName:'academic-formulas.docx',imageAssets:[]});
+if(result.warnings.length) throw new Error(`Academic Word corpus produced ${result.warnings.length} warnings`);
+await writeFile(`${directory}/academic-formulas.docx`,new Uint8Array(result.bytes));
+await writeFile(`${directory}/support-matrix.json`,JSON.stringify({samples:FORMULA_ACADEMIC_CORPUS,warnings:result.warnings},null,2));
+await writeFile(`${directory}/SUPPORT_FA.md`,'# ماتریس پشتیبانی Word\n\nهمهٔ نمونه‌های زیر به فرمول بومی OMML قابل‌ویرایش تبدیل می‌شوند. ساختارهای خارج از این دامنه، مانند `\\widehat` و محیط `aligned`، همچنان هشدار دارند و PDF مسیر جایگزین است. تبدیل تصویری اضافه نشده است.\n\n| نمونه | ساختار | LaTeX | وضعیت تولید |\n|---|---|---|---|\n'+FORMULA_ACADEMIC_CORPUS.map(s=>`| ${s.id} | ${s.category} | \`${s.latex.replaceAll('|','&#124;')}\` | OMML، بدون هشدار |`).join('\n'));
+console.log({samples:FORMULA_ACADEMIC_CORPUS.length,warnings:result.warnings});

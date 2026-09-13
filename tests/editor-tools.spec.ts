@@ -509,13 +509,11 @@ test.describe("ابزارهای contextual ویرایش", () => {
     expect(await markdownFromClipboard(page)).toBe("");
 
     await page.setViewportSize({ width: 375, height: 760 });
-    const mobileViewTabs = page.locator('.mobile-tabs [role="tab"]:visible');
-    await expect(mobileViewTabs).toHaveCount(2);
-    const boxes = await mobileViewTabs.evaluateAll((buttons) => buttons.map((button) => {
-      const box = button.getBoundingClientRect();
-      return { width: box.width, height: box.height };
-    }));
-    expect(boxes.every((box) => box.width >= 44 && box.height >= 44), JSON.stringify(boxes)).toBe(true);
+    await expect(page.locator('.mobile-tabs')).toHaveCount(0);
+    await expect(editor).toBeVisible();
+    await expect(page.locator('.editor-mode-switcher button[aria-pressed="true"]'))
+      .toHaveAttribute("aria-label", "ویرایش روان");
+    expect(await markdownFromClipboard(page)).toBe("");
   });
 
   test("inserts a portable divider with its registered shortcut", async ({ page }) => {

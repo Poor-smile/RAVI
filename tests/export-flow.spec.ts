@@ -78,7 +78,10 @@ test("preserves the ultimate Markdown acceptance counts in Word and PDF", async 
           invalidDiagrams:
             article?.querySelectorAll(".mermaid-diagram.is-invalid").length ??
             -1,
-          articleOnly: Boolean(article && root?.children.length === 1),
+          // The staging root also carries the selected A4 orientation stylesheet.
+          articleOnly: Boolean(article && root && Array.from(root.children).every(
+            (child) => child === article || child.tagName === "STYLE",
+          )),
         };
         document.documentElement.dataset.raaviAcceptancePdf =
           JSON.stringify(counts);
@@ -99,7 +102,7 @@ test("preserves the ultimate Markdown acceptance counts in Word and PDF", async 
     const exportButton = page.locator(
       ".export-modal-actions .button--primary",
     );
-    await exportButton.click();
+    await page.getByRole("button", { name: "Word", exact: true }).click();
     await expect(page.locator(".export-review")).toBeVisible({
       timeout: 120_000,
     });
@@ -141,8 +144,8 @@ test("preserves the ultimate Markdown acceptance counts in Word and PDF", async 
     await successDialog.getByRole("button", { name: "تمام" }).click();
 
     await openExportDialog(page);
-    await page.locator('input[value="pdf"]').check();
-    await page.locator(".export-modal-actions .button--primary").click();
+    await page.getByRole("button", { name: "PDF", exact: true }).click();
+    await page.getByRole("button", { name: "پیش‌نمایش و ذخیره در مرورگر", exact: true }).click();
     await expect(page.locator("html")).toHaveAttribute(
       "data-raavi-acceptance-pdf",
       /"articleOnly":true/u,
@@ -171,11 +174,11 @@ test("downloads an editable Word file from the export dialog", async () => {
 
     await openExportDialog(page);
     await expect(page.locator(".export-modal")).toBeVisible();
-    await expect(page.locator('input[value="word"]')).toBeChecked();
+    await expect(page.getByRole("button", { name: "Word", exact: true })).toBeFocused();
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),
-      page.locator(".export-modal-actions .button--primary").click(),
+      page.getByRole("button", { name: "Word", exact: true }).click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/\.docx$/iu);
     const downloadPath = await download.path();
@@ -228,7 +231,7 @@ test("embeds Mermaid as padded SVG with an adaptive high-resolution PNG fallback
     ).toBeVisible({ timeout: 15_000 });
 
     await openExportDialog(page);
-    await page.locator(".export-modal-actions .button--primary").click();
+    await page.getByRole("button", { name: "Word", exact: true }).click();
     await expect(page.locator(".export-review")).toBeVisible({
       timeout: 120_000,
     });
@@ -312,8 +315,8 @@ test("prepares the preview and opens the browser PDF print flow", async () => {
       });
 
     await openExportDialog(page);
-    await page.locator('input[value="pdf"]').check();
-    await page.locator(".export-modal-actions .button--primary").click();
+    await page.getByRole("button", { name: "PDF", exact: true }).click();
+    await page.getByRole("button", { name: "پیش‌نمایش و ذخیره در مرورگر", exact: true }).click();
 
     await expect(page.locator("html")).toHaveAttribute(
       "data-raavi-print-called",
@@ -366,13 +369,10 @@ test("requires explicit confirmation before exporting a failed Mermaid diagram",
     });
 
     await openExportDialog(page);
-    await page.locator('input[value="pdf"]').check();
-    await page.locator(".export-modal-actions .button--primary").click();
+    await page.getByRole("button", { name: "PDF", exact: true }).click();
 
-    const confirmation = page.locator('input[name="confirm-export-review"]');
-    const continueButton = page.locator(
-      ".export-modal-actions .button--primary",
-    );
+    const confirmation = page.getByRole("checkbox", { name: "با این تغییرها موافقم", exact: true });
+    const continueButton = page.getByRole("button", { name: "پیش‌نمایش و ذخیره در مرورگر", exact: true });
     await expect(confirmation).toBeVisible();
     await expect(confirmation).not.toBeChecked();
     await expect(continueButton).toBeDisabled();

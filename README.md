@@ -2,34 +2,56 @@
 
 ویور و ویرایشگر Markdown فارسی با چیدمان راست‌به‌چپ و فونت IRANSansX.
 
-## نسخهٔ عمومی 2.4.5
+## نسخهٔ 2.4.6
 
-پنجرهٔ نظر در مرکز صفحه، ذخیرهٔ مقاوم‌تر فایل، جداسازی اجرای Mermaid، اصلاح پیمایش
-سندهای بلند و رفع جابه‌جایی تمرکز هنگام تایپ فرمول در این نسخه ارائه شده‌اند.
-۴۶۱ آزمون واحد و ۲۳۸ آزمون عملکردی روی نامزد Windows پاس شده‌اند؛ یک آزمون R10
-به ورودی اختصاصیِ فراهم‌نشده نیاز دارد.
+راوی در کد فعلی فقط برای رایانه و لپ‌تاپ است. نسخهٔ وب روی موبایل و تبلت، پیام
+«راوی یک نرم‌افزار دسکتاپ است» و راهنمای ورود با رایانه را نمایش می‌دهد.
+ویرایشگر روی این دستگاه‌ها باز نمی‌شود. اندازهٔ کوچک پنجره یا لمسی‌بودن رایانه
+مانع دسترسی نیست؛ میز دسکتاپ با حداقل عرض ۱۰۲۴ پیکسل حفظ می‌شود.
 
-- [Windows x64 — 105.6 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-Setup-2.4.5-x64.exe)
-  SHA-256: `8b9d4b4244c96fad834e169173cfc693f1d28a7406e3341e359ebeec29ae02b5`
-- [macOS Apple Silicon · arm64 — 134.8 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-2.4.5-macOS-arm64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-arm64-unsigned.zip)
-  SHA-256: `9c3b0aa6b519f6d568796a805dee22034d90359091e86061f86b454dcdbcbb07`
-- [macOS Intel · x64 — 138.7 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-2.4.5-macOS-x64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-x64-unsigned.zip)
-  SHA-256: `535b9ae45ae0e07b98d4ae03d688dd1c3d189275a87616e784ecca9284085768`
-- [یادداشت انتشار](https://ravi.poorsmile.ir/updates/releases/2.4.5.json)
-- [GitHub Release، بسته‌های جایگزین و گزارش ساخت](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.5)
-- [SHA-256 بسته‌های مک](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-SHA256SUMS.txt)
+[گزارش حذف نمای موبایل و آزمون‌های مرتبط](docs/DESKTOP_ONLY_2026-09-12_FA.md).
 
-نصب‌کنندهٔ Windows فاقد امضای Authenticode است. بسته‌های macOS برای هر دو معماری
-روی runner واقعی همان معماری از tag یکسان ساخته شده‌اند؛ Developer ID و notarization
-ندارند و نام فایل‌ها صریحاً `unsigned` است. اصالت بستهٔ به‌روزرسان با Ed25519 و
-SHA-512 بررسی می‌شود؛ این امضا جای امضای سیستم‌عامل را نمی‌گیرد.
+کد فعلی شامل انتخاب هم‌وزن Word و PDF، پیش‌نمایش واقعی PDF در دسکتاپ با کنترل‌های
+سازگار با هر دو تم، معادله‌های قابل‌ویرایش Word و هشدار ساختارهای پشتیبانی‌نشده است.
+زمینهٔ جمع‌شونده و بازبینی تغییرات در راوی هوشمند، نمودار XY با چند سری، تفکیک رنگ
+کاغذ از پس‌زمینه و اصلاحات نگه‌داری سندهای بلند نیز اضافه شده‌اند. نام راوی در هدر و
+گزینهٔ «دربارهٔ راوی» در منوی «…» همان پنجرهٔ معرفی، نسخه و دفتر تغییرات را باز می‌کنند.
+اجزای اصلاحی از فونت محلی Vazirmatn استفاده می‌کنند.
 
-نصب تازه، حذف و ارتقای واقعی از 2.2.1 به 2.4.5 روی ماشین موقت Windows با دسترسی
-مدیر موفق بودند؛ سند فارسی، نظر و دادهٔ کاربر حفظ شدند.
-[گزارش آزمون نصب و ارتقا](https://github.com/Poor-smile/RAVI/actions/runs/34036808090). اعتبارسنجی نمای موبایل
-در دامنهٔ این انتشار نبوده است. ترتیب فعال‌سازی updater در
-[راهنمای انتشار](docs/RELEASE_GUIDE_FA.md) و شواهد اجرا در
-[گزارش انتشار](docs/RELEASE_EXECUTION_2.4.5_FA.md) ثبت می‌شود.
+پشتیبانی فرمول Word محدود به
+ساختارهای مستند است؛ در وب، PDF از مسیر چاپ مرورگر تهیه می‌شود. فهرست کامل در
+[بخش 2.4.6 در CHANGELOG](CHANGELOG.md) و شواهد اصلاحات در
+[گزارش پیاده‌سازی](docs/REM_IMPLEMENTATION_2026-09-12_FA.md) ثبت شده‌اند.
+
+برای بررسی این checkout، `npm run release:gate` را اجرا کنید؛ گیت شامل آزمون‌های
+واحد، رابط، اصلاحات جدید، PDF بومی و رندر و ویرایش واقعی Word است. مرحلهٔ Word به
+Windows، Microsoft Word و Python دارای `pywin32` نیاز دارد. آزمون‌های اختصاصی
+اصلاحات با `npm run test:corrective-release` نیز اجرا می‌شوند. [گزارش ممیزی فعلی](docs/RELEASE_GATE_2026-09-12_FA.md)
+وضعیت واقعی اجرا را ثبت می‌کند. خروجی هر مرحله و
+فهرست شکست‌ها در پوشهٔ ممیزی ذخیره می‌شود؛ جزئیات پیش‌نیازها و مراحل نصب/ارتقا در
+[راهنمای انتشار](docs/RELEASE_GUIDE_FA.md) آمده است. نتایج همین نسخه در
+[گزارش انتشار 2.4.6](docs/RELEASE_EXECUTION_2.4.6_FA.md) ثبت می‌شوند.
+
+## دریافت بسته‌های 2.4.6
+
+این انتشار به GitHub محدود است. نسخهٔ وب، Ravi Light، لینک‌های سایت و manifest
+بروزرسانی خودکار در این مرحله تغییر نمی‌کنند؛ نصب نسخهٔ جدید به‌صورت دستی است.
+بسته‌ها پس از موفق‌شدن گیت‌ها در [Release همین نسخه](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.6) ارائه می‌شوند.
+
+- [Windows x64](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-Setup-2.4.6-x64.exe) · [SHA-256](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-Setup-2.4.6-x64.exe.sha256)
+- [macOS Apple Silicon · arm64](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-arm64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-arm64-unsigned.zip)
+- [macOS Intel · x64](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-x64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-x64-unsigned.zip)
+- [SHA-256 بسته‌های مک](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-SHA256SUMS.txt)
+
+نصاب Windows فاقد Authenticode است. بسته‌های macOS فاقد Developer ID و
+notarization هستند و نام آن‌ها صریحاً `unsigned` است. Windows SmartScreen یا
+macOS Gatekeeper ممکن است دربارهٔ ناشناس‌بودن ناشر هشدار دهند. هش دانلود را با
+فایل checksum همان Release تطبیق دهید؛ checksum جای امضای سیستم‌عامل را نمی‌گیرد.
+
+گیت انتشار شامل نصب تازه، حذف و ارتقای واقعی از 2.4.5 روی ماشین موقت Windows
+و ساخت DMG/ZIP روی runner بومی Apple Silicon و Intel است. نتایج و وضعیت تکمیل
+در [گزارش اجرای انتشار](docs/RELEASE_EXECUTION_2.4.6_FA.md) و گزارش‌های پیوست Release ثبت می‌شوند.
+[نسخهٔ قبلی 2.4.5](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.5) برای بازگشت در دسترس است.
 
 ## امکانات
 
@@ -51,7 +73,7 @@ SHA-512 بررسی می‌شود؛ این امضا جای امضای سیستم�
 - پنهان‌کردن مستقل ویرایشگر یا پیش‌نمایش و بازگردانی آن‌ها از ستون میانی
 - مینی‌منوی فشردهٔ انتخاب متن با هشت عمل پرتکرار و دسترسی صفحه‌کلیدی
 - تم روشن و تاریک با ذخیره‌ی انتخاب کاربر و تغییر نرم بدون پوشاندن متن
-- نمایش نسخهٔ جاری، معرفی ویژگی‌های متمایز و دفتر تغییرات با کلیک روی لوگوی راوی
+- نمایش نسخه، معرفی ویژگی‌ها و دفتر تغییرات از منوی «… ← دربارهٔ راوی» و نام راوی در هدر کد فعلی
 - سوییچ فشرده کنار نام راوی و میان‌بر `Alt+T` با عملکرد یکسان در صفحه‌کلید فارسی و انگلیسی
 - قفل اسکرول دوطرفه میان ادیتور و پیش‌نمایش
 - پشتیبانی از جدول، چک‌لیست، نقل‌قول و قطعه‌کد
@@ -64,7 +86,7 @@ SHA-512 بررسی می‌شود؛ این امضا جای امضای سیستم�
 - هدر متمرکز حالت مطالعه با نام فایل، بازگشت به میز و نمایش هوشمند هنگام اسکرول رو به بالا
 - نگه‌داری محلی آخرین نوشته
 - دانلود نسخه‌ی ویرایش‌شده
-- رابط واکنش‌گرا و قابل استفاده با صفحه‌کلید
+- رابط دسکتاپ و قابل استفاده با صفحه‌کلید
 
 ## میان‌برهای اصلی ویرایشگر
 
@@ -107,6 +129,9 @@ npm run build
 ```bash
 npm run desktop
 ```
+
+مسیر Tauri داخل مخزن یک مسیر قدیمی و خارج از انتشار رسمی نسخهٔ ۲ است؛ شمارهٔ
+`1.7.2` در تنظیمات آن، شمارهٔ نسخهٔ رسمی Electron را تعیین نمی‌کند.
 
 برای ساخت پوشهٔ اجرایی بدون نصب‌کننده:
 

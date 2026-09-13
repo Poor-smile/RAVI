@@ -1,11 +1,12 @@
 "use client";
 
-import { AlertTriangle, Check, Download, X } from "@/app/icons/material-symbols";
-import { useRef, type CSSProperties, type RefObject } from "react";
+import { AlertTriangle, Check, Download, FileText, X } from "@/app/icons/material-symbols";
+import { useRef, type ReactNode, type CSSProperties, type RefObject } from "react";
 import { AccessibleModal } from "./accessible-modal";
 
 export type ExportFormat = "word" | "pdf";
 export type ExportDialogStatus =
+  | "preview"
   | "idle"
   | "preparing"
   | "review"
@@ -16,6 +17,7 @@ export type ExportDialogStatus =
 export type ExportDialogWarning = {
   kind: "diagram" | "image" | "unsupported";
   message: string;
+  sourceRange?: { start: number; end: number };
 };
 
 type ExportDialogProps = {
@@ -33,12 +35,16 @@ type ExportDialogProps = {
   resultPath: string;
   canRevealResult: boolean;
   directPdf: boolean;
+  preview?: (header: ReactNode, footer: ReactNode) => ReactNode;
+  previewReady?: boolean;
+  browserPdf?: boolean;
   onFormatChange: (format: ExportFormat) => void;
   onClose: () => void;
   onStart: () => void;
   onContinue: () => void;
   onBack: () => void;
   onRevealResult: () => void;
+  onInspectWarning?: (warning: ExportDialogWarning) => void;
   onReviewConfirmationChange: (confirmed: boolean) => void;
 };
 
@@ -62,18 +68,21 @@ export function ExportDialog({
   error,
   resultPath,
   canRevealResult,
-  directPdf,
+  preview,
+  previewReady = false,
+  browserPdf = false,
   onFormatChange,
   onClose,
   onStart,
   onContinue,
   onBack,
   onRevealResult,
+  onInspectWarning,
   onReviewConfirmationChange,
 }: ExportDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const wordOptionRef = useRef<HTMLInputElement>(null);
-  const pdfOptionRef = useRef<HTMLInputElement>(null);
+  const wordOptionRef = useRef<HTMLButtonElement>(null);
+  const pdfOptionRef = useRef<HTMLButtonElement>(null);
   const reviewConfirmationRef = useRef<HTMLInputElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
   const revealRef = useRef<HTMLButtonElement>(null);
@@ -86,21 +95,9 @@ export function ExportDialog({
   const progressStyle = {
     "--export-progress": `${boundedProgress}%`,
   } as CSSProperties;
-  const formatInformation =
-    format === "word"
-      ? {
-          title: "DOCX · سند قابل ویرایش",
-          description:
-            "تیترها، فهرست‌ها و جدول‌ها حفظ می‌شوند؛ نمودارهای سازگار به تصویر تبدیل می‌شوند.",
-        }
-      : {
-          title: "PDF · صفحه‌بندی ثابت",
-          description: directPdf
-            ? "خروجی A4 برای اشتراک و چاپ؛ در ویندوز مستقیماً ذخیره می‌شود."
-            : "خروجی A4 برای اشتراک و چاپ؛ از پنجرهٔ چاپ ذخیره می‌شود.",
-        };
   const title = {
     idle: "خروجی سند",
+    preview: "پیش‌نمایش PDF",
     review: "بازبینی خروجی",
     preparing: "در حال ساخت خروجی",
     saving: "در حال ساخت خروجی",
@@ -127,21 +124,21 @@ export function ExportDialog({
       open={open}
       isTopLayer={isTopLayer}
       onClose={() => {
-        if (!busy) onClose();
+        if (status !== "saving" && (!busy || format === "pdf")) onClose();
       }}
       dialogRef={dialogRef}
       initialFocusRef={initialFocusRef}
       returnFocusRef={returnFocusRef}
-      backdropClassName="export-modal-backdrop"
+      backdropClassName={`export-modal-backdrop export-backdrop--${status}`}
       dialogClassName={`export-modal export-modal--${status} export-modal--${format}`}
       labelledBy="export-modal-title"
       describedBy="export-modal-description"
     >
-      <div className="export-modal-header" dir="ltr">
+      {status !== "preview" && <><div className="export-modal-header" dir="ltr">
         <button
           type="button"
           onClick={onClose}
-          disabled={busy}
+          disabled={status === "saving" || (busy && format !== "pdf")}
           aria-label="بستن پنجره‌ی خروجی"
         >
           <X size={20} aria-hidden="true" />
@@ -154,49 +151,28 @@ export function ExportDialog({
         </span>
       </div>
       <div className="export-modal-divider" aria-hidden="true" />
+      </>}
 
       {status === "idle" && (
         <div className="export-modal-body export-modal-body--idle">
-          <p id="export-modal-description">
+          <p id="export-modal-description" className="visually-hidden">
             فرمت خروجی را انتخاب کنید. فایل روی همین دستگاه ساخته می‌شود و سند
             اصلی بدون تغییر می‌ماند.
           </p>
-          <fieldset className="export-format-options">
-            <legend>فرمت خروجی</legend>
-            <label>
-              <input
-                ref={wordOptionRef}
-                type="radio"
-                name="export-format"
-                value="word"
-                checked={format === "word"}
-                onChange={() => onFormatChange("word")}
-              />
-              <strong>Word (.docx) — قابل ویرایش</strong>
-            </label>
-            <label>
-              <input
-                ref={pdfOptionRef}
-                type="radio"
-                name="export-format"
-                value="pdf"
-                checked={format === "pdf"}
-                onChange={() => onFormatChange("pdf")}
-              />
-              <strong>PDF — صفحه‌بندی ثابت A4</strong>
-            </label>
-          </fieldset>
-          <div className="export-format-information" aria-live="polite">
-            <strong>{formatInformation.title}</strong>
-            <span>{formatInformation.description}</span>
-          </div>
-          <div className="export-result-name" aria-label="نام فایل خروجی">
-            <span>نام فایل</span>
-            <strong dir="auto">{fileName}</strong>
+          <div className="export-format-choice" role="group" aria-label="فرمت خروجی">
+            <button ref={wordOptionRef} type="button" onClick={() => onFormatChange("word")}><FileText size={18} aria-hidden="true" /><span>Word</span></button>
+            <button ref={pdfOptionRef} type="button" onClick={() => onFormatChange("pdf")}><span className="export-pdf-icon" aria-hidden="true" /><span>PDF</span></button>
           </div>
         </div>
       )}
 
+      {status === "preview" && preview?.(<><strong id="export-modal-title">پیش‌نمایش PDF <span className="export-pdf-icon" aria-hidden="true" /></strong><strong dir="auto">{fileName}</strong></>, <>
+        {warnings.length > 0 && <ul className="pdf-preview-warnings">{warnings.map((warning, index) => <li key={index}>{warning.message}</li>)}</ul>}
+        {warnings.length > 0 && <label className="pdf-preview-consent"><input type="checkbox" checked={reviewConfirmed} onChange={event => onReviewConfirmationChange(event.target.checked)} />با این تغییرها موافقم</label>}
+        <button className="button button--primary" type="button" onClick={onContinue} disabled={!previewReady || (warnings.length > 0 && !reviewConfirmed)}>{browserPdf ? "پیش‌نمایش و ذخیره در مرورگر" : "ذخیرهٔ PDF"}</button>
+        <button className="button button--quiet" type="button" onClick={onClose}>بازگشت به سند</button>
+        <button className="pdf-change-format" type="button" onClick={onBack}>انتخاب فرمت دیگر</button>
+      </>)}
       {status === "review" && (
         <div className="export-modal-body export-modal-body--review">
           <p id="export-modal-description">
@@ -211,7 +187,7 @@ export function ExportDialog({
             </div>
             <ul>
               {warnings.map((warning, index) => (
-                <li key={`${warning.kind}-${index}`}>{warning.message}</li>
+                <li key={`${warning.kind}-${index}`}>{warning.message}{warning.sourceRange && onInspectWarning && <button className="export-warning-locate" type="button" onClick={() => onInspectWarning(warning)}>دیدن در سند</button>}</li>
               ))}
             </ul>
           </section>
@@ -299,13 +275,11 @@ export function ExportDialog({
         </div>
       )}
 
-      <div className="export-modal-divider" aria-hidden="true" />
+      {status !== "preview" && <><div className="export-modal-divider" aria-hidden="true" />
       <div className={`export-modal-actions export-modal-actions--${status}`} dir="ltr">
         {status === "idle" && (
           <>
-            <button className="button button--primary" type="button" onClick={onStart}>
-              {format === "word" ? "خروجی DOCX" : "خروجی PDF"}
-            </button>
+
             <button className="button button--quiet" type="button" onClick={onClose}>
               انصراف
             </button>
@@ -321,6 +295,7 @@ export function ExportDialog({
             >
               ادامه و ذخیره
             </button>
+            <button className="button button--quiet" type="button" onClick={() => onFormatChange("pdf")}>پیش‌نمایش PDF</button>
             <button className="button button--quiet" type="button" onClick={onBack}>
               بازگشت
             </button>
@@ -354,6 +329,7 @@ export function ExportDialog({
           </>
         )}
       </div>
+      </>}
     </AccessibleModal>
   );
 }

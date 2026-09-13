@@ -59,6 +59,9 @@ export function createAtomicFileWriter({ fs = platformFs } = {}) {
   return (filePath, content) => {
     const bytes = Buffer.from(content); // Callers cannot mutate an enqueued save.
     return enqueue(filePath, async (target) => {
+      const started = performance.now();
+      const timings = [];
+      const mark = (stage) => { if (process.env.RAAVI_PERFORMANCE_TRACE === "1") timings.push({ stage, elapsedMs: performance.now() - started }); };
       const temporary = path.join(path.dirname(target), `.raavi-save-${randomUUID()}.tmp`);
       let ownedTemporary = false;
       let file;
@@ -74,6 +77,7 @@ export function createAtomicFileWriter({ fs = platformFs } = {}) {
           const original = await fs.open(target, "r+");
           await original.close();
           await fs.copyFile(target, temporary, constants.COPYFILE_EXCL);
+          mark("replacement-created");
           ownedTemporary = true;
           file = await fs.open(temporary, "r+");
           if (process.platform !== "win32") {
@@ -89,7 +93,9 @@ export function createAtomicFileWriter({ fs = platformFs } = {}) {
           ownedTemporary = true;
         }
         await writeAll(file, bytes);
+        mark("bytes-written");
         await file.sync();
+        mark("file-synced");
         await file.close();
         file = null;
         // Never delete or truncate the original if replacement is refused.
@@ -105,6 +111,7 @@ export function createAtomicFileWriter({ fs = platformFs } = {}) {
           }
         }
         ownedTemporary = false;
+        mark("renamed");
         if (process.platform !== "win32") {
           const directory = await fs.open(path.dirname(target), "r");
           try {
@@ -116,6 +123,7 @@ export function createAtomicFileWriter({ fs = platformFs } = {}) {
       } finally {
         await file?.close().catch(() => {});
         if (ownedTemporary) await fs.rm(temporary, { force: true }).catch(() => {});
+        if (process.env.RAAVI_PERFORMANCE_TRACE === "1") console.log("[raavi-performance]", JSON.stringify({ operation: "atomic-write", bytes: bytes.length, timings }));
       }
     });
   };

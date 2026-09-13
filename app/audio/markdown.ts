@@ -39,6 +39,7 @@ export function serializeMarkdownAudio(
 
 export function findAudioBlocks(markdown: string): AudioBlock[] {
   const blocks: AudioBlock[] = [];
+  if (!markdown.includes("raavi-audio")) return blocks;
   let from = 0;
   for (const line of markdown.split(/(?<=\n)/u)) {
     const withoutBreak = line.replace(/\r?\n$/u, "");

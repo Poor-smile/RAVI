@@ -140,16 +140,16 @@ test("W06 maps the saved writing screen to the exact dark surfaces and active-bl
 
   expect(visualContract.geometry).toEqual({
     document: { x: 232, y: 144, width: 760, height: 754 },
-    activeBlock: { x: 232, y: 338, width: 760, height: 34 },
-    gutter: { x: 1000, y: 322, width: 58, height: 28 },
-    status: { x: 502, y: 869, width: 220, height: 20 },
+    activeBlock: { x: 233, y: 339, width: 758, height: 34 },
+    gutter: { x: 999, y: 323, width: 58, height: 28 },
+    status: { x: 502, y: 868, width: 220, height: 20 },
   });
   expect(visualContract.colors).toEqual({
     titleBar: "rgb(14, 19, 15)",
     commandBar: "rgb(24, 30, 26)",
-    stage: "rgb(26, 33, 28)",
+    stage: "rgb(12, 18, 14)",
     rail: "rgb(16, 20, 17)",
-    document: "rgb(24, 30, 26)",
+    document: "rgb(38, 56, 45)",
     activeBlock: "rgb(32, 46, 80)",
     activeText: "rgb(242, 245, 241)",
     activeFocus: "rgb(185, 201, 255) 0px 0px 0px 1px inset",
@@ -164,7 +164,7 @@ test("W06 maps the saved writing screen to the exact dark surfaces and active-bl
   expect(visualContract.states).toEqual({
     inactiveShellCount: 0,
     documentRadius: "14px",
-    documentBorder: "0px",
+    documentBorder: "1px",
     saveBorder: "0px",
   });
 

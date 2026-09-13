@@ -87,6 +87,25 @@ jobs:
           npm ci
           npm run verify:dependencies
 
+      - name: Prepare Google Drive desktop OAuth configuration
+        env:
+          RAAVI_GOOGLE_CLIENT_ID: ${{ secrets.RAAVI_GOOGLE_CLIENT_ID }}
+          RAAVI_GOOGLE_CLIENT_SECRET: ${{ secrets.RAAVI_GOOGLE_CLIENT_SECRET }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          mkdirSync('build', { recursive: true });
+          for (const [variable, file] of [
+            ['RAAVI_GOOGLE_CLIENT_ID', 'google-oauth-client-id.txt'],
+            ['RAAVI_GOOGLE_CLIENT_SECRET', 'google-oauth-client-secret.txt'],
+          ]) {
+            const value = (process.env[variable] || '').trim();
+            if (!value) throw new Error(`Missing required release configuration: ${variable}`);
+            writeFileSync(`build/${file}`, value + '\n', { mode: 0o600 });
+          }
+          NODE
+
       - name: Generate native application icons
         shell: bash
         run: |

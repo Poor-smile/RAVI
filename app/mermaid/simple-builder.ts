@@ -722,7 +722,7 @@ export function validateSimpleDiagramDraft(draft: SimpleDiagramDraft) {
 
   const fields = simpleDiagramFields(draft.kind);
   const kindsWithRequiredValue = new Set<SimpleDiagramKind>([
-    "sequence", "gantt", "pie", "xychart", "sankey", "journey", "quadrant",
+    "sequence", "gantt", "pie", "sankey", "journey", "quadrant",
     "packet", "radar", "treemap", "venn", "wardley",
   ]);
   const kindsWithOptionalSecond = new Set<SimpleDiagramKind>([
@@ -827,8 +827,16 @@ export function validateSimpleDiagramDraft(draft: SimpleDiagramDraft) {
       series.set(name, points);
     }
     const lengths = new Set(Array.from(series.values(), (points) => points.size));
+    const firstPoints = [...(series.values().next().value ?? [])];
+    if (lengths.size === 1 && [...series.values()].some(points => firstPoints.some(point => !points.has(point)))) {
+      issues.push({ message: "مقدارهای محور افقی سری‌ها باید یکسان باشند؛ نام نقطه‌ها را بررسی کنید." });
+    }
     if (lengths.size > 1) {
-      issues.push({ message: "همهٔ سری‌های XY باید تعداد نقطهٔ یکسان داشته باشند." });
+      const counts = Array.from(series, ([name, points]) => `«${name}»: ${points.size.toLocaleString("fa-IR")} نقطه`).join("، ");
+      for (const [name] of series) {
+        const item = active.find(row => cleanLabel(metaText(row.meta, "series"), "سری ۱") === name);
+        issues.push({ rowId: item?.id, field: "first", message: `${counts}. نقطهٔ سری «${name}» را به سری درست منتقل کنید یا مقدارهای محور افقی مشترک را کامل کنید.` });
+      }
     }
   }
 
@@ -1951,7 +1959,8 @@ export function simpleDraftToCode(draft: SimpleDiagramDraft) {
     const yAxis = `    y-axis${yAxisTitle ? ` ${mermaidQuoted(yAxisTitle, "محور عمودی")}` : ""} ${safeFiniteNumber(yMin)} --> ${safeFiniteNumber(yMax, "1")}`;
     const seriesLines = Array.from(series, ([, items]) => {
       const type = metaText(items[0]?.meta, "seriesType", "line") === "bar" ? "bar" : "line";
-      const values = items.map((item) => {
+      const orderedItems = xAxisType === "category" ? xValues.map(point => items.find(item => item.first.trim() === point.first.trim())!).filter(Boolean) : items;
+      const values = orderedItems.map((item) => {
         const number = safeFiniteNumber(item.second);
         return type === "line" && item.value.trim()
           ? `${number} ${mermaidQuoted(item.value, "رویداد")}`
@@ -1967,8 +1976,7 @@ export function simpleDraftToCode(draft: SimpleDiagramDraft) {
       ...seriesLines,
     ].join("\n");
     const palette = Array.from(series.values())
-      .map((items) => metaText(items[0]?.meta, "color"))
-      .filter(Boolean)
+      .map((items, index) => metaText(items[0]?.meta, "color") || ["#2557e5", "#176f3b", "#7756a8"][index % 3])
       .join(",");
     code = withFrontmatter(xyCode, [
       "  xyChart:",

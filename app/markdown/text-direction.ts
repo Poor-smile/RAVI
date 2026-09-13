@@ -23,9 +23,10 @@ export function detectDocumentTextDirection(
   markdown: string,
   fallback: TextDirection = "rtl",
 ): TextDirection {
-  const { latin, arabic } = countDirectionalLetters(markdown);
-  if (arabic > 0) return "rtl";
-  return latin > 0 ? "ltr" : fallback;
+  // Document direction only needs presence, unlike the 70% block rule.
+  // Intersect Script and Letter so Arabic numerals/marks remain neutral.
+  if (/(?=\p{Script=Arabic})\p{Letter}/u.test(markdown)) return "rtl";
+  return /(?=\p{Script=Latin})\p{Letter}/u.test(markdown) ? "ltr" : fallback;
 }
 
 export function detectBlockTextDirection(

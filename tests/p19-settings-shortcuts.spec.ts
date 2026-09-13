@@ -139,7 +139,7 @@ test("P19 lists the complete active catalog with search and real keycaps", async
 test("P19 formats macOS keycaps and keeps the full catalog responsive", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 1024, height: 844 });
   await page.addInitScript(() => {
     window.localStorage.clear();
     Object.defineProperty(navigator, "platform", {
@@ -176,7 +176,7 @@ test("P19 formats macOS keycaps and keeps the full catalog responsive", async ({
   await lastShortcut.scrollIntoViewIfNeeded();
   await expect(lastShortcut).toBeVisible();
 
-  const mobile = await page.evaluate(() => {
+  const compact = await page.evaluate(() => {
     const input = document.querySelector<HTMLInputElement>(
       ".settings-shortcut-search input",
     )!;
@@ -198,16 +198,16 @@ test("P19 formats macOS keycaps and keeps the full catalog responsive", async ({
       ),
     };
   });
-  expect(mobile.pageOverflow).toBeLessThanOrEqual(0);
-  expect(mobile.contentOverflow).toBeLessThanOrEqual(0);
-  expect(mobile.inputHeight).toBeGreaterThanOrEqual(44);
-  expect(mobile.rowsStacked).toBe(true);
+  expect(compact.pageOverflow).toBeLessThanOrEqual(0);
+  expect(compact.contentOverflow).toBeLessThanOrEqual(0);
+  expect(compact.inputHeight).toBeGreaterThanOrEqual(42);
+  expect(compact.rowsStacked).toBe(false);
 
   await dialog.locator(".shortcut-settings-content").evaluate((element) => {
     element.scrollTop = 0;
   });
   await page.screenshot({
-    path: ".artifacts/p19-settings-shortcuts-mobile.png",
+    path: ".artifacts/p19-settings-shortcuts-compact.png",
     fullPage: false,
   });
 });

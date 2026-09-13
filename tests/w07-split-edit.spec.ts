@@ -136,10 +136,10 @@ test("W07 keeps Code and block Writing synchronized and promotes either leaf to 
   );
 });
 
-test("W07 compact breakpoint exposes Code and Writing without a split shell", async ({
+test("W07 narrow desktop switches Code and Writing while preserving content", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 820, height: 900 });
+  await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto("/");
   await expect(page.locator(".app-shell")).toHaveAttribute(
     "data-hydrated",
@@ -159,28 +159,14 @@ test("W07 compact breakpoint exposes Code and Writing without a split shell", as
   });
   if (await leaveReading.isVisible()) await leaveReading.click();
 
-  const mobileTabs = page.getByRole("tablist", { name: "نمای موبایل" });
-  await expect(mobileTabs.getByRole("tab")).toHaveCount(2);
-  await expect(mobileTabs.getByRole("tab").nth(0)).toHaveText("کد");
-  await expect(mobileTabs.getByRole("tab").nth(1)).toHaveText("نوشتن");
-  await expect(page.locator('[data-pane-layout="split"]')).toHaveCount(0);
-  await expect(page.locator(".registration-spine")).toBeHidden();
+  await expect(page.getByRole("tablist", { name: "نمای موبایل" })).toHaveCount(0);
+  await page.getByRole("button", { name: "متن خام", exact: true }).click();
+  await expect(page.locator('[data-workspace-screen="code"]')).toBeVisible();
+  await expect(page.locator("#markdown-editor .cm-content")).toContainText("متن آزمایشی");
+  await page.getByRole("button", { name: "ویرایش روان", exact: true }).click();
+  await expect(page.locator('[data-workspace-screen="writing"]')).toBeVisible();
+  await expect(page.locator("#markdown-editor .cm-content")).toContainText("متن آزمایشی");
 
-  await mobileTabs.getByRole("tab", { name: "کد", exact: true }).click();
-  const code = page.locator('[data-workspace-screen="code"]');
-  await expect(code).toBeVisible();
-  const codeHeader = code.locator(".editor-pane > .pane-header");
-  await expect(codeHeader).toBeHidden();
-  await expect(codeHeader.locator(".pane-title")).toBeHidden();
-  await expect(codeHeader.locator(".editor-primary-tools")).toBeHidden();
-
-  await mobileTabs.getByRole("tab", { name: "نوشتن", exact: true }).click();
-  const writing = page.locator('[data-workspace-screen="writing"]');
-  await expect(writing).toBeVisible();
-  const writingHeader = writing.locator(".editor-pane > .pane-header");
-  await expect(writingHeader).toHaveCSS("display", "contents");
-  await expect(writingHeader.locator(".pane-title")).toBeHidden();
-  await expect(writingHeader.locator(".editor-primary-tools")).toBeVisible();
 });
 
 test("W07 gives the Code leaf a bounded inset on ultrawide screens", async ({

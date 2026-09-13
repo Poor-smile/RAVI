@@ -1,20 +1,23 @@
 import { existsSync, readFileSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { activatePointerAction } from "./helpers/pointer-action";
 
-const stressFixturePath = process.env.RAAVI_STRESS_FIXTURE;
+const stressFixturePath = process.env.RAAVI_STRESS_FIXTURE ?? resolve("docs/MERMAID_ULTIMATE_STRESS_TEST_FA.md");
 
 test("R10 fills the Graph Viewer canvas with the supplied Mermaid stress document", async ({
   page,
-}) => {
+}, testInfo) => {
   test.setTimeout(180_000);
-  test.skip(
-    !stressFixturePath || !existsSync(stressFixturePath),
-    "Set RAAVI_STRESS_FIXTURE to the supplied Markdown stress document.",
-  );
-  const content = readFileSync(stressFixturePath!, "utf8");
-  const fileName = basename(stressFixturePath!);
+  expect(existsSync(stressFixturePath), "The Mermaid architecture stress fixture must exist").toBe(true);
+  const source = readFileSync(stressFixturePath, "utf8");
+  // The bundled document has 26 diagrams and virtualizes them. This scenario
+  // targets its architecture chart, rather than whichever diagram is mounted first.
+  const architecture = [...source.matchAll(/^```mermaid[^\n]*\n[\s\S]*?^```\s*$/gm)]
+    .find(([block]) => ["Clients", "Edge & Security", "Application Platform", "Data Plane", "Observability & Operations"].every(label => block.includes(label)));
+  const content = process.env.RAAVI_STRESS_FIXTURE ? source : architecture?.[0];
+  expect(content, "The bundled fixture must contain the architecture chart").toBeTruthy();
+  const fileName = basename(stressFixturePath);
   await page.setViewportSize({ width: 1917, height: 1078 });
   await page.emulateMedia({ reducedMotion: "reduce", colorScheme: "dark" });
   await page.addInitScript(
@@ -41,7 +44,7 @@ test("R10 fills the Graph Viewer canvas with the supplied Mermaid stress documen
         }),
       );
     },
-    { markdown: content, name: fileName },
+    { markdown: content!, name: fileName },
   );
   await page.goto("/");
   await expect(page.locator(".app-shell")).toHaveAttribute("data-hydrated", "true");
@@ -78,6 +81,7 @@ test("R10 fills the Graph Viewer canvas with the supplied Mermaid stress documen
     const content = mounted.querySelector<SVGGraphicsElement>("g.output, svg > g, g");
     const bounds = (content ?? mounted).getBBox();
     const diagnostics = {
+      text: Array.from(parsed.querySelectorAll("text")).map(node => node.textContent).join("\n"),
       viewBox: { x: viewBox.x, y: viewBox.y, width: viewBox.width, height: viewBox.height },
       bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
       hasArchitectureRegions: [
@@ -91,6 +95,7 @@ test("R10 fills the Graph Viewer canvas with the supplied Mermaid stress documen
     host.remove();
     return diagnostics;
   });
+  await testInfo.attach("architecture-svg-diagnostics", { body: JSON.stringify(svgDiagnostics, null, 2), contentType: "application/json" });
 
   const geometry = await diagram.evaluate((node) => {
     const rect = (selector: string) => {

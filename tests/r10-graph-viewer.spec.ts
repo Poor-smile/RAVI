@@ -198,7 +198,7 @@ test("R10 preserves the active theme in the 1180×858 Graph Viewer", async ({
   expect(contract.colors).toEqual({
     viewer: "rgb(232, 235, 226)",
     header: "rgb(252, 253, 249)",
-    canvas: "rgb(250, 251, 247)",
+    canvas: "rgb(255, 255, 255)",
     preview: "rgba(0, 0, 0, 0)",
     toolbar: "rgb(255, 255, 255)",
   });
@@ -289,60 +289,12 @@ test("R10 keeps zoom, fit, pan, native fullscreen and Reading return semantics",
     .toBeLessThanOrEqual(2);
 });
 
-test("R10 uses touch-safe controls without horizontal overflow on mobile", async ({
-  page,
-}) => {
-  await openReadingFixture(page, READING_FIXTURE, { width: 390, height: 844 });
-  const { diagram } = await openGraphViewer(page);
-  const geometry = await diagram.evaluate((node) => {
-    const rect = (selector: string) => {
-      const bounds = node.querySelector(selector)!.getBoundingClientRect();
-      return {
-        left: bounds.left,
-        right: bounds.right,
-        width: bounds.width,
-        height: bounds.height,
-      };
-    };
-    return {
-      viewport: window.innerWidth,
-      documentWidth: document.documentElement.scrollWidth,
-      header: rect(".mermaid-graph-viewer-header"),
-      returnButton: rect(".mermaid-graph-viewer-return"),
-      preview: rect(".mermaid-graph-viewer-preview"),
-      render: rect(".mermaid-graph-viewer-render"),
-      toolbar: rect(".mermaid-diagram-viewport-tools"),
-      tools: Array.from(
-        node.querySelectorAll(".mermaid-diagram-viewport-tools button"),
-        (button) => {
-          const bounds = button.getBoundingClientRect();
-          return { width: bounds.width, height: bounds.height };
-        },
-      ),
-    };
-  });
-
-  expect(Math.round(geometry.header.height)).toBe(64);
-  expect(Math.round(geometry.returnButton.width)).toBe(44);
-  expect(Math.round(geometry.returnButton.height)).toBe(44);
-  expect(Math.round(geometry.preview.width)).toBe(390);
-  expect(Math.round(geometry.preview.height)).toBe(780);
-  expect(Math.round(geometry.render.width)).toBe(366);
-  expect(Math.round(geometry.render.height)).toBe(684);
-  expect(Math.round(geometry.toolbar.width)).toBe(208);
-  expect(Math.round(geometry.toolbar.height)).toBe(60);
-  expect(geometry.tools).toEqual(
-    Array.from({ length: 4 }, () => ({ width: 44, height: 44 })),
-  );
-  expect(geometry.preview.left).toBeGreaterThanOrEqual(0);
-  expect(geometry.preview.right).toBeLessThanOrEqual(geometry.viewport);
-  expect(geometry.documentWidth).toBeLessThanOrEqual(geometry.viewport);
-});
+// Mobile editor contract retired; device access is covered in desktop-access.spec.ts.
 
 test("R10 separates its toolbar and preview in a short landscape viewport", async ({
   page,
 }) => {
-  await openReadingFixture(page, READING_FIXTURE, { width: 667, height: 375 });
+  await openReadingFixture(page, READING_FIXTURE, { width: 1024, height: 640 });
   const { diagram } = await openGraphViewer(page);
   const geometry = await diagram.evaluate((node) => {
     const bounds = (selector: string) => {

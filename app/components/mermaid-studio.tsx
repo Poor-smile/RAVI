@@ -56,7 +56,7 @@ import { useMermaidViewport } from "../mermaid/use-mermaid-viewport";
 import { AccessibleModal } from "./accessible-modal";
 import { useBackLayer } from "./back-layer-provider";
 import { MermaidCodeEditor } from "./mermaid-code-editor";
-import { MermaidSimpleBuilder } from "./mermaid-simple-builder";
+const MermaidSimpleBuilder = lazy(() => import("./mermaid-simple-builder").then(module => ({ default: module.MermaidSimpleBuilder })));
 import {
   MermaidAiBuilder,
   type MermaidAiDiagramPreview,
@@ -287,6 +287,7 @@ export function MermaidStudio({
     }
     if (hasSimpleIssues) {
       setApplyError(simpleIssues[0]?.message ?? "یک مورد در فرم نیاز به اصلاح دارد.");
+      dialogRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
       return;
     }
     if (renderState.status !== "valid") {
@@ -345,7 +346,7 @@ export function MermaidStudio({
 
   const updateSimpleDraft = (next: SimpleDiagramDraft) => {
     setSimpleDraft(next);
-    setCode(simpleDraftToCode(next));
+    if (validateSimpleDiagramDraft(next).length === 0) setCode(simpleDraftToCode(next));
     setApplyError("");
   };
 
@@ -357,6 +358,10 @@ export function MermaidStudio({
   };
 
   const openAdvanced = () => {
+    if (hasSimpleIssues) {
+      setApplyError("ابتدا خطاهای فرم را اصلاح کنید؛ مقدارهای واردشده در فرم حفظ شده‌اند.");
+      return;
+    }
     setWorkspaceMode("advanced");
     setSamplesOpen(false);
     setGuidedDiagramPreview(null);
@@ -480,7 +485,7 @@ export function MermaidStudio({
   }, [activeBlobUrl]);
   const showingLastValid =
     !awaitingKind &&
-    renderState.status === "invalid" &&
+    (renderState.status === "invalid" || hasSimpleIssues) &&
     Boolean(renderState.lastValidSvg);
   const showingGuidedBuild = workspaceMode === "guided" && guidedAiStep === "building";
   const fitPreview = () =>
@@ -640,12 +645,14 @@ export function MermaidStudio({
             </div>
           </div>
           <div className={`mermaid-editor-surface ${workspaceMode === "simple" ? "is-active" : ""}`} inert={workspaceMode === "simple" ? undefined : true} aria-hidden={workspaceMode !== "simple"}>
+            <Suspense fallback={<p role="status">در حال آماده‌سازی فرم نمودار…</p>}>
             <MermaidSimpleBuilder
               draft={simpleDraft}
               onChange={updateSimpleDraft}
               onChooseKind={chooseSimpleDraft}
               onPreviewChange={setGuidedDiagramPreview}
             />
+            </Suspense>
           </div>
           <div className={`mermaid-editor-surface ${workspaceMode === "advanced" ? "is-active" : ""}`} inert={workspaceMode === "advanced" ? undefined : true} aria-hidden={workspaceMode !== "advanced"}>
               <MermaidCodeEditor

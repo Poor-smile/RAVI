@@ -75,12 +75,13 @@ function parseTab<Snapshot>(
 }
 
 export function parseDocumentSession<Snapshot>(
-  raw: string | null,
+  raw: unknown,
   isSnapshot: (value: unknown) => value is Snapshot,
 ): PersistedDocumentSession<Snapshot> | null {
   if (!raw) return null;
   try {
-    const value = JSON.parse(raw) as Record<string, unknown>;
+    const value = (typeof raw === "string" ? JSON.parse(raw) : raw) as Record<string, unknown>;
+    if (!value || typeof value !== "object") return null;
     if ((value.version !== 1 && value.version !== 2) || !Array.isArray(value.tabs)) {
       return null;
     }
@@ -119,10 +120,18 @@ export function serializeDocumentSession<Snapshot>(
   tabs: readonly DocumentTabRecord<Snapshot>[],
   closedTabs: readonly DocumentTabRecord<Snapshot>[] = [],
 ) {
-  return JSON.stringify({
+  return JSON.stringify(buildDocumentSession(activeTabId, tabs, closedTabs));
+}
+
+export function buildDocumentSession<Snapshot>(
+  activeTabId: string,
+  tabs: readonly DocumentTabRecord<Snapshot>[],
+  closedTabs: readonly DocumentTabRecord<Snapshot>[] = [],
+) {
+  return {
     version: 2,
     activeTabId,
     tabs: orderDocumentTabs(tabs),
     closedTabs: closedTabs.slice(0, MAX_CLOSED_TABS),
-  } satisfies PersistedDocumentSession<Snapshot>);
+  } satisfies PersistedDocumentSession<Snapshot>;
 }

@@ -619,6 +619,8 @@ function normalizeTopLevelCalculus(
       const denominatorOrder = denominator.length === 2 && denominator[1].kind === "script"
         ? denominator[1].superscript
         : undefined;
+      // A noncanonical fraction must retain both orders, not silently become a derivative.
+      if (serializeFormulaToLatex(numeratorMarker.order ?? formulaAtom("1")) !== serializeFormulaToLatex(denominatorOrder ?? formulaAtom("1"))) return node;
       return {
         id: idFactory(),
         kind: "large-operator",
@@ -642,6 +644,7 @@ function normalizeTopLevelCalculus(
       if (markerIndex >= 0 && remainder.length > markerIndex + 1) {
         return {
           ...operator,
+          body: expressionFromParts([...(operator.body.kind === "slot" ? [] : operator.body.kind === "row" ? operator.body.children : [operator.body]), ...remainder.slice(0, markerIndex)], idFactory),
           differential: expressionFromParts(remainder.slice(markerIndex + 1), idFactory),
         };
       }
