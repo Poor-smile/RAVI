@@ -3,12 +3,8 @@
 import {
   AlertTriangle,
   Check,
-  Copy,
   FolderOpen,
-  Info,
-  KeyboardReturn,
   LoaderCircle,
-  RefreshCw,
 } from "@/app/icons/material-symbols";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Image from "next/image";
@@ -31,12 +27,11 @@ import {
   type FirstRunProviderState,
 } from "../first-run-state";
 import { useModalFocus } from "./accessible-modal";
+import { ChatGPTConnectControl } from "./chatgpt-connect-control";
 import { ChatGPTIcon } from "./chatgpt-icon";
+import { chatGPTConnection } from "../ai/connection-monitor";
 
 export const FIRST_RUN_STORAGE_KEY = "raavi:first-run-onboarding:v1";
-const CHATGPT_INSTALL_GUIDE =
-  "https://help.openai.com/en/articles/11096431";
-const CHATGPT_INSTALL_COMMAND = "npm install -g @openai/codex@latest";
 const CHATGPT_PREVIEW_STATES: readonly FirstRunChatGPTState[] = [
   "checking",
   "cli_missing",
@@ -249,160 +244,6 @@ function WelcomeArt() {
   );
 }
 
-function ChatGPTStatusRow({
-  state,
-  onLogin,
-  onInstallInPowerShell,
-  onOpenInstallGuide,
-  onRecheck,
-  installStarted,
-}: {
-  state: FirstRunChatGPTState;
-  onLogin: () => void;
-  onInstallInPowerShell: () => void;
-  onOpenInstallGuide: () => void;
-  onRecheck: () => void;
-  installStarted: boolean;
-}) {
-  const [installCommandCopied, setInstallCommandCopied] = useState(false);
-  const content: Record<
-    FirstRunChatGPTState,
-    readonly [string, string]
-  > = {
-    checking: [
-      "در حال بررسی پیش‌نیازهای ChatGPT…",
-      "نصب ابزار اتصال و وضعیت ورود حساب را بررسی می‌کنیم.",
-    ],
-    cli_missing: [
-      "آماده‌سازی اتصال ChatGPT",
-      "ابزار اتصال را با یک کلیک نصب کنید؛ سپس راوی آماده‌بودن آن را بررسی می‌کند.",
-    ],
-    auth_required: [
-      "ابزار آماده است؛ فقط ورود باقی مانده",
-      "ورود امن در مرورگر انجام می‌شود و سپس خودکار به راوی برمی‌گردید.",
-    ],
-    auth_waiting: [
-      "در انتظار ورود به ChatGPT…",
-      "مرورگر باز شده است؛ ورود را کامل کنید و به راوی برگردید.",
-    ],
-    connected: [
-      "با موفقیت به ChatGPT متصل شدید",
-      "هر دو پیش‌نیاز کامل‌اند و راوی هوشمند آماده است.",
-    ],
-    connection_error: [
-      "بررسی اتصال کامل نشد",
-      "اینترنت را بررسی کنید؛ سپس وضعیت را دوباره بررسی کنید.",
-    ],
-  };
-  const [title, defaultDescription] = content[state];
-  const description =
-    state === "cli_missing" && installStarted
-      ? "PowerShell باز شده است؛ پس از پایان نصب، راوی به‌صورت خودکار وضعیت را دوباره بررسی می‌کند."
-      : defaultDescription;
-  const cliComplete =
-    state === "auth_required" ||
-    state === "auth_waiting" ||
-    state === "connected";
-  const loginComplete = state === "connected";
-  const copyInstallCommand = async () => {
-    try {
-      await navigator.clipboard.writeText(CHATGPT_INSTALL_COMMAND);
-      setInstallCommandCopied(true);
-    } catch {
-      setInstallCommandCopied(false);
-    }
-  };
-
-  return (
-    <div
-      className={`first-run-action-row is-${state}`}
-      role="group"
-      aria-label="وضعیت اتصال ChatGPT"
-    >
-      <div className="first-run-chatgpt-summary">
-        <span className="first-run-action-row__copy" role="status" aria-live="polite">
-          <strong>{title}</strong>
-          <small>{description}</small>
-        </span>
-        <span className="first-run-chatgpt-summary-tools">
-          {state === "cli_missing" || state === "connection_error" ? (
-            <button type="button" className="first-run-status-refresh" onClick={onRecheck}>
-              <RefreshCw size={16} aria-hidden="true" />
-              بررسی دوباره
-            </button>
-          ) : null}
-          <span className="first-run-chatgpt-mark" aria-hidden="true">
-            <ChatGPTIcon />
-            <i className={`first-run-status-dot is-${state}`}>
-              {state === "connected" ? (
-                <Check size={12} />
-              ) : state === "checking" || state === "auth_waiting" ? (
-                <LoaderCircle size={12} />
-              ) : null}
-            </i>
-          </span>
-        </span>
-      </div>
-
-      <div className="first-run-prerequisites" aria-label="پیش‌نیازهای اتصال ChatGPT">
-        <span className={cliComplete ? "is-complete" : state === "cli_missing" ? "is-current" : ""}>
-          <i>{cliComplete ? <Check size={12} /> : "۱"}</i>
-          نصب ابزار اتصال
-        </span>
-        <span className={loginComplete ? "is-complete" : state === "auth_required" || state === "auth_waiting" ? "is-current" : ""}>
-          <i>{loginComplete ? <Check size={12} /> : "۲"}</i>
-          ورود با ChatGPT
-        </span>
-      </div>
-
-      {state === "cli_missing" ? (
-        <div className="first-run-cli-install-box" dir="ltr">
-          <code className="first-run-install-command">
-            {CHATGPT_INSTALL_COMMAND}
-          </code>
-          <div className="first-run-cli-install-controls">
-            <button
-              type="button"
-              className="first-run-cli-copy"
-              onClick={() => void copyInstallCommand()}
-              aria-label={installCommandCopied ? "فرمان نصب کپی شد" : "کپی فرمان نصب CLI"}
-              title={installCommandCopied ? "کپی شد" : "کپی فرمان نصب"}
-            >
-              {installCommandCopied ? <Check size={19} aria-hidden="true" /> : <Copy size={19} aria-hidden="true" />}
-            </button>
-            <button
-              type="button"
-              className="first-run-cli-guide"
-              onClick={onOpenInstallGuide}
-              aria-label="راهنمای نصب"
-              title="راهنمای نصب"
-            >
-              <Info size={17} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="first-run-cli-install-trigger"
-              onClick={onInstallInPowerShell}
-              aria-label={installStarted ? "بازکردن دوباره PowerShell" : "نصب CLI در PowerShell"}
-              title={installStarted ? "بازکردن دوباره PowerShell" : "نصب CLI در PowerShell"}
-            >
-              <KeyboardReturn size={21} aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {state === "auth_required" ? (
-        <div className="first-run-chatgpt-actions">
-          <button type="button" className="is-primary" onClick={onLogin}>
-            ورود با ChatGPT
-          </button>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function providerStateLabel(state: FirstRunProviderState) {
   if (state === "connecting") return "در حال اتصال";
   if (state === "connected") return "متصل";
@@ -522,7 +363,6 @@ export function FirstRunOnboarding({
   const [vaultBusy, setVaultBusy] = useState(false);
   const [chatGPTState, setChatGPTState] =
     useState<FirstRunChatGPTState>(initialChatGPTState);
-  const [cliInstallStarted, setCliInstallStarted] = useState(false);
   const initialProviderSelection = useMemo(
     () => firstRunProviderSelection(backupStatus),
     [backupStatus],
@@ -544,8 +384,7 @@ export function FirstRunOnboarding({
   useEffect(() => {
     if (!open || chatGPTState !== "checking") return;
     let cancelled = false;
-    void window.raaviDesktop
-      ?.getCodexConnectionStatus?.()
+    void chatGPTConnection.check()
       .then((status) => {
         if (!cancelled) setChatGPTState(chatGPTStateFromConnection(status));
       })
@@ -575,57 +414,9 @@ export function FirstRunOnboarding({
   }, [backupStatus, open]);
 
   useEffect(() => {
-    if (!open || chatGPTState !== "auth_waiting") return;
-    let cancelled = false;
-    let attempts = 0;
-    const poll = async () => {
-      if (cancelled) return;
-      attempts += 1;
-      try {
-        const status = await window.raaviDesktop?.getCodexConnectionStatus?.();
-        if (cancelled) return;
-        if (status && status.state !== "auth_waiting" && status.state !== "auth_required") {
-          setChatGPTState(chatGPTStateFromConnection(status));
-          return;
-        }
-      } catch {
-        if (attempts >= 20) {
-          setChatGPTState("connection_error");
-          return;
-        }
-      }
-      if (attempts >= 40) {
-        setChatGPTState("connection_error");
-        return;
-      }
-      window.setTimeout(poll, 1_500);
-    };
-    const timer = window.setTimeout(poll, 1_000);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [chatGPTState, open]);
-
-  useEffect(() => {
-    if (!open || !cliInstallStarted || chatGPTState !== "cli_missing") return;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const status = await window.raaviDesktop?.getCodexConnectionStatus?.();
-        if (cancelled || !status || status.state === "cli_missing") return;
-        setCliInstallStarted(false);
-        setChatGPTState(chatGPTStateFromConnection(status));
-      } catch {
-        // PowerShell remains visible with the actionable installation error.
-      }
-    };
-    const timer = window.setInterval(() => void poll(), 2_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [chatGPTState, cliInstallStarted, open]);
+    if (!open) return;
+    return chatGPTConnection.subscribe(status => setChatGPTState(chatGPTStateFromConnection(status)));
+  }, [open]);
 
   const effectiveVaultPath = vaultPath || initialVaultPath || "";
   const resume = visitedSteps.has(step);
@@ -649,60 +440,6 @@ export function FirstRunOnboarding({
     } finally {
       setVaultBusy(false);
     }
-  };
-
-  const connectChatGPT = async () => {
-    if (chatGPTState === "auth_waiting" || chatGPTState === "connected") return;
-    const desktop = window.raaviDesktop;
-    if (!desktop?.startCodexLogin) {
-      setChatGPTState("connection_error");
-      return;
-    }
-    setChatGPTState("auth_waiting");
-    try {
-      const result = await desktop.startCodexLogin();
-      if (!result.started) setChatGPTState(result.state);
-    } catch {
-      setChatGPTState("connection_error");
-    }
-  };
-
-  const refreshChatGPTConnection = async () => {
-    const desktop = window.raaviDesktop;
-    if (!desktop?.getCodexConnectionStatus) {
-      setChatGPTState("connection_error");
-      return;
-    }
-    setChatGPTState("checking");
-    try {
-      const status = await desktop.getCodexConnectionStatus();
-      setChatGPTState(chatGPTStateFromConnection(status));
-    } catch {
-      setChatGPTState("connection_error");
-    }
-  };
-
-  const openChatGPTInstallGuide = async () => {
-    const desktop = window.raaviDesktop;
-    if (desktop?.openExternalUrl) {
-      await desktop.openExternalUrl(CHATGPT_INSTALL_GUIDE);
-      return;
-    }
-    window.open(CHATGPT_INSTALL_GUIDE, "_blank", "noopener,noreferrer");
-  };
-
-  const installChatGPTCli = async () => {
-    const desktop = window.raaviDesktop;
-    if (!desktop?.installCodexCli) {
-      await openChatGPTInstallGuide();
-      return;
-    }
-    const result = await desktop.installCodexCli();
-    if (result.started) {
-      setCliInstallStarted(true);
-      return;
-    }
-    setChatGPTState("connection_error");
   };
 
   const connectProvider = async (providerId: BackupProviderId) => {
@@ -839,14 +576,7 @@ export function FirstRunOnboarding({
                     </span>
                   </button>
                 ) : step === 2 ? (
-                  <ChatGPTStatusRow
-                    state={chatGPTState}
-                    installStarted={cliInstallStarted}
-                    onInstallInPowerShell={() => void installChatGPTCli()}
-                    onLogin={() => void connectChatGPT()}
-                    onOpenInstallGuide={() => void openChatGPTInstallGuide()}
-                    onRecheck={() => void refreshChatGPTConnection()}
-                  />
+                  <ChatGPTConnectControl state={chatGPTState} />
                 ) : step === 3 ? (
                   <div className="first-run-provider-list">
                     {PROVIDERS.map((provider) => (

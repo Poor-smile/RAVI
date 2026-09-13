@@ -41,8 +41,18 @@ jobs:
           Copy-Item -LiteralPath 'tests/fixtures/windows-release-2.4.6.json' -Destination (Join-Path $stage 'contract.json')
           $contract = Get-Content -LiteralPath (Join-Path $stage 'contract.json') -Raw | ConvertFrom-Json
           foreach ($entry in @($contract.candidate, $contract.previous)) {
-            gh release download "v$($entry.version)" --repo Poor-smile/RAVI --pattern $entry.file --dir $stage
-            if ($LASTEXITCODE -ne 0) { throw 'GitHub release download failed' }
+            if ($entry.releaseId) {
+              # Draft releases have no public tag endpoint. Download by the
+              # explicit release/asset IDs, then verify the pinned checksum.
+              $release = gh api "repos/Poor-smile/RAVI/releases/$($entry.releaseId)" | ConvertFrom-Json
+              if ($LASTEXITCODE -ne 0 -or $release.tag_name -ne "v$($entry.version)") { throw 'Draft release identity mismatch' }
+              $asset = @($release.assets | Where-Object { $_.name -eq $entry.file })
+              if ($asset.Count -ne 1) { throw 'Expected exactly one candidate installer asset' }
+              Invoke-WebRequest -Uri $asset[0].url -Headers @{ Authorization="Bearer $env:GH_TOKEN"; Accept='application/octet-stream' } -OutFile (Join-Path $stage $entry.file)
+            } else {
+              gh release download "v$($entry.version)" --repo Poor-smile/RAVI --pattern $entry.file --dir $stage
+              if ($LASTEXITCODE -ne 0) { throw 'GitHub release download failed' }
+            }
             if ((Get-FileHash -LiteralPath (Join-Path $stage $entry.file) -Algorithm SHA256).Hash -ne $entry.sha256) { throw 'Installer checksum mismatch' }
           }
       - name: Exercise fresh install, uninstall and real upgrade

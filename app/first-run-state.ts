@@ -33,14 +33,10 @@ export function chatGPTStateFromConnection(
 }
 
 export function shouldAutoOpenFirstRun(
-  chatGPTStatus: CodexConnectionStatus,
-  connections: Partial<BackupProviderConnections>,
+  installation: { firstLaunch: boolean },
+  completed: boolean,
 ) {
-  const aiConnected = chatGPTStatus.state === "connected";
-  const backupConnected = PROVIDER_IDS.some(
-    (providerId) => connections[providerId]?.state === "connected",
-  );
-  return !aiConnected || !backupConnected;
+  return installation.firstLaunch && !completed;
 }
 
 export function firstRunProviderSelection(

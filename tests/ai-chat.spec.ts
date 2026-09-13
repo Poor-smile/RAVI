@@ -182,10 +182,11 @@ test("missing ChatGPT connection opens setup and keeps login, model selection an
           );
           return { saved: true, preferences };
         },
-        startCodexLogin: async () => {
+        connectCodex: async () => {
           connectionState = "connected";
           return { started: true, state: "auth_waiting" as const };
         },
+        startCodexLogin: async () => ({ started: true, state: "auth_waiting" as const }),
         resetCodexConnection: async () => {
           connectionState = "auth_required";
           window.localStorage.setItem("raavi:test-chatgpt-reset", "true");
@@ -213,16 +214,17 @@ test("missing ChatGPT connection opens setup and keeps login, model selection an
   await expect(page.getByText("Gemini CLI")).toHaveCount(0);
   await expect(page.getByText("Cursor Agent")).toHaveCount(0);
   await expect(page.getByText("GitHub Copilot")).toHaveCount(0);
-  await chatgptConnection.getByRole("button", { name: "ورود با ChatGPT" }).click();
-  await chatgptConnection.getByRole("button", { name: "ورود را انجام دادم" }).click();
-  await expect(chatgptConnection).toContainText("متصل و آماده");
+  await chatgptConnection.getByRole("button", { name: "اتصال به ChatGPT", exact: true }).click();
+  // Completing authorization updates the shared status without a reload or a
+  // second confirmation button. Model persistence and reconnect remain covered.
+  await expect(chatgptConnection).toContainText("ChatGPT متصل است");
   const modelSelect = chatgptConnection.getByRole("combobox", { name: "مدل ChatGPT" });
   await expect(modelSelect).toHaveValue("gpt-5.6-sol");
   await modelSelect.selectOption("gpt-5.6-terra");
   await expect(modelSelect).toHaveValue("gpt-5.6-terra");
   page.once("dialog", (dialog) => dialog.accept());
   await chatgptConnection.getByRole("button", { name: "قطع و اتصال دوباره" }).click();
-  await expect(chatgptConnection).toContainText("در انتظار تکمیل ورود در مرورگر");
+  await expect(chatgptConnection.getByRole("button", { name: "ادامهٔ ورود", exact: true })).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("raavi:test-chatgpt-reset"))).toBe("true");
   await expect(page.locator(".speech-tier-row")).toHaveCount(3);
   await expect(page.locator(".speech-tier-list")).toContainText("پیشرفته");

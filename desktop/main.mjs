@@ -18,6 +18,9 @@ import { warmWindowsSavePermissions } from "./windows-save-permissions.mjs";
 import { createDocumentSessionStore } from "./document-session-store.mjs";
 import { createSnapshotStorage } from "./snapshot-storage.mjs";
 import { createRendererStateStore } from "./renderer-state-store.mjs";
+import { initializeInstallationState } from "./installation-state.mjs";
+import { installManagedCodex } from "./managed-codex.mjs";
+import { createCodexConnector } from "./codex-connect.mjs";
 import { createDocumentHistoryStore } from "./document-history-store.mjs";
 import { fileURLToPath } from "node:url";
 import {
@@ -46,7 +49,7 @@ import {
   runCodexPersianReview,
   runCodexSmartAnnotations,
   resetCodexConnection,
-  startCodexCliInstall,
+  resolveCodexCommand,
   startCodexLogin,
 } from "./codex-cli.mjs";
 import {
@@ -93,6 +96,18 @@ if (
 }
 app.setName("راوی");
 app.setPath("userData", raaviUserDataDirectory);
+process.env.RAAVI_CODEX_MANAGED_ROOT = path.join(raaviUserDataDirectory, "tools", "codex");
+const codexConnector = createCodexConnector({
+  readStatus: getCodexConnectionStatus,
+  resolveCommand: resolveCodexCommand,
+  install: onProgress => installManagedCodex(process.env.RAAVI_CODEX_MANAGED_ROOT, onProgress),
+  login: () => startCodexLogin(url => shell.openExternal(url)),
+  onProgress: progress => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("codex:setup-progress", progress);
+  },
+});
+const installationState = initializeInstallationState(raaviUserDataDirectory, app.getVersion())
+  .catch(() => ({ firstLaunch: false }));
 const snapshotStorage = createSnapshotStorage(path.join(app.getPath("userData"), "state-store"), {
   manifests: [rendererStatePath(), path.join(app.getPath("userData"), "document-session.json")],
   automaticCollection: true,
@@ -1404,6 +1419,7 @@ function registerDesktopHandlers() {
   });
   trustedIpc.handle("renderer-state:get", getRendererState);
   trustedIpc.handle("document-session:get", () => documentSessionStore.read());
+  trustedIpc.handle("installation:get-state", () => installationState);
   trustedIpc.handle("document-session:save", (_event, session) => documentSessionStore.write(session));
   trustedIpc.handle("renderer-state:save", saveRendererState);
   trustedIpc.handle("backup:get-status", getBackupStatus);
@@ -1492,9 +1508,11 @@ function registerDesktopHandlers() {
   trustedIpc.handle("ai:preferences-save", saveStoredAiPreferences);
   trustedIpc.handle("ai:preferences-clear", clearAiPreferences);
   trustedIpc.handle("codex:connection-status", getCodexConnectionStatus);
+  trustedIpc.handle("codex:connect", () => codexConnector.connect());
+  trustedIpc.handle("codex:setup-state", () => codexConnector.getProgress());
   trustedIpc.handle("codex:models", getCodexModels);
-  trustedIpc.handle("codex:install-cli", startCodexCliInstall);
-  trustedIpc.handle("codex:start-login", startCodexLogin);
+  trustedIpc.handle("codex:install-cli", () => codexConnector.connect());
+  trustedIpc.handle("codex:start-login", () => startCodexLogin(url => shell.openExternal(url)));
   trustedIpc.handle("codex:reset-connection", resetCodexConnection);
   trustedIpc.handle("codex:run", (_event, payload) => runCodexPrompt(payload));
   trustedIpc.handle("codex:audio-cleanup", (_event, payload) =>
@@ -1549,6 +1567,13 @@ function registerDesktopHandlers() {
   trustedIpc.on("renderer:checkpoint-ready", (event, id, ok) => {
     const checkpoint = closeCheckpoints.get(id);
     if (checkpoint?.sender === event.sender) checkpoint.finish(ok === true);
+  });
+  trustedIpc.on("renderer:state-restored", (event) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return;
+    // Data restoration is complete, but React may still need a visible frame
+    // to commit a large editor. Do not make uncovering that frame depend on
+    // the post-commit renderer:ready effect.
+    removeStartupOverlay();
   });
   trustedIpc.on("renderer:ready", (event) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;

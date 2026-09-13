@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  CODEX_CLI_INSTALL_COMMAND,
   buildAudioCleanupPrompt,
   buildCodexPrompt,
   buildNarrationDirectorPrompt,
@@ -10,14 +9,6 @@ import {
   getCodexModels,
   resolveCodexCommand,
 } from "../desktop/codex-cli.mjs";
-
-test("First Run exposes only the fixed official Codex CLI install command", () => {
-  assert.equal(
-    CODEX_CLI_INSTALL_COMMAND,
-    "npm install -g @openai/codex@latest",
-  );
-  assert.doesNotMatch(CODEX_CLI_INSTALL_COMMAND, /[;&|`]/);
-});
 
 test("Codex prompt isolates the frozen context from the user request", () => {
   const prompt = buildCodexPrompt({

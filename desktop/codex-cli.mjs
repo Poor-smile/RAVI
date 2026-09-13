@@ -4,54 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import { isMainThread } from "node:worker_threads";
 import { runNativeTask } from "./native-task-runner.mjs";
+import { managedCodexPath } from "./managed-codex.mjs";
 
 const MAX_CONTEXT_LENGTH = 480_000;
 const MAX_PROMPT_LENGTH = 24_000;
 const MAX_OUTPUT_LENGTH = 1_200_000;
 const EXECUTION_TIMEOUT_MS = 180_000;
-export const CODEX_CLI_INSTALL_COMMAND =
-  "npm install -g @openai/codex@latest";
-
-export function startCodexCliInstall() {
-  if (process.platform !== "win32") {
-    return { started: false, reason: "unsupported_platform" };
-  }
-
-  const script = [
-    "$Host.UI.RawUI.WindowTitle = 'Raavi - Install ChatGPT CLI'",
-    "Write-Host 'Installing the official OpenAI Codex CLI for Raavi...' -ForegroundColor Cyan",
-    "if (Get-Command npm -ErrorAction SilentlyContinue) {",
-    `  ${CODEX_CLI_INSTALL_COMMAND}`,
-    "  if ($LASTEXITCODE -eq 0) {",
-    "    Write-Host ''",
-    "    Write-Host 'Installation completed. Return to Raavi; detection is automatic.' -ForegroundColor Green",
-    "  } else {",
-    "    Write-Host ''",
-    "    Write-Host 'Installation failed. Review the error above, then try again.' -ForegroundColor Red",
-    "  }",
-    "} else {",
-    "  Write-Host 'npm was not found. Install Node.js, then run this action again.' -ForegroundColor Yellow",
-    "}",
-  ].join("; ");
-
-  try {
-    const child = spawn(
-      "powershell.exe",
-      ["-NoLogo", "-NoProfile", "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", script],
-      {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: false,
-      },
-    );
-    child.once("error", () => {});
-    child.unref();
-    return { started: true };
-  } catch {
-    return { started: false, reason: "launch_failed" };
-  }
-}
-
 export const RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -285,6 +243,8 @@ export async function resolveCodexCommand() {
       // The explicit install locations below remain available.
     }
   }
+  const managed = managedCodexPath();
+  if (managed) candidates.unshift(managed);
   for (const candidate of [...new Set(candidates)]) {
     if (!(await canAccess(candidate))) continue;
     try {
@@ -703,16 +663,43 @@ export async function runCodexNarrationDirector(payload) {
   return { segments };
 }
 
-export async function startCodexLogin() {
+let activeLogin;
+let activeLoginUrl;
+export async function startCodexLogin(openBrowser) {
+  if (activeLogin && activeLogin.exitCode === null && !activeLogin.killed) {
+    if (activeLoginUrl && typeof openBrowser === "function") await openBrowser(activeLoginUrl);
+    return { started: true, state: "auth_waiting" };
+  }
   const command = await resolveCodexCommand();
   if (!command) return { started: false, state: "cli_missing" };
   try {
     const child = spawn(command, ["login"], {
-      detached: true,
       windowsHide: true,
-      stdio: "ignore",
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    child.unref();
+    activeLogin = child;
+    activeLoginUrl = undefined;
+    let buffer = "";
+    const inspect = chunk => {
+      // Keep the authorization URL only in memory for the resume action.
+      buffer = (buffer + chunk.toString("utf8")).slice(-16_384);
+      for (const match of buffer.matchAll(/https:\/\/auth\.openai\.com\/[^\s<>"']+/g)) {
+        try {
+          const url = new URL(match[0]);
+          if (url.hostname === "auth.openai.com" && url.pathname === "/oauth/authorize" && url.searchParams.has("state") && url.searchParams.has("code_challenge")) activeLoginUrl = url.href;
+        } catch { /* Wait for the rest of a URL split across output chunks. */ }
+      }
+    };
+    child.stdout.on("data", inspect);
+    child.stderr.on("data", inspect);
+    const timer = setTimeout(() => child.kill(), 5 * 60_000);
+    timer.unref();
+    child.once("close", () => {
+      clearTimeout(timer);
+      buffer = "";
+      if (activeLogin === child) { activeLogin = undefined; activeLoginUrl = undefined; }
+    });
+    await new Promise((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
     return { started: true, state: "auth_waiting" };
   } catch {
     return { started: false, state: "connection_error" };
@@ -720,6 +707,7 @@ export async function startCodexLogin() {
 }
 
 export async function resetCodexConnection() {
+  if (activeLogin) activeLogin.kill();
   const command = await resolveCodexCommand();
   if (!command) return { state: "cli_missing" };
   try {

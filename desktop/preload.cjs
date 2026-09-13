@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld(
   "raaviDesktop",
   Object.freeze({
     isDesktop: true,
+    getInstallationState: () => ipcRenderer.invoke("installation:get-state"),
+    rendererStateRestored: () => ipcRenderer.send("renderer:state-restored"),
     onPrepareToClose: (callback) => {
       const listener = (_event, id) => {
         Promise.resolve().then(callback).then(
@@ -129,6 +131,13 @@ contextBridge.exposeInMainWorld(
     clearAiPreferences: () => ipcRenderer.invoke("ai:preferences-clear"),
     getCodexConnectionStatus: () =>
       ipcRenderer.invoke("codex:connection-status"),
+    connectCodex: () => ipcRenderer.invoke("codex:connect"),
+    getCodexSetupProgress: () => ipcRenderer.invoke("codex:setup-state"),
+    onCodexSetupProgress: (callback) => {
+      const listener = (_event, progress) => callback(progress);
+      ipcRenderer.on("codex:setup-progress", listener);
+      return () => ipcRenderer.removeListener("codex:setup-progress", listener);
+    },
     getCodexModels: () => ipcRenderer.invoke("codex:models"),
     installCodexCli: () => ipcRenderer.invoke("codex:install-cli"),
     startCodexLogin: () => ipcRenderer.invoke("codex:start-login"),

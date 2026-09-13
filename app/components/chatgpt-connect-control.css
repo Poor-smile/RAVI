@@ -1,0 +1,9 @@
+.chatgpt-connect-control { display: grid; gap: 12px; width: 100%; text-align: start; }
+.chatgpt-connect-summary { display: flex; align-items: center; gap: 10px; }
+.chatgpt-connect-control .chatgpt-icon { width: 24px; height: 24px; flex: none; }
+.chatgpt-connect-control p { margin: 0; font-size: 13px; line-height: 1.9; }
+.chatgpt-connect-control > button { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 12px; padding: 10px 16px; border: 1px solid var(--line); background: var(--accent); color: var(--accent-contrast, white); font: inherit; cursor: pointer; }
+.chatgpt-connect-control > button:disabled { cursor: default; }
+.chatgpt-connect-control.is-connected > button { background: #237b52; color: white; border-color: transparent; }
+.chatgpt-connect-control > progress { width: 100%; height: 6px; accent-color: var(--accent); }
+.chatgpt-connect-control > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

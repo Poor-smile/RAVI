@@ -87,6 +87,11 @@ jobs:
           npm ci
           npm run verify:dependencies
 
+      - name: Verify one-click managed Codex installation
+        run: |
+          node --test tests/managed-codex.test.mjs tests/installation-state.test.mjs
+          node scripts/verify-managed-codex.mjs
+
       - name: Prepare Google Drive desktop OAuth configuration
         env:
           RAAVI_GOOGLE_CLIENT_ID: ${{ secrets.RAAVI_GOOGLE_CLIENT_ID }}

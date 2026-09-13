@@ -66,27 +66,9 @@ test("a connected but inactive provider is reusable without another login", () =
   assert.equal(result.states["google-drive"], "idle");
 });
 
-test("first run stays hidden only when both AI and at least one backup provider are connected", () => {
-  const connectedProviders: BackupProviderConnections = {
-    "google-drive": { state: "connected", accountEmail: "user@example.com" },
-    "proton-drive": { state: "disconnected", accountEmail: "" },
-  };
-  assert.equal(
-    shouldAutoOpenFirstRun({ state: "connected" }, connectedProviders),
-    false,
-  );
-  assert.equal(
-    shouldAutoOpenFirstRun({ state: "auth_required" }, connectedProviders),
-    true,
-  );
-  assert.equal(
-    shouldAutoOpenFirstRun(
-      { state: "connected" },
-      {
-        "google-drive": { state: "disconnected", accountEmail: "" },
-        "proton-drive": { state: "reauth", accountEmail: "" },
-      },
-    ),
-    true,
-  );
+test("automatic tour is limited to a new installation, independently of account connections", () => {
+  assert.equal(shouldAutoOpenFirstRun({ firstLaunch: true }, false), true);
+  assert.equal(shouldAutoOpenFirstRun({ firstLaunch: true }, true), false);
+  assert.equal(shouldAutoOpenFirstRun({ firstLaunch: false }, false), false);
+  assert.equal(shouldAutoOpenFirstRun({ firstLaunch: false }, true), false);
 });

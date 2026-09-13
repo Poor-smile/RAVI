@@ -402,6 +402,7 @@ import type {
   CodexResult,
 } from "./ai/types";
 import { shouldAutoOpenFirstRun } from "./first-run-state";
+import { chatGPTConnection } from "./ai/connection-monitor";
 import {
   frozenBlockIsCurrent,
   frozenContextIsCurrent,
@@ -940,6 +941,7 @@ type ReadingResumeNotice = {
 
 export type RaaviDesktopAPI = {
   isDesktop: true;
+  getInstallationState?: () => Promise<{ firstLaunch: boolean }>;
   getLocalDocumentSnapshot: () => Promise<LocalDocumentSnapshot | null>;
   getDocumentSession?: () => Promise<unknown>;
   saveDocumentSession?: (session: unknown) => Promise<{ saved: boolean }>;
@@ -1064,6 +1066,9 @@ export type RaaviDesktopAPI = {
   ) => Promise<{ saved: boolean; preferences: AiPreferences }>;
   clearAiPreferences?: () => Promise<{ cleared: boolean }>;
   getCodexConnectionStatus?: () => Promise<CodexConnectionStatus>;
+  connectCodex?: () => Promise<{ started: boolean; state: CodexConnectionStatus["state"]; code?: string }>;
+  getCodexSetupProgress?: () => Promise<import("./ai/types").CodexSetupProgress>;
+  onCodexSetupProgress?: (callback: (progress: import("./ai/types").CodexSetupProgress) => void) => () => void;
   getCodexModels?: () => Promise<ChatGPTModelList>;
   installCodexCli?: () => Promise<{
     started: boolean;
@@ -1152,6 +1157,7 @@ export type RaaviDesktopAPI = {
   toggleMaximizeWindow?: () => Promise<void>;
   closeWindow?: () => Promise<void>;
   rendererReady: () => void;
+  rendererStateRestored?: () => void;
   documentPresented?: () => void;
   onOpenMarkdownFile: (
     callback: (document: DesktopOpenedDocument) => void,
@@ -6457,6 +6463,9 @@ function DesktopWorkspace() {
         } finally {
           documentTabsHydratedRef.current = true;
           setHydrated(true);
+          // Uncover the native document after recovery, before its first large
+          // React commit; the ready handshake still runs after that commit.
+          window.raaviDesktop?.rendererStateRestored?.();
         }
       })();
     }, 0);
@@ -6476,26 +6485,20 @@ function DesktopWorkspace() {
     let cancelled = false;
     void (async () => {
       const desktop = window.raaviDesktop;
-      if (
-        !desktop?.getCodexConnectionStatus ||
-        !desktop.getBackupProviderConnections
-      ) {
-        if (!cancelled) setFirstRunOpen(true);
-        return;
-      }
+      if (!desktop?.getInstallationState) return;
       try {
-        const [chatGPTStatus, providerConnections] = await Promise.all([
-          desktop.getCodexConnectionStatus(),
-          desktop.getBackupProviderConnections(),
-        ]);
+        const installation = await desktop.getInstallationState();
+        const stored = window.localStorage.getItem(FIRST_RUN_STORAGE_KEY);
+        const completed = stored ? JSON.parse(stored)?.completed === true : false;
         if (
           !cancelled &&
-          shouldAutoOpenFirstRun(chatGPTStatus, providerConnections)
+          shouldAutoOpenFirstRun(installation, completed)
         ) {
           setFirstRunOpen(true);
         }
       } catch {
-        if (!cancelled) setFirstRunOpen(true);
+        // Unavailable installation metadata must not replay the tour on upgrade.
+        // The user can still open it explicitly from settings.
       }
     })();
     return () => {
@@ -12318,6 +12321,19 @@ function DesktopWorkspace() {
     );
   };
 
+  useEffect(() => {
+    if (!window.raaviDesktop?.getCodexConnectionStatus) return;
+    const unsubscribe = chatGPTConnection.subscribe(status => setCodexConnectionState(status.state));
+    const refresh = () => { if (document.visibilityState === "visible") void chatGPTConnection.check(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
   const checkCodexConnection = async () => {
     const desktop = window.raaviDesktop;
     if (!desktop?.getCodexConnectionStatus) {
@@ -12326,7 +12342,7 @@ function DesktopWorkspace() {
     }
     setCodexConnectionState("checking");
     try {
-      const status = await desktop.getCodexConnectionStatus();
+      const status = await chatGPTConnection.check();
       setCodexConnectionState(status.state);
       return status.state;
     } catch {
@@ -17231,8 +17247,8 @@ function DesktopWorkspace() {
                               {readingDocumentKicker}
                             </p>
                           )}
-                          {renderedMarkdownPreview}
-                          {progressivePreview && !pdfExportActive && (
+                          {(!previewPaneCollapsed || pdfExportActive) && renderedMarkdownPreview}
+                          {!previewPaneCollapsed && progressivePreview && !pdfExportActive && (
                             <div
                               ref={progressiveRenderSentinelRef}
                               className="progressive-render-status"

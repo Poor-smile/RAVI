@@ -42,9 +42,11 @@ export async function waitForRaaviWindow(
     for (const page of app.windows()) {
       try {
         if (page.isClosed()) continue;
-        observedUrls.add(page.url());
+        observedUrls.add(page.url().startsWith("data:") ? "data:startup-overlay" : page.url());
+        // Read readiness only from the document route, not the startup overlay.
+        if (!/^http:\/\/127\.0\.0\.1:\d+\/$/.test(page.url())) continue;
         const shell = page.locator('.app-shell[data-hydrated="true"]');
-        if ((await shell.count()) === 0) continue;
+        await shell.waitFor({ state: "attached", timeout: Math.min(1_000, Math.max(1, deadline - Date.now())) });
         await dismissFirstRunIfNeeded(page);
         return page;
       } catch {

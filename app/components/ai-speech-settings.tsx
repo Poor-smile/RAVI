@@ -7,10 +7,7 @@ import {
   AlertTriangle,
   BrainCircuit,
   Check,
-  Copy,
   Download,
-  Info,
-  KeyboardReturn,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -21,10 +18,8 @@ import type {
 } from "../ai/types";
 import type { AudioModelState, AudioModelTierId } from "../audio/types";
 import type { AiPreferences } from "../settings/ai-preferences";
-import { ChatGPTIcon } from "./chatgpt-icon";
-
-const CHATGPT_INSTALL_GUIDE = "https://help.openai.com/en/articles/11096431";
-const CHATGPT_INSTALL_COMMAND = "npm install -g @openai/codex@latest";
+import { ChatGPTConnectControl } from "./chatgpt-connect-control";
+import { chatGPTConnection } from "../ai/connection-monitor";
 
 const EMPTY_AUDIO_STATE: AudioModelState = {
   supported: false,
@@ -43,16 +38,6 @@ function formatBytes(value: number) {
   return `${Math.round(value / 1024 / 1024).toLocaleString("fa-IR")} مگابایت`;
 }
 
-function connectionCopy(state: CodexConnectionState) {
-  if (state === "connected") return "متصل و آماده";
-  if (state === "cli_missing") return "ابزار اتصال روی سیستم پیدا نشد";
-  if (state === "auth_required") return "آمادهٔ ورود با حساب ChatGPT";
-  if (state === "auth_waiting") return "در انتظار تکمیل ورود در مرورگر";
-  if (state === "checking") return "در حال بررسی اتصال";
-  if (state === "unavailable") return "فقط در نسخهٔ دسکتاپ در دسترس است";
-  return "بررسی اتصال کامل نشد";
-}
-
 function tierLabel(id: AudioModelTierId, fallback: string) {
   return id === "accurate" ? "پیشرفته" : fallback;
 }
@@ -60,7 +45,6 @@ function tierLabel(id: AudioModelTierId, fallback: string) {
 export function AiSpeechSettings({
   preferences,
   onPreferencesChange,
-  onOpenExternal,
 }: {
   preferences: AiPreferences;
   onPreferencesChange: (preferences: AiPreferences) => void;
@@ -73,8 +57,6 @@ export function AiSpeechSettings({
     "checking" | "login" | "reconnect" | null
   >("checking");
   const [connectionError, setConnectionError] = useState("");
-  const [cliInstallStarted, setCliInstallStarted] = useState(false);
-  const [cliCommandCopied, setCliCommandCopied] = useState(false);
   const [models, setModels] = useState<ChatGPTModelOption[]>([]);
   const [modelsBusy, setModelsBusy] = useState(true);
   const [modelError, setModelError] = useState("");
@@ -90,7 +72,7 @@ export function AiSpeechSettings({
     setConnectionBusy("checking");
     setConnectionError("");
     try {
-      const status = await desktop.getCodexConnectionStatus();
+      const status = await chatGPTConnection.check();
       setConnectionState(status.state);
     } catch {
       setConnectionState("connection_error");
@@ -144,95 +126,16 @@ export function AiSpeechSettings({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!cliInstallStarted || connectionState !== "cli_missing") return;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const status = await desktop?.getCodexConnectionStatus?.();
-        if (cancelled || !status || status.state === "cli_missing") return;
-        setCliInstallStarted(false);
-        setConnectionState(status.state);
-      } catch {
-        // The visible PowerShell window keeps the actionable installation error.
-      }
-    };
-    const timer = window.setInterval(() => void poll(), 2_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [cliInstallStarted, connectionState, desktop]);
+  useEffect(() => chatGPTConnection.subscribe(status => {
+    setConnectionState(status.state);
+    if (status.state === "connected") setConnectionError("");
+  }), []);
 
   useEffect(() => {
-    if (connectionState !== "auth_waiting") return;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const status = await desktop?.getCodexConnectionStatus?.();
-        if (cancelled || !status || status.state === "auth_required" || status.state === "auth_waiting") return;
-        setConnectionState(status.state);
-        if (status.state === "connected") void refreshModels();
-      } catch {
-        // The user can still run a manual connection check.
-      }
-    };
-    const timer = window.setInterval(() => void poll(), 1_500);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-    // The preload bridge and model refresh routine are stable for this view.
+    if (connectionState === "connected") queueMicrotask(() => void refreshModels());
+    // Fetch the account's models when a connection is detected in any view.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectionState]);
-
-  const installCli = async () => {
-    if (!desktop?.installCodexCli) {
-      onOpenExternal(CHATGPT_INSTALL_GUIDE);
-      return;
-    }
-    setConnectionError("");
-    const result = await desktop.installCodexCli();
-    if (result.started) {
-      setCliInstallStarted(true);
-      return;
-    }
-    setConnectionState("connection_error");
-    setConnectionError("PowerShell باز نشد؛ راهنمای رسمی نصب را باز کنید.");
-  };
-
-  const copyCliInstallCommand = async () => {
-    try {
-      await navigator.clipboard.writeText(CHATGPT_INSTALL_COMMAND);
-      setCliCommandCopied(true);
-    } catch {
-      setCliCommandCopied(false);
-    }
-  };
-
-  const login = async () => {
-    if (!desktop?.startCodexLogin) return;
-    setConnectionBusy("login");
-    setConnectionError("");
-    try {
-      const result = await desktop.startCodexLogin();
-      if (!result.started) {
-        setConnectionState(result.state);
-        setConnectionError(
-          result.state === "cli_missing"
-            ? "ابزار اتصال ChatGPT نصب نیست؛ راهنمای رسمی نصب را باز کنید."
-            : "ورود شروع نشد؛ دوباره تلاش کنید.",
-        );
-        return;
-      }
-      setConnectionState("auth_waiting");
-    } catch {
-      setConnectionState("connection_error");
-      setConnectionError("ورود با ChatGPT شروع نشد؛ دوباره تلاش کنید.");
-    } finally {
-      setConnectionBusy(null);
-    }
-  };
 
   const reconnect = async () => {
     if (!desktop?.resetCodexConnection || !desktop.startCodexLogin) return;
@@ -258,6 +161,7 @@ export function AiSpeechSettings({
         setConnectionError("اتصال قطع شد، اما ورود دوباره شروع نشد؛ دکمهٔ ورود را بزنید.");
         return;
       }
+      chatGPTConnection.trackLogin();
       setConnectionState("auth_waiting");
     } catch {
       setConnectionState("connection_error");
@@ -315,96 +219,15 @@ export function AiSpeechSettings({
       )}
 
       <article className={`chatgpt-connection is-${connectionState}`}>
-        <div className="chatgpt-connection-top">
-          <div className="ai-engine-identity">
-            <span className="ai-engine-mark" aria-hidden="true">
-              <ChatGPTIcon />
-              <span className={`ai-engine-state is-${connectionState}`}>
-                {connected ? <Check size={10} /> : null}
-              </span>
-            </span>
-            <div>
-              <strong>ChatGPT</strong>
-              <span>{connectionCopy(connectionState)}</span>
-            </div>
-          </div>
-          <div className="ai-engine-actions">
-            {connectionState === "cli_missing" ? (
-              <button type="button" onClick={() => void refreshConnection()} disabled={connectionBusy !== null}>
-                <RefreshCw
-                  className={connectionBusy === "checking" ? "is-spinning" : ""}
-                  size={16}
-                  aria-hidden="true"
-                />
-                بررسی دوباره
-              </button>
-            ) : connectionState === "auth_required" ? (
-              <button className="is-primary" type="button" disabled={connectionBusy !== null} onClick={() => void login()}>
-                {connectionBusy === "login" ? "در حال شروع ورود…" : "ورود با ChatGPT"}
-              </button>
-            ) : connectionState === "auth_waiting" ? (
-              <button className="is-primary" type="button" disabled={connectionBusy !== null} onClick={() => { void refreshConnection(); void refreshModels(); }}>
-                ورود را انجام دادم
-              </button>
-            ) : !connected ? (
-              <button type="button" disabled={connectionBusy !== null} onClick={() => void refreshConnection()}>
-                تلاش دوباره
-              </button>
-            ) : null}
-            {connected && desktop?.resetCodexConnection && (
-              <button className="is-danger" type="button" disabled={connectionBusy !== null} onClick={() => void reconnect()}>
-                {connectionBusy === "reconnect" ? "در حال اتصال دوباره…" : "قطع و اتصال دوباره"}
-              </button>
-            )}
-          </div>
+        <ChatGPTConnectControl state={connectionState} />
+        <div className="ai-engine-actions">
+          <button type="button" onClick={() => void refreshConnection()} disabled={connectionBusy !== null}>
+            <RefreshCw size={16} aria-hidden="true" /> بررسی دوباره
+          </button>
+          {connected && desktop?.resetCodexConnection && <button className="is-danger" type="button" disabled={connectionBusy !== null} onClick={() => void reconnect()}>
+            {connectionBusy === "reconnect" ? "در حال اتصال دوباره…" : "قطع و اتصال دوباره"}
+          </button>}
         </div>
-        <div className="ai-connection-prerequisites" aria-label="پیش‌نیازهای اتصال ChatGPT">
-          <span className={connected || connectionState === "auth_required" || connectionState === "auth_waiting" ? "is-complete" : connectionState === "cli_missing" ? "is-current" : ""}>
-            <i>{connected || connectionState === "auth_required" || connectionState === "auth_waiting" ? <Check size={12} /> : "۱"}</i>
-            نصب ابزار اتصال
-          </span>
-          <span className={connected ? "is-complete" : connectionState === "auth_required" || connectionState === "auth_waiting" ? "is-current" : ""}>
-            <i>{connected ? <Check size={12} /> : "۲"}</i>
-            ورود با ChatGPT
-          </span>
-        </div>
-        {connectionState === "cli_missing" ? (
-          <div className="ai-cli-install-detail">
-            <div className="ai-cli-install-box" dir="ltr">
-              <code>{CHATGPT_INSTALL_COMMAND}</code>
-              <div className="ai-cli-install-controls">
-                <button
-                  type="button"
-                  className="ai-cli-copy"
-                  onClick={() => void copyCliInstallCommand()}
-                  aria-label={cliCommandCopied ? "فرمان نصب کپی شد" : "کپی فرمان نصب CLI"}
-                  title={cliCommandCopied ? "کپی شد" : "کپی فرمان نصب"}
-                >
-                  {cliCommandCopied ? <Check size={19} aria-hidden="true" /> : <Copy size={19} aria-hidden="true" />}
-                </button>
-                <button
-                  type="button"
-                  className="ai-cli-guide"
-                  onClick={() => onOpenExternal(CHATGPT_INSTALL_GUIDE)}
-                  aria-label="راهنمای نصب"
-                  title="راهنمای نصب"
-                >
-                  <Info size={17} aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className="ai-cli-install-trigger"
-                  onClick={() => void installCli()}
-                  aria-label={cliInstallStarted ? "بازکردن دوباره PowerShell" : "نصب CLI در PowerShell"}
-                  title={cliInstallStarted ? "بازکردن دوباره PowerShell" : "نصب CLI در PowerShell"}
-                >
-                  <KeyboardReturn size={21} aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-            <small>{cliInstallStarted ? "PowerShell باز است؛ پس از پایان نصب، وضعیت خودکار به‌روز می‌شود." : "این فرمان رسمی با کلیک شما در PowerShell اجرا می‌شود."}</small>
-          </div>
-        ) : null}
         <label className="chatgpt-model-picker">
           <span>مدل ChatGPT</span>
           <select
