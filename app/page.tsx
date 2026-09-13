@@ -6129,7 +6129,7 @@ function DesktopWorkspace() {
 
   useEffect(() => {
     const desktop = window.raaviDesktop;
-    if (!desktop || !hydrated) return;
+    if (!desktop || !hydrated || !paneLayoutHydrated) return;
 
     const notifyDocumentPresented = () => {
       // The startup WebContentsView can occlude this renderer and suspend its
@@ -6154,7 +6154,7 @@ function DesktopWorkspace() {
       unsubscribe();
       window.clearTimeout(readyTimer);
     };
-  }, [hydrated]);
+  }, [hydrated, paneLayoutHydrated]);
 
   const applyLocalDocumentSnapshot = useCallback(
     (snapshot: Partial<LocalDocumentSnapshot>) => {
@@ -10565,8 +10565,10 @@ function DesktopWorkspace() {
     const quote = plainHeadingText(selectedSource).replace(/\s+/gu, " ").trim();
     if (!quote) return null;
 
+    // A collapsed large-document preview has no rendered text. Annotation
+    // creation still needs the source fallback rather than an empty article.
     const renderedText =
-      previewArticleRef.current?.textContent ?? plainHeadingText(source);
+      previewArticleRef.current?.textContent || plainHeadingText(source);
     const approximateStart = Math.round(
       ((tableSelection?.blockFrom ?? editor.selectionStart) /
         Math.max(1, source.length)) *
@@ -14997,7 +14999,7 @@ function DesktopWorkspace() {
       } ${exportModalOpen ? "has-export-dialog" : ""} ${
         modeSwipeTarget ? `is-mode-swipe-to-${modeSwipeTarget}` : ""
       }`}
-      data-hydrated={hydrated ? "true" : "false"}
+      data-hydrated={hydrated && paneLayoutHydrated ? "true" : "false"}
       style={workspaceFrameStyle}
       onKeyDownCapture={handleAppKeyDownCapture}
     >
@@ -16302,7 +16304,7 @@ function DesktopWorkspace() {
             </div>
 
             <div className="editor-surface">
-              {!readingMode && (
+              {hydrated && paneLayoutHydrated && !readingMode && (
                 <Suspense
                   fallback={
                     <div
@@ -17031,7 +17033,7 @@ function DesktopWorkspace() {
               </div>
             </div>
 
-            {splitWorkspaceActive && !readingMode ? (
+            {hydrated && paneLayoutHydrated && splitWorkspaceActive && !readingMode ? (
               <div className="split-writing-surface">
                 <Suspense
                   fallback={
@@ -17247,7 +17249,7 @@ function DesktopWorkspace() {
                               {readingDocumentKicker}
                             </p>
                           )}
-                          {(!previewPaneCollapsed || pdfExportActive) && renderedMarkdownPreview}
+                          {hydrated && paneLayoutHydrated && (!previewPaneCollapsed || !deferLargePreview || pdfExportActive) && renderedMarkdownPreview}
                           {!previewPaneCollapsed && progressivePreview && !pdfExportActive && (
                             <div
                               ref={progressiveRenderSentinelRef}

@@ -44,7 +44,9 @@ export function useWorkspaceLayoutState(liveEditEnabled: boolean) {
   }, []);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
+    // Restore layout before mounting a recovered document, even while the native
+    // startup view covers the renderer and animation frames are suspended.
+    const timer = window.setTimeout(() => {
       try {
         const savedLayout = window.localStorage.getItem(PANE_LAYOUT_STORAGE_KEY);
         if (savedLayout && !paneLayoutInteractedRef.current) {
@@ -75,7 +77,7 @@ export function useWorkspaceLayoutState(liveEditEnabled: boolean) {
         setPaneLayoutHydrated(true);
       }
     });
-    return () => window.cancelAnimationFrame(frame);
+    return () => window.clearTimeout(timer);
   }, [liveEditEnabled]);
 
   useEffect(() => {
