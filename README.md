@@ -9,7 +9,7 @@
 رایانه نمای کامل راوی را باز می‌کند. لایت یک PWA مستقل برای Markdown، جدول، تصویر
 و خروجی PDF است و به راوی هوشمند دسکتاپ وابسته نیست.
 
-انتشار عمومی نصاب‌های ۲.۴.۶ و manifest بروزرسانی هنوز منوط به گیت دسکتاپ است.
+انتشار ۲.۴.۶ شامل نسخهٔ وب، راوی لایت و بسته‌های Windows و macOS است.
 [گزارش استقرار وب](docs/WEB_DEPLOYMENT_2.4.6_FA.md).
 
 کد فعلی شامل انتخاب هم‌وزن Word و PDF، پیش‌نمایش واقعی PDF در دسکتاپ با کنترل‌های
@@ -35,9 +35,9 @@ Windows، Microsoft Word و Python دارای `pywin32` نیاز دارد. آز�
 
 ## دریافت بسته‌های 2.4.6
 
-این انتشار به GitHub محدود است. نسخهٔ وب، Ravi Light، لینک‌های سایت و manifest
-بروزرسانی خودکار در این مرحله تغییر نمی‌کنند؛ نصب نسخهٔ جدید به‌صورت دستی است.
-بسته‌ها پس از موفق‌شدن گیت‌ها در [Release همین نسخه](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.6) ارائه می‌شوند.
+بسته‌ها در [Release همین نسخه](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.6)
+و [وب‌سایت راوی](https://ravi.poorsmile.ir/) ارائه می‌شوند. بروزرسانی داخلی پس از
+تکمیل و بررسی هر سه بستهٔ Windows، Apple Silicon و Intel فعال می‌شود.
 
 - [Windows x64](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-Setup-2.4.6-x64.exe) · [SHA-256](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-Setup-2.4.6-x64.exe.sha256)
 - [macOS Apple Silicon · arm64](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-arm64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-arm64-unsigned.zip)
@@ -49,9 +49,10 @@ notarization هستند و نام آن‌ها صریحاً `unsigned` است. Wi
 macOS Gatekeeper ممکن است دربارهٔ ناشناس‌بودن ناشر هشدار دهند. هش دانلود را با
 فایل checksum همان Release تطبیق دهید؛ checksum جای امضای سیستم‌عامل را نمی‌گیرد.
 
-گیت انتشار شامل نصب تازه، حذف و ارتقای واقعی از 2.4.5 روی ماشین موقت Windows
-و ساخت DMG/ZIP روی runner بومی Apple Silicon و Intel است. نتایج و وضعیت تکمیل
-در [گزارش اجرای انتشار](docs/RELEASE_EXECUTION_2.4.6_FA.md) و گزارش‌های پیوست Release ثبت می‌شوند.
+در این انتشار، به درخواست مالک، ادامهٔ آزمون جامع پس از موفقیت ۶۲۹ آزمون واحد،
+اصلاحات، تم‌ها، جست‌وجو، PDF و Word و بخشی از آزمون‌های عمومی متوقف شد. آزمون
+نصب و ارتقای نهایی Windows اجرا نشده است؛ کنترل هویت بسته‌ها و ساخت DMG/ZIP
+روی runner بومی Apple Silicon و Intel انجام می‌شود. نتایج و وضعیت تکمیل در [گزارش اجرای انتشار](docs/RELEASE_EXECUTION_2.4.6_FA.md) و گزارش‌های پیوست Release ثبت می‌شوند.
 [نسخهٔ قبلی 2.4.5](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.5) برای بازگشت در دسترس است.
 
 ## امکانات

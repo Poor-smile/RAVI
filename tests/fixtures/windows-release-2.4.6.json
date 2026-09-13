@@ -2,9 +2,9 @@
   "candidate": {
     "version": "2.4.6",
     "file": "Raavi-Setup-2.4.6-x64.exe",
-    "sha256": "9baa212623f4ce0ad31d9124935a909285d81837744a5d8c8aa62b387a49f129",
-    "asarSha256": "3c17c292d61615bd177e16e058404396d89c3a895e96e124ab68a8738081e17b",
-    "releaseId": 387835849
+    "sha256": "fe22c1988a5caff2225c5ec88f231fc0e78422b1d4e463845645f45285e28cfb",
+    "asarSha256": "a27612fa41f1c36250b4861e6386ff4427d9cb819fe0e2a066190ab7ab24085f",
+    "url": "https://dl2.gptt.ir/raavi/stable/2.4.6/Raavi-Setup-2.4.6-x64.exe"
   },
   "previous": {
     "version": "2.4.5",

@@ -41,14 +41,12 @@ jobs:
           Copy-Item -LiteralPath 'tests/fixtures/windows-release-2.4.6.json' -Destination (Join-Path $stage 'contract.json')
           $contract = Get-Content -LiteralPath (Join-Path $stage 'contract.json') -Raw | ConvertFrom-Json
           foreach ($entry in @($contract.candidate, $contract.previous)) {
-            if ($entry.releaseId) {
-              # Draft releases have no public tag endpoint. Download by the
-              # explicit release/asset IDs, then verify the pinned checksum.
-              $release = gh api "repos/Poor-smile/RAVI/releases/$($entry.releaseId)" | ConvertFrom-Json
-              if ($LASTEXITCODE -ne 0 -or $release.tag_name -ne "v$($entry.version)") { throw 'Draft release identity mismatch' }
-              $asset = @($release.assets | Where-Object { $_.name -eq $entry.file })
-              if ($asset.Count -ne 1) { throw 'Expected exactly one candidate installer asset' }
-              Invoke-WebRequest -Uri $asset[0].url -Headers @{ Authorization="Bearer $env:GH_TOKEN"; Accept='application/octet-stream' } -OutFile (Join-Path $stage $entry.file)
+            if ($entry.url) {
+              # Verify the staged, versioned download without granting the
+              # runner write access merely to read a draft GitHub release.
+              $expectedUrl = "https://dl2.gptt.ir/raavi/stable/$($entry.version)/$($entry.file)"
+              if ($entry.url -cne $expectedUrl) { throw 'Unexpected installer download URL' }
+              Invoke-WebRequest -Uri $entry.url -OutFile (Join-Path $stage $entry.file)
             } else {
               gh release download "v$($entry.version)" --repo Poor-smile/RAVI --pattern $entry.file --dir $stage
               if ($LASTEXITCODE -ne 0) { throw 'GitHub release download failed' }
