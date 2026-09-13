@@ -18,8 +18,10 @@ export function createRendererStateStore(file, positionsFile, storage) {
   let latest;
   let positions = {};
   let loading;
-  let queue = Promise.resolve();
-  let running = 0;
+  let running = null;
+  let pendingSnapshot = false;
+  let pendingPositions = false;
+  let waiters = [];
   let dirtySnapshot = false;
   let dirtyPositions = false;
   const load = () => loading ??= (async () => {
@@ -30,12 +32,6 @@ export function createRendererStateStore(file, positionsFile, storage) {
     if (latest === undefined) latest = snapshot;
     positions = mergeReadingPositions(snapshot?.readingPositions, savedPositions, positions);
   })().catch(error => { loading = undefined; throw error; });
-  const enqueue = task => {
-    running++;
-    const result = queue.then(task).finally(() => { running--; });
-    queue = result.catch(() => {});
-    return result;
-  };
   const persistPositions = async () => {
     const current = positions;
     await atomicWriteFile(positionsFile, JSON.stringify(current));
@@ -45,36 +41,62 @@ export function createRendererStateStore(file, positionsFile, storage) {
     await load();
     return latest ? { ...latest, readingPositions: positions } : Object.keys(positions).length ? { readingPositions: positions } : null;
   };
+  const drain = async () => {
+    while (pendingSnapshot || pendingPositions) {
+      const snapshot = pendingSnapshot ? latest : null;
+      const currentWaiters = waiters;
+      pendingSnapshot = false;
+      pendingPositions = false;
+      waiters = [];
+      try {
+        await load();
+        await persistPositions();
+        if (snapshot) {
+          await storage.write(file, { ...snapshot, readingPositions: undefined });
+          if (latest === snapshot) dirtySnapshot = false;
+        }
+        currentWaiters.forEach(waiter => waiter.resolve({ saved: true }));
+      } catch (error) {
+        currentWaiters.forEach(waiter => waiter.reject(error));
+      }
+    }
+  };
+  const start = () => {
+    if (!running) running = drain().finally(() => {
+      running = null;
+      if (pendingSnapshot || pendingPositions) start();
+    });
+  };
+  const enqueue = () => {
+    const result = new Promise((resolve, reject) => waiters.push({ resolve, reject }));
+    start();
+    return result;
+  };
   const write = snapshot => {
     if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return Promise.reject(new Error("Renderer state is invalid."));
     latest = snapshot;
     positions = mergeReadingPositions(positions, snapshot.readingPositions);
     dirtySnapshot = true;
     dirtyPositions = true;
-    return enqueue(async () => {
-      await load();
-      await persistPositions();
-      // Reading anchors have a small independent checkpoint. They no longer
-      // force JSON parsing or rewriting all text/history during pagehide.
-      await storage.write(file, { ...snapshot, readingPositions: undefined });
-      if (latest === snapshot) dirtySnapshot = false;
-      return { saved: true };
-    });
+    // Only one disk write is in flight. Replace queued snapshots with the
+    // newest state, so the final close checkpoint cannot sit behind a long
+    // sequence of obsolete edits or reading-position updates. Every caller
+    // is acknowledged only after its batch reaches durable storage.
+    pendingSnapshot = true;
+    pendingPositions = true;
+    return enqueue();
   };
   const writePositions = incoming => {
     if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) return Promise.reject(new Error("Renderer reading positions are invalid."));
     positions = mergeReadingPositions(positions, incoming);
     dirtyPositions = true;
-    return enqueue(async () => {
-      await load();
-      await persistPositions();
-      return { saved: true };
-    });
+    pendingPositions = true;
+    return enqueue();
   };
   const flush = async () => {
-    await queue;
+    while (running) await running;
     if (dirtySnapshot) await write(latest);
     else if (dirtyPositions) await writePositions(positions);
   };
-  return { read, write, writePositions, flush, hasUncommitted: () => running > 0 || dirtySnapshot || dirtyPositions };
+  return { read, write, writePositions, flush, hasUncommitted: () => running !== null || dirtySnapshot || dirtyPositions };
 }
