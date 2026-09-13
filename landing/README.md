@@ -1,4 +1,4 @@
-# لندینگ راوی 2.4.5
+# لندینگ راوی 2.4.6
 
 این پوشه صفحهٔ ایستای معرفی و دانلود راوی است. بسته‌های حجیم Windows و DMG مک روی
 هاست دانلود مستقل و ZIPهای مک در GitHub Release نگهداری می‌شوند؛ داخل بستهٔ سایت
@@ -6,20 +6,19 @@
 
 ## فایل‌های دانلود
 
-- [Windows x64 — 105.6 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-Setup-2.4.5-x64.exe)
-  SHA-256: `8b9d4b4244c96fad834e169173cfc693f1d28a7406e3341e359ebeec29ae02b5`
-- [macOS Apple Silicon · arm64 — 134.8 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-2.4.5-macOS-arm64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-arm64-unsigned.zip)
-  SHA-256: `9c3b0aa6b519f6d568796a805dee22034d90359091e86061f86b454dcdbcbb07`
-- [macOS Intel · x64 — 138.7 MB](https://dl2.gptt.ir/raavi/stable/2.4.5/Raavi-2.4.5-macOS-x64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-x64-unsigned.zip)
-  SHA-256: `535b9ae45ae0e07b98d4ae03d688dd1c3d189275a87616e784ecca9284085768`
+- [Windows x64 — 122.6 MB](https://dl2.gptt.ir/raavi/stable/2.4.6/Raavi-Setup-2.4.6-x64.exe)
+  SHA-256: `fe22c1988a5caff2225c5ec88f231fc0e78422b1d4e463845645f45285e28cfb`
+- [macOS Apple Silicon · arm64 — 156.9 MB](https://dl2.gptt.ir/raavi/stable/2.4.6/Raavi-2.4.6-macOS-arm64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-arm64-unsigned.zip)
+  SHA-256: `41a4abc0828dcb24ae29f62c8ff1972451a1c8112fdb54e97ba6ab5b16c9337a`
+- [macOS Intel · x64 — 161.8 MB](https://dl2.gptt.ir/raavi/stable/2.4.6/Raavi-2.4.6-macOS-x64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-x64-unsigned.zip)
+  SHA-256: `d661ee34608de9598203c04c30d55995181b7f21cf6841da5dcd0e5e7e710ffc`
 
-[GitHub Release و گزارش ساخت](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.5) · [SHA-256 مک](https://github.com/Poor-smile/RAVI/releases/download/v2.4.5/Raavi-2.4.5-macOS-SHA256SUMS.txt)
+[GitHub Release و گزارش ساخت](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.6) · [SHA-256 مک](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-SHA256SUMS.txt)
 
 Windows امضای Authenticode ندارد؛ macOS بدون Developer ID و notarization با پسوند
-`unsigned` ارائه می‌شود. Ed25519 به‌روزرسان، امضای Windows یا اپل نیست. نصب تازه، حذف و
-ارتقای واقعی از 2.2.1 روی Windows آزمایشی مدیر موفق بودند و سند و نظر حفظ شدند.
-[گزارش آزمون](https://github.com/Poor-smile/RAVI/actions/runs/34036808090). Linux
-برای نسخهٔ 2.4.5 ارائه نشده و دکمهٔ آن غیرفعال است.
+`unsigned` ارائه می‌شود. Ed25519 به‌روزرسان، امضای Windows یا اپل نیست. آزمون‌های واحد و بررسی‌های منتخب موفق بودند؛ به درخواست مالک، ادامهٔ مجموعهٔ جامع و نصب/ارتقای نهایی Windows اجرا نشد.
+[گزارش اعتبارسنجی](https://github.com/Poor-smile/RAVI/blob/main/docs/RELEASE_EXECUTION_2.4.6_FA.md). Linux
+برای نسخهٔ 2.4.6 ارائه نشده و دکمهٔ آن غیرفعال است.
 
 ## بارگذاری روی هاست
 
