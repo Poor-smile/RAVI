@@ -82,6 +82,12 @@ const CURRENT_CHANGES = [
 
 const RELEASES = [
   {
+    version: "2.4.7",
+    dateTime: "2026-09-14",
+    dateLabel: "۲۳ شهریور ۱۴۰۵",
+    changes: ["همان قابلیت‌های ۲.۴.۶ با شمارهٔ جدید برای آزمون دریافت، نصب و اجرای دوباره از مسیر به‌روزرسان داخلی"],
+  },
+  {
     version: "2.4.6",
     dateTime: "2026-09-13",
     dateLabel: "۲۲ شهریور ۱۴۰۵",

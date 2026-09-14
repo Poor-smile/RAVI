@@ -2,7 +2,12 @@
 
 ویور و ویرایشگر Markdown فارسی با چیدمان راست‌به‌چپ و فونت IRANSansX.
 
-## نسخهٔ 2.4.6
+## نسخهٔ دسکتاپ 2.4.7
+
+همان قابلیت‌های ۲.۴.۶ با شمارهٔ تازه برای آزمون به‌روزرسان داخلی؛ انتشار عمومی برای Windows و هر دو معماری مک به درخواست مالک انجام می‌شود. نسخهٔ وب و راوی لایت همچنان ۲.۴.۶ هستند.
+[گزارش انتشار ۲.۴.۷](docs/RELEASE_EXECUTION_2.4.7_FA.md). تغییرات برنامه فقط نسخه و متن دفتر تغییرات است.
+
+## مبنای قابلیت‌ها: 2.4.6
 
 نسخهٔ وب ۲.۴.۶ در [raviweb.poorsmile.ir](https://raviweb.poorsmile.ir/) فعال است.
 موبایل و تبلت خودکار وارد [راوی لایت](https://raviweb.poorsmile.ir/light/) می‌شوند؛
@@ -33,27 +38,18 @@ Windows، Microsoft Word و Python دارای `pywin32` نیاز دارد. آز�
 [راهنمای انتشار](docs/RELEASE_GUIDE_FA.md) آمده است. نتایج همین نسخه در
 [گزارش انتشار 2.4.6](docs/RELEASE_EXECUTION_2.4.6_FA.md) ثبت می‌شوند.
 
-## دریافت بسته‌های 2.4.6
+## دریافت بسته‌های 2.4.7
 
-بسته‌ها در [Release همین نسخه](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.6)
-و [وب‌سایت راوی](https://ravi.poorsmile.ir/) ارائه می‌شوند. بروزرسانی داخلی پس از
-تکمیل و بررسی هر سه بستهٔ Windows، Apple Silicon و Intel فعال می‌شود.
+[Release ۲.۴.۷](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.7) · [وب‌سایت دانلود](https://ravi.poorsmile.ir/)
 
-- [Windows x64](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-Setup-2.4.6-x64.exe) · [SHA-256](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-Setup-2.4.6-x64.exe.sha256)
-- [macOS Apple Silicon · arm64](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-arm64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-arm64-unsigned.zip)
-- [macOS Intel · x64](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-x64-unsigned.dmg) · [ZIP](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-x64-unsigned.zip)
-- [SHA-256 بسته‌های مک](https://github.com/Poor-smile/RAVI/releases/download/v2.4.6/Raavi-2.4.6-macOS-SHA256SUMS.txt)
+- [Windows x64](https://dl2.gptt.ir/raavi/stable/2.4.7/Raavi-Setup-2.4.7-x64.exe)
+- [macOS Apple Silicon](https://dl2.gptt.ir/raavi/stable/2.4.7/Raavi-2.4.7-macOS-arm64-unsigned.dmg)
+- [macOS Intel](https://dl2.gptt.ir/raavi/stable/2.4.7/Raavi-2.4.7-macOS-x64-unsigned.dmg)
 
-نصاب Windows فاقد Authenticode است. بسته‌های macOS فاقد Developer ID و
-notarization هستند و نام آن‌ها صریحاً `unsigned` است. Windows SmartScreen یا
-macOS Gatekeeper ممکن است دربارهٔ ناشناس‌بودن ناشر هشدار دهند. هش دانلود را با
-فایل checksum همان Release تطبیق دهید؛ checksum جای امضای سیستم‌عامل را نمی‌گیرد.
+Windows فاقد Authenticode و macOS فاقد Developer ID و notarization هستند. فایل‌های SHA-256، ZIPهای مک و گزارش ساخت در GitHub Release قرار می‌گیرند. امضای Ed25519 به‌روزرسان جای امضای سیستم‌عامل را نمی‌گیرد.
 
-در این انتشار، به درخواست مالک، ادامهٔ آزمون جامع پس از موفقیت ۶۲۹ آزمون واحد،
-اصلاحات، تم‌ها، جست‌وجو، PDF و Word و بخشی از آزمون‌های عمومی متوقف شد. آزمون
-نصب و ارتقای نهایی Windows اجرا نشده است؛ کنترل هویت بسته‌ها و ساخت DMG/ZIP
-روی runner بومی Apple Silicon و Intel انجام می‌شود. نتایج و وضعیت تکمیل در [گزارش اجرای انتشار](docs/RELEASE_EXECUTION_2.4.6_FA.md) و گزارش‌های پیوست Release ثبت می‌شوند.
-[نسخهٔ قبلی 2.4.5](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.5) برای بازگشت در دسترس است.
+این انتشار برای آزمون ارتقای ۲.۴.۶ به ۲.۴.۷ است؛ موفقیت نصب روی دستگاه کاربر هنوز تأیید نشده است. آزمون جامع قابلیت‌های بدون تغییر تکرار نمی‌شود؛ ساخت، آزمون اختصاصی updater و یکپارچگی بسته‌ها بررسی می‌شوند.
+[نسخهٔ قبلی ۲.۴.۶](https://github.com/Poor-smile/RAVI/releases/tag/v2.4.6) حفظ شده است.
 
 ## امکانات
 
